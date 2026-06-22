@@ -2,12 +2,38 @@ import { useState, useEffect } from 'react';
 import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
-import { decodeTrip } from './utils/helpers';
+import { decodeTrip, getSkyGradient } from './utils/helpers';
 
 function AppInner() {
   const { importTrip } = useTripsContext();
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem('provo_theme');
+    if (stored) return stored === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  // Apply sky gradient and dark mode
+  useEffect(() => {
+    function applyBackground() {
+      if (!darkMode) {
+        document.body.style.background = getSkyGradient();
+        document.body.style.backgroundAttachment = 'fixed';
+      } else {
+        document.body.style.background = 'linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)';
+        document.body.style.backgroundAttachment = 'fixed';
+      }
+    }
+    applyBackground();
+    const timer = setInterval(applyBackground, 60000);
+    return () => clearInterval(timer);
+  }, [darkMode]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('provo_theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -16,7 +42,7 @@ function AppInner() {
         const trip = decodeTrip(hash.slice(7));
         setPendingImport(trip);
         window.history.replaceState(null, '', window.location.pathname);
-      } catch { /* invalid share URL */ }
+      } catch { /* invalid */ }
     }
   }, []);
 
@@ -40,8 +66,8 @@ function AppInner() {
         </div>
       )}
       {route.page === 'dashboard'
-        ? <Dashboard onNavigate={navigate} />
-        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} />
+        ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
+        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
       }
     </div>
   );

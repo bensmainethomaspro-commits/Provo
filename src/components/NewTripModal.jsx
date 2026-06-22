@@ -1,9 +1,14 @@
 import { useState } from 'react';
+import { TRIP_EMOJIS } from '../utils/helpers';
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function NewTripModal({ onClose, onCreate }) {
-  const [form, setForm] = useState({ name: '', destination: '', startDate: today(), endDate: today() });
+export default function NewTripModal({ onClose, onCreate, editTrip }) {
+  const isEdit = !!editTrip;
+  const [form, setForm] = useState(editTrip
+    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate }
+    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today() }
+  );
   const [error, setError] = useState('');
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -20,11 +25,23 @@ export default function NewTripModal({ onClose, onCreate }) {
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal__header">
-          <h2 className="modal__title">✈️ Nouveau voyage</h2>
+          <h2 className="modal__title">{isEdit ? '✏️ Modifier le voyage' : '✈️ Nouveau voyage'}</h2>
           <button className="sheet__close" onClick={onClose}>✕</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal__body">
+            <div className="form-group">
+              <label className="form-label">Emoji du voyage</label>
+              <div className="emoji-grid">
+                {TRIP_EMOJIS.map(em => (
+                  <button key={em} type="button"
+                    className={`emoji-option${form.emoji === em ? ' selected' : ''}`}
+                    onClick={() => set('emoji', em)}>
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="form-group">
               <label className="form-label">Nom du voyage *</label>
               <input className="form-input" placeholder="Ex: Road trip Islande" value={form.name}
@@ -51,7 +68,7 @@ export default function NewTripModal({ onClose, onCreate }) {
           </div>
           <div className="modal__footer">
             <button type="button" className="btn btn--secondary btn--full" onClick={onClose}>Annuler</button>
-            <button type="submit" className="btn btn--primary btn--full">Créer le voyage</button>
+            <button type="submit" className="btn btn--primary btn--full">{isEdit ? '✅ Enregistrer' : '🚀 Créer'}</button>
           </div>
         </form>
       </div>

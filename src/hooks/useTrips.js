@@ -11,24 +11,19 @@ function buildDays(startDate, endDate) {
   const cursor = new Date(startDate + 'T00:00:00');
   const end = new Date(endDate + 'T00:00:00');
   while (cursor <= end) {
-    days.push({ id: genId(), date: cursor.toISOString().split('T')[0], activities: [] });
+    days.push({ id: genId(), date: cursor.toISOString().split('T')[0], activities: [], startTime: '09:00' });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
 }
 
 function isPast(endDate) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   return new Date(endDate + 'T00:00:00') < today;
 }
 
 function load() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch {
-    return [];
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
 }
 
 export function useTrips() {
@@ -42,12 +37,35 @@ export function useTrips() {
     const id = genId();
     const trip = {
       id, name: data.name, destination: data.destination || '',
+      emoji: data.emoji || '✈️',
       startDate: data.startDate, endDate: data.endDate,
       days: buildDays(data.startDate, data.endDate),
       reserve: [], createdAt: new Date().toISOString()
     };
     setTrips(p => [trip, ...p]);
     return id;
+  }, []);
+
+  const updateTrip = useCallback((tripId, data) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const needRebuild = data.startDate !== t.startDate || data.endDate !== t.endDate;
+      if (needRebuild) {
+        const newStart = data.startDate || t.startDate;
+        const newEnd = data.endDate || t.endDate;
+        const newDays = buildDays(newStart, newEnd);
+        const byDate = {};
+        t.days.forEach(d => { byDate[d.date] = d; });
+        newDays.forEach(d => {
+          if (byDate[d.date]) {
+            d.activities = byDate[d.date].activities;
+            d.startTime = byDate[d.date].startTime || '09:00';
+          }
+        });
+        return { ...t, ...data, days: newDays };
+      }
+      return { ...t, ...data };
+    }));
   }, []);
 
   const deleteTrip = useCallback((tripId) => {
@@ -77,8 +95,29 @@ export function useTrips() {
         return { ...t, reserve: t.reserve.map(a => a.id === activityId ? { ...a, status } : a) };
       }
       return {
+        ...t, days: t.days.map(d => {
+          if (d.id !== location.dayId) return d;
+          let acts = d.activities.map(a => a.id === activityId ? { ...a, status } : a);
+          // Move done activities to bottom
+          if (status === 'done') {
+            const target = acts.find(a => a.id === activityId);
+            acts = [...acts.filter(a => a.id !== activityId && a.status !== 'done'), ...acts.filter(a => a.id !== activityId && a.status === 'done'), target];
+          }
+          return { ...d, activities: acts };
+        })
+      };
+    }));
+  }, []);
+
+  const updateActivity = useCallback((tripId, location, activityId, updates) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      if (location.type === 'reserve') {
+        return { ...t, reserve: t.reserve.map(a => a.id === activityId ? { ...a, ...updates } : a) };
+      }
+      return {
         ...t, days: t.days.map(d => d.id !== location.dayId ? d : {
-          ...d, activities: d.activities.map(a => a.id === activityId ? { ...a, status } : a)
+          ...d, activities: d.activities.map(a => a.id === activityId ? { ...a, ...updates } : a)
         })
       };
     }));
@@ -115,6 +154,22 @@ export function useTrips() {
     }));
   }, []);
 
+  const moveDayToDay = useCallback((tripId, srcDayId, tgtDayId, activityId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const src = t.days.find(d => d.id === srcDayId);
+      const activity = src?.activities.find(a => a.id === activityId);
+      if (!activity) return t;
+      return {
+        ...t, days: t.days.map(d => {
+          if (d.id === srcDayId) return { ...d, activities: d.activities.filter(a => a.id !== activityId) };
+          if (d.id === tgtDayId) return { ...d, activities: [...d.activities, activity] };
+          return d;
+        })
+      };
+    }));
+  }, []);
+
   const moveToNextDay = useCallback((tripId, dayId, activityId) => {
     setTrips(p => p.map(t => {
       if (t.id !== tripId) return t;
@@ -132,6 +187,37 @@ export function useTrips() {
     }));
   }, []);
 
+  const reorderActivity = useCallback((tripId, dayId, activityId, dir) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      return {
+        ...t, days: t.days.map(d => {
+          if (d.id !== dayId) return d;
+          const arr = [...d.activities];
+          const i = arr.findIndex(a => a.id === activityId);
+          if (i < 0) return d;
+          const j = dir === 'up' ? i - 1 : i + 1;
+          if (j < 0 || j >= arr.length) return d;
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+          return { ...d, activities: arr };
+        })
+      };
+    }));
+  }, []);
+
+  const reorderInReserve = useCallback((tripId, activityId, dir) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const arr = [...t.reserve];
+      const i = arr.findIndex(a => a.id === activityId);
+      if (i < 0) return t;
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= arr.length) return t;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      return { ...t, reserve: arr };
+    }));
+  }, []);
+
   const deleteActivity = useCallback((tripId, location, activityId) => {
     setTrips(p => p.map(t => {
       if (t.id !== tripId) return t;
@@ -146,6 +232,12 @@ export function useTrips() {
     }));
   }, []);
 
+  const setDayStartTime = useCallback((tripId, dayId, startTime) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, days: t.days.map(d => d.id !== dayId ? d : { ...d, startTime })
+    }));
+  }, []);
+
   const importTrip = useCallback((tripData) => {
     const id = genId();
     const trip = { ...tripData, id, createdAt: new Date().toISOString() };
@@ -157,9 +249,11 @@ export function useTrips() {
     trips,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
-    createTrip, deleteTrip, getTripById,
+    createTrip, updateTrip, deleteTrip, getTripById,
     addToReserve, addToDay,
-    setActivityStatus, moveToReserve, moveFromReserveToDay,
-    moveToNextDay, deleteActivity, importTrip
+    setActivityStatus, updateActivity,
+    moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
+    reorderActivity, reorderInReserve,
+    deleteActivity, setDayStartTime, importTrip
   };
 }
