@@ -102,6 +102,70 @@ export function getTimeSlots(activities, startTime = '09:00') {
   return slots;
 }
 
+// ─── Category colors ──────────────────────────────────────
+export const CATEGORY_COLORS = {
+  resto:  '#d4704a',
+  visite: '#8b6914',
+  balade: '#4a7c59',
+  plage:  '#2e86c1',
+  sport:  '#c0392b',
+  repos:  '#6b5b8a',
+  trajet: '#7f8c8d',
+  fun:    '#d4ac0d',
+};
+
+export function deduceTitle(category, address, notes) {
+  const cat = CATEGORIES.find(c => c.id === category);
+  if (address) {
+    const place = address.split(',')[0].trim();
+    if (place.length >= 2) return cat ? `${cat.emoji} ${place}` : place;
+  }
+  if (notes) {
+    const first = notes.trim().split(/\n/)[0].split(/\s+/).slice(0, 5).join(' ');
+    if (first.length >= 3) return first;
+  }
+  return cat ? `${cat.emoji} ${cat.label}` : 'Activité';
+}
+
+export function parseGoogleMapsUrl(url) {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes('google') && !u.hostname.includes('goo.gl')) return null;
+    const m = u.pathname.match(/\/maps\/(?:place|search)\/([^/@?&]+)/);
+    if (m) return decodeURIComponent(m[1].replace(/\+/g, ' ')).replace(/_/g, ' ');
+    const q = u.searchParams.get('q') || u.searchParams.get('daddr');
+    if (q) return q;
+  } catch {}
+  return null;
+}
+
+export async function fetchPlaceData(query) {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=1`
+  );
+  const data = await res.json();
+  if (!data?.length) return null;
+  const p = data[0];
+  const a = p.address || {};
+  const address = [a.road || a.pedestrian, a.city || a.town || a.village, a.country]
+    .filter(Boolean).join(', ');
+  const type = (p.type || p.class || '').toLowerCase();
+  const catMap = [
+    [/restaurant|cafe|bar|fast_food|pub|food|bistro|brasserie/, 'resto'],
+    [/beach|coastline|bay|plage/, 'plage'],
+    [/sport|fitness|swimming|stadium/, 'sport'],
+    [/hotel|hostel|motel|accommodation/, 'repos'],
+    [/bus_stop|train|airport|ferry|subway|station/, 'trajet'],
+    [/park|forest|nature|trail|viewpoint|peak|garden/, 'balade'],
+    [/theme_park|nightclub|cinema|theatre|entertainment|casino|amusement/, 'fun'],
+  ];
+  let category = 'visite';
+  for (const [re, cat] of catMap) {
+    if (re.test(type)) { category = cat; break; }
+  }
+  return { title: (p.name || p.display_name.split(',')[0]).trim(), address, category };
+}
+
 // ─── Dynamic sky ──────────────────────────────────────────
 export function getSkyGradient() {
   const h = new Date().getHours();

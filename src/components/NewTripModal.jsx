@@ -6,8 +6,8 @@ const today = () => new Date().toISOString().split('T')[0];
 export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
-    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate }
-    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today() }
+    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '' }
+    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '' }
   );
   const [error, setError] = useState('');
 
@@ -51,6 +51,11 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
               <label className="form-label">Destination</label>
               <input className="form-input" placeholder="Ex: Reykjavik, Islande" value={form.destination}
                 onChange={e => set('destination', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Budget initial (€) <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— optionnel</span></label>
+              <input className="form-input" type="number" min="0" step="10" placeholder="Ex: 2000"
+                value={form.initialBudget} onChange={e => set('initialBudget', e.target.value)} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-group">

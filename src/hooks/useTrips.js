@@ -45,6 +45,7 @@ export function useTrips() {
     const trip = {
       id, name: data.name, destination: data.destination || '',
       emoji: data.emoji || '✈️',
+      initialBudget: parseFloat(data.initialBudget) || 0,
       startDate: data.startDate, endDate: data.endDate,
       days: buildDays(data.startDate, data.endDate),
       reserve: [], createdAt: new Date().toISOString()
@@ -245,6 +246,26 @@ export function useTrips() {
     }));
   }, []);
 
+  const duplicateToDay = useCallback((tripId, activityId, targetDayId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      let activity = t.reserve.find(a => a.id === activityId);
+      if (!activity) {
+        for (const d of t.days) {
+          activity = d.activities.find(a => a.id === activityId);
+          if (activity) break;
+        }
+      }
+      if (!activity) return t;
+      const copy = { ...activity, id: genId(), status: 'todo' };
+      return {
+        ...t, days: t.days.map(d => d.id !== targetDayId ? d : {
+          ...d, activities: [...d.activities, copy]
+        })
+      };
+    }));
+  }, []);
+
   const importTrip = useCallback((tripData) => {
     const id = genId();
     const trip = { ...tripData, id, createdAt: new Date().toISOString() };
@@ -261,6 +282,6 @@ export function useTrips() {
     setActivityStatus, updateActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     reorderActivity, reorderInReserve,
-    deleteActivity, setDayStartTime, importTrip
+    deleteActivity, setDayStartTime, importTrip, duplicateToDay
   };
 }

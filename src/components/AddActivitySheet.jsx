@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, parseGoogleMapsUrl, fetchPlaceData } from '../utils/helpers';
 
-const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '' };
+const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [] };
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave }) {
@@ -11,11 +11,14 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const [dest, setDest] = useState('reserve');
   const [selectedDayId, setSelectedDayId] = useState('');
   const [error, setError] = useState('');
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setClosing(false);
       setError('');
+      setImportUrl('');
       if (isEdit) {
         setForm({
           title: editActivity.title || '',
@@ -26,8 +29,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           notes: editActivity.notes || '',
           price: editActivity.price || '',
           link: editActivity.link || '',
+          screenshots: editActivity.screenshots || [],
         });
-        // Don't reset dest/day in edit mode
       } else {
         setForm({ ...blank });
         setDest(defaultDayId ? 'day' : 'reserve');
@@ -43,14 +46,69 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  const handleImport = async () => {
+    const name = parseGoogleMapsUrl(importUrl.trim());
+    if (!name) { setError('URL Google Maps non reconnue. Utilise une URL complète (maps.google.com/…).'); return; }
+    setImporting(true);
+    setError('');
+    try {
+      const data = await fetchPlaceData(name);
+      if (data) {
+        setForm(f => ({ ...f, title: data.title || name, address: data.address || f.address, category: data.category || f.category, link: importUrl.trim() }));
+      } else {
+        setForm(f => ({ ...f, title: f.title || name, link: importUrl.trim() }));
+      }
+      setImportUrl('');
+    } catch {
+      setForm(f => ({ ...f, title: f.title || name, link: importUrl.trim() }));
+      setImportUrl('');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const compressImage = (file) => new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 700;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  const handleScreenshots = async (e) => {
+    const existing = form.screenshots || [];
+    const slots = 3 - existing.length;
+    if (slots <= 0) return;
+    const files = Array.from(e.target.files).slice(0, slots);
+    const results = await Promise.all(files.map(compressImage));
+    set('screenshots', [...existing, ...results].slice(0, 3));
+    e.target.value = '';
+  };
+
+  const removeScreenshot = (i) => {
+    set('screenshots', (form.screenshots || []).filter((_, idx) => idx !== i));
+  };
+
   const handleSubmit = () => {
-    if (!form.title.trim()) { setError('Le titre est requis.'); return; }
+    const rawTitle = form.title.trim();
+    const title = rawTitle || deduceTitle(form.category, form.address, form.notes);
     const activity = {
       ...form,
-      title: form.title.trim(),
+      title,
       durationHours: parseInt(form.durationHours) || 0,
       durationMinutes: parseInt(form.durationMinutes) || 0,
       price: parseFloat(form.price) || 0,
+      screenshots: form.screenshots || [],
     };
     if (isEdit) {
       onEditSave(activity);
@@ -75,8 +133,31 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         </div>
 
         <div className="sheet__body">
+          {/* Google Maps import */}
+          <div className="form-group import-section">
+            <label className="form-label">📍 Importer depuis Google Maps</label>
+            <div className="import-row">
+              <input
+                className="form-input"
+                type="url"
+                placeholder="Colle une URL Google Maps…"
+                value={importUrl}
+                onChange={e => setImportUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}
+              />
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={handleImport}
+                disabled={!importUrl.trim() || importing}
+              >
+                {importing ? '…' : '⬇️'}
+              </button>
+            </div>
+          </div>
+
           <div className="form-group">
-            <label className="form-label">Titre *</label>
+            <label className="form-label">Titre <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— déduit si vide</span></label>
             <input className="form-input" placeholder="Ex: Déjeuner au marché" value={form.title}
               onChange={e => set('title', e.target.value)} autoFocus />
           </div>
@@ -87,6 +168,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               {CATEGORIES.map(cat => (
                 <button key={cat.id} type="button"
                   className={`category-btn${form.category === cat.id ? ' category-btn--active' : ''}`}
+                  data-cat={cat.id}
                   onClick={() => set('category', cat.id)}>
                   <span>{cat.emoji}</span>
                   <span>{cat.label}</span>
@@ -130,6 +212,30 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             <label className="form-label">Notes</label>
             <textarea className="form-textarea" placeholder="Infos, horaires, réservations..." value={form.notes}
               onChange={e => set('notes', e.target.value)} />
+          </div>
+
+          {/* Screenshots */}
+          <div className="form-group">
+            <label className="form-label">
+              Photos / captures d'écran
+              <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}> — max 3</span>
+            </label>
+            {(form.screenshots || []).length > 0 && (
+              <div className="screenshots-preview">
+                {form.screenshots.map((src, i) => (
+                  <div key={i} className="screenshot-preview-wrap">
+                    <img src={src} className="screenshot-preview-img" alt="" />
+                    <button type="button" className="screenshot-remove" onClick={() => removeScreenshot(i)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(form.screenshots || []).length < 3 && (
+              <label className="btn btn--secondary btn--sm" style={{ cursor: 'pointer', display: 'inline-flex' }}>
+                📷 Ajouter une photo
+                <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleScreenshots} />
+              </label>
+            )}
           </div>
 
           {!isEdit && (

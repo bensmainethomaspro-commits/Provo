@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTripsContext } from '../context/TripsContext';
 import DaySection from '../components/DaySection';
 import DayDetailModal from '../components/DayDetailModal';
@@ -6,14 +6,15 @@ import ActivityCard from '../components/ActivityCard';
 import AddActivitySheet from '../components/AddActivitySheet';
 import ShareModal from '../components/ShareModal';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { formatDateShort, budgetStats, formatPrice, formatDate, getDayLabel } from '../utils/helpers';
+import CompareModal from '../components/CompareModal';
+import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     addToReserve, addToDay, reorderActivity, reorderInReserve,
-    setDayStartTime, deleteTrip
+    setDayStartTime, deleteTrip, duplicateToDay
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -23,9 +24,43 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [editingActivity, setEditingActivity] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
-  const [detailDay, setDetailDay] = useState(null);  // day object for detail modal
+  const [detailDay, setDetailDay] = useState(null);
   const [reserveExpanded, setReserveExpanded] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
+  const [showCompare, setShowCompare] = useState(false);
+  const tabContentRef = useRef(null);
+
+  // Auto-scroll during drag near viewport edges
+  useEffect(() => {
+    let animFrame;
+    let dy = 0;
+    const EDGE = 90;
+    const MAX = 14;
+    const onDragOver = (e) => {
+      const y = e.clientY;
+      const h = window.innerHeight;
+      if (y < EDGE) dy = -Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
+      else if (y > h - EDGE) dy = Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
+      else dy = 0;
+    };
+    const stop = () => { dy = 0; };
+    const tick = () => {
+      if (dy !== 0 && tabContentRef.current) tabContentRef.current.scrollTop += dy;
+      animFrame = requestAnimationFrame(tick);
+    };
+    animFrame = requestAnimationFrame(tick);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragend', stop);
+    window.addEventListener('drop', stop);
+    return () => {
+      cancelAnimationFrame(animFrame);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragend', stop);
+      window.removeEventListener('drop', stop);
+    };
+  }, []);
 
   if (!trip) return (
     <div className="trip-view">
@@ -50,7 +85,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const stats = budgetStats(allActivities);
   const actTotal = trip.days.reduce((s, d) => s + d.activities.length, 0);
 
-  // ─── Handlers ──────────────────────────────────────────
+  const initBudget = parseFloat(trip.initialBudget) || 0;
+  const budgetRemaining = initBudget > 0 ? initBudget - stats.spent : stats.remaining;
+  const showBudget = initBudget > 0 || stats.total > 0;
+
+  // ─── Compare helpers ──────────────────────────────────
+  const toggleCompare = (id) => {
+    setCompareSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const compareActivities = allActivities.filter(a => compareSelectedIds.has(a.id));
+
+  // ─── Handlers ────────────────────────────────────────
   const handleStatusChange = (dayId, activityId, status) =>
     setActivityStatus(tripId, { type: 'day', dayId }, activityId, status);
 
@@ -71,20 +120,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setSheetOpen(true);
   };
 
-  // ─── Drag & Drop ──────────────────────────────────────
+  const handleDuplicate = (activityId, targetDayId) =>
+    duplicateToDay(tripId, activityId, targetDayId);
+
+  // ─── Drag & Drop ─────────────────────────────────────
   const handleDropOnDay = (targetDayId, activityId) => {
     if (!activityId) return;
-    // Check if coming from reserve
     const isInReserve = trip.reserve.some(a => a.id === activityId);
-    if (isInReserve) {
-      moveFromReserveToDay(tripId, targetDayId, activityId);
-      return;
-    }
-    // Check if coming from another day
+    if (isInReserve) { moveFromReserveToDay(tripId, targetDayId, activityId); return; }
     const srcDay = trip.days.find(d => d.activities.some(a => a.id === activityId));
-    if (srcDay && srcDay.id !== targetDayId) {
-      moveDayToDay(tripId, srcDay.id, targetDayId, activityId);
-    }
+    if (srcDay && srcDay.id !== targetDayId) moveDayToDay(tripId, srcDay.id, targetDayId, activityId);
   };
 
   const handleDropOnReserve = (e) => {
@@ -95,8 +140,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setReserveDragOver(false);
   };
 
-  // ─── Detail modal handlers (mirror day handlers) ──────
   const detailDay_ = detailDay ? trip.days.find(d => d.id === detailDay.id) : null;
+
+  const sharedDayProps = {
+    days: trip.days,
+    onDuplicate: handleDuplicate,
+    compareMode,
+    compareSelectedIds,
+    onToggleCompare: toggleCompare,
+  };
 
   return (
     <div className="trip-view">
@@ -121,11 +173,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <span className="trip-meta__item">
           📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
         </span>
-        {stats.total > 0 && (
+        {showBudget && (
           <>
-            <span className="budget-pill budget-pill--total">💰 {formatPrice(stats.total)}</span>
+            {initBudget > 0
+              ? <span className="budget-pill budget-pill--total">💰 {formatPrice(initBudget)}</span>
+              : stats.total > 0 && <span className="budget-pill budget-pill--total">💰 {formatPrice(stats.total)}</span>
+            }
             {stats.spent > 0 && <span className="budget-pill budget-pill--spent">✅ {formatPrice(stats.spent)}</span>}
-            {stats.remaining > 0 && <span className="budget-pill budget-pill--remaining">💵 Restant {formatPrice(stats.remaining)}</span>}
+            {budgetRemaining > 0 && <span className="budget-pill budget-pill--remaining">💵 {formatPrice(budgetRemaining)}</span>}
+            {budgetRemaining < 0 && <span className="budget-pill budget-pill--over">🚨 {formatPrice(Math.abs(budgetRemaining))} dépassé</span>}
           </>
         )}
       </div>
@@ -142,8 +198,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </button>
       </div>
 
+      {/* Compare toolbar */}
+      <div className="compare-bar">
+        {compareMode && compareSelectedIds.size >= 2 && (
+          <button className="btn btn--primary btn--sm" onClick={() => setShowCompare(true)}>
+            ⚖️ Voir ({compareSelectedIds.size})
+          </button>
+        )}
+        {compareMode && compareSelectedIds.size > 0 && (
+          <span className="compare-bar__hint">{compareSelectedIds.size} sélectionné{compareSelectedIds.size > 1 ? 's' : ''}</span>
+        )}
+        <button
+          className={`btn btn--sm ${compareMode ? 'btn--danger' : 'btn--secondary'}`}
+          onClick={() => { setCompareMode(p => !p); setCompareSelectedIds(new Set()); setShowCompare(false); }}
+        >
+          {compareMode ? '✕ Annuler' : '⚖️ Comparer'}
+        </button>
+      </div>
+
       {/* Tab content */}
-      <div className="tab-content">
+      <div ref={tabContentRef} className="tab-content">
 
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
@@ -165,10 +239,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onAddActivity={openAddSheet}
                 onOpenDetail={(day) => setDetailDay(day)}
                 onDrop={handleDropOnDay}
+                {...sharedDayProps}
               />
             ))}
 
-            {/* Reserve mini-panel at bottom of planning for drag-from-reserve */}
+            {/* Reserve mini-panel */}
             <div className="planning-reserve">
               <button
                 className="planning-reserve__toggle"
@@ -177,7 +252,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 <span>📦 Réserve d'idées {trip.reserve.length > 0 && <span className="planning-reserve__count">{trip.reserve.length}</span>}</span>
                 <span>{reserveExpanded ? '▲' : '▼'}</span>
               </button>
-
               {reserveExpanded && (
                 <div className="planning-reserve__body">
                   {trip.reserve.length === 0
@@ -200,6 +274,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                               isLast={i === trip.reserve.length - 1}
                               onDragStart={() => {}}
                               onDragEnd={() => {}}
+                              compareMode={compareMode}
+                              compareSelected={compareSelectedIds.has(activity.id)}
+                              onToggleCompare={() => toggleCompare(activity.id)}
                             />
                           </div>
                         ))}
@@ -253,6 +330,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       isLast={i === trip.reserve.length - 1}
                       onDragStart={() => {}}
                       onDragEnd={() => {}}
+                      compareMode={compareMode}
+                      compareSelected={compareSelectedIds.has(activity.id)}
+                      onToggleCompare={() => toggleCompare(activity.id)}
                     />
                     <div className="reserve-card__assign">
                       <span className="reserve-card__assign-label">Assigner :</span>
@@ -300,7 +380,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         />
       )}
 
-      {/* Day detail modal */}
       {detailDay_ && (
         <DayDetailModal
           day={detailDay_}
@@ -316,6 +395,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
           onEdit={(activity, location) => { setDetailDay(null); setEditingActivity({ activity, location }); }}
           onAddActivity={(dayId) => { setDetailDay(null); openAddSheet(dayId); }}
+          {...sharedDayProps}
         />
       )}
 
@@ -331,6 +411,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           onConfirm={() => { deleteTrip(tripId); onBack(); }}
           onCancel={() => setShowDeleteTrip(false)}
         />
+      )}
+
+      {showCompare && compareActivities.length >= 2 && (
+        <CompareModal activities={compareActivities} onClose={() => setShowCompare(false)} />
       )}
     </div>
   );

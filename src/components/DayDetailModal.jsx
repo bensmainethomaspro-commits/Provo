@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { formatDate, getDayLabel, formatDuration, formatPrice, totalMinutes, totalBudget, getTimeSlots, budgetStats } from '../utils/helpers';
+import { formatDate, getDayLabel, formatDuration, formatPrice, totalMinutes, getTimeSlots, budgetStats } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
 
 export default function DayDetailModal({
   day, dayIndex, totalDays, isPastTrip,
   onClose, onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
-  onReorder, onStartTimeChange, onEdit, onAddActivity
+  onReorder, onStartTimeChange, onEdit, onAddActivity,
+  days, onDuplicate,
+  compareMode, compareSelectedIds, onToggleCompare,
 }) {
   const [closing, setClosing] = useState(false);
 
@@ -35,14 +37,13 @@ export default function DayDetailModal({
                 ? `${formatDuration(totalMin)} · ${day.activities.filter(a => a.status !== 'nogo').length} activité${day.activities.length > 1 ? 's' : ''}`
                 : 'Aucune activité'
               }
-              {stats.total > 0 && ` · Budget : ${formatPrice(stats.total)}`}
+              {stats.total > 0 && ` · ${formatPrice(stats.total)}`}
             </div>
           </div>
           <button className="sheet__close" onClick={close}>✕</button>
         </div>
 
         <div className="day-detail__body">
-          {/* Heure de départ */}
           <div className="day-section__start-time" style={{ marginBottom: 12 }}>
             <label htmlFor={`modal-start-${day.id}`}>🕘 Départ :</label>
             <input id={`modal-start-${day.id}`} type="time"
@@ -50,20 +51,19 @@ export default function DayDetailModal({
               onChange={e => onStartTimeChange(day.id, e.target.value)} />
           </div>
 
-          {/* Budget restant */}
           {stats.total > 0 && (
             <div className="budget-row" style={{ marginBottom: 12 }}>
               <span className="budget-pill" style={{ background: '#fef3c7', color: '#92400e' }}>
-                💰 Total : {formatPrice(stats.total)}
+                💰 {formatPrice(stats.total)}
               </span>
               {stats.spent > 0 && (
                 <span className="budget-pill" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                  ✅ Dépensé : {formatPrice(stats.spent)}
+                  ✅ {formatPrice(stats.spent)}
                 </span>
               )}
               {stats.remaining > 0 && (
                 <span className="budget-pill" style={{ background: '#dcfce7', color: '#15803d' }}>
-                  💵 Restant : {formatPrice(stats.remaining)}
+                  💵 {formatPrice(stats.remaining)}
                 </span>
               )}
             </div>
@@ -71,7 +71,6 @@ export default function DayDetailModal({
 
           <LogicAlerts activities={day.activities} />
 
-          {/* Activities */}
           <div className="day-section__body" style={{ marginTop: 8 }}>
             {sorted.length === 0
               ? (
@@ -103,13 +102,18 @@ export default function DayDetailModal({
                     isLast={origIdx === day.activities.length - 1}
                     onDragStart={() => {}}
                     onDragEnd={() => {}}
+                    days={days}
+                    currentDayId={day.id}
+                    onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
+                    compareMode={compareMode}
+                    compareSelected={compareSelectedIds?.has(activity.id)}
+                    onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
                   />
                 );
               })
             }
           </div>
 
-          {/* Add button */}
           <button
             className="btn btn--primary"
             style={{ width: '100%', marginTop: 14 }}

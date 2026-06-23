@@ -7,7 +7,9 @@ export default function DaySection({
   day, dayIndex, totalDays, isPastTrip,
   onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
   onReorder, onStartTimeChange, onEdit, onAddActivity,
-  onOpenDetail, onDrop
+  onOpenDetail, onDrop,
+  days, onDuplicate,
+  compareMode, compareSelectedIds, onToggleCompare,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -106,6 +108,12 @@ export default function DaySection({
                 onDragStart={() => setLocalDragId(activity.id)}
                 onDragEnd={() => setLocalDragId(null)}
                 isDragging={localDragId === activity.id}
+                days={days}
+                currentDayId={day.id}
+                onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
+                compareMode={compareMode}
+                compareSelected={compareSelectedIds?.has(activity.id)}
+                onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
               />
             );
           })
