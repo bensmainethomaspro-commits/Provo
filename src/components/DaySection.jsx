@@ -52,7 +52,7 @@ export default function DaySection({
             </span>
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
-          <button className="btn btn--xs btn--secondary" onClick={() => onOpenDetail(day)}>↗ Détail</button>
+          <button className="btn btn--xs btn--ghost-white" onClick={() => onOpenDetail(day)}>↗ Détail</button>
         </div>
       </div>
 

@@ -10,7 +10,7 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark, colorTheme, onCycleTheme }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -162,6 +162,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
+          {onCycleTheme && (
+            <button className="btn btn--ghost-white btn--sm" onClick={onCycleTheme} title={`Thème : ${colorTheme?.label || 'Soleil'}`}>
+              {colorTheme?.emoji || '🟠'}
+            </button>
+          )}
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
@@ -241,6 +246,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               <TimelineView
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
+                onDrop={handleDropOnDay}
               />
             ) : (
               trip.days.map((day, i) => (

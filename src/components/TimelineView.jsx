@@ -1,12 +1,21 @@
+import { useState } from 'react';
 import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
 
-function TlActivity({ activity, slot }) {
+function TlActivity({ activity, slot, onDragStart, onDragEnd }) {
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
   return (
     <div
       className={`tl-activity tl-activity--${activity.status}`}
       data-category={activity.category}
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData('text/plain', activity.id);
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart?.();
+      }}
+      onDragEnd={() => onDragEnd?.()}
     >
       <div className="tl-activity__top">
         <span className="tl-activity__emoji">{meta.emoji}</span>
@@ -21,14 +30,34 @@ function TlActivity({ activity, slot }) {
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
+  const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const totalMin = totalMinutes(active);
   const budget = totalBudget(day.activities);
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const activityId = e.dataTransfer.getData('text/plain');
+    if (activityId) onDrop?.(day.id, activityId);
+  };
+
   return (
-    <div className="tl-day" onClick={() => onOpenDetail(day)}>
+    <div
+      className={`tl-day${isDragOver ? ' tl-day--drop' : ''}`}
+      onClick={() => onOpenDetail(day)}
+      onDragOver={handleDragOver}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
+      onDrop={handleDrop}
+    >
       <div className="tl-day__header">
         <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
         <div className="tl-day__date">{formatDateShort(day.date)}</div>
@@ -43,7 +72,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail }) {
           <div className="tl-day__no-act">Aucune activité</div>
         ) : (
           day.activities.map(a => (
-            <TlActivity key={a.id} activity={a} slot={slots[a.id]} />
+            <TlActivity key={a.id} activity={a} slot={slots[a.id]} onDragStart={() => {}} onDragEnd={() => {}} />
           ))
         )}
       </div>
@@ -51,7 +80,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail }) {
   );
 }
 
-export default function TimelineView({ days, onOpenDetail }) {
+export default function TimelineView({ days, onOpenDetail, onDrop }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -61,6 +90,7 @@ export default function TimelineView({ days, onOpenDetail }) {
           dayIndex={i}
           totalDays={days.length}
           onOpenDetail={onOpenDetail}
+          onDrop={onDrop}
         />
       ))}
     </div>
