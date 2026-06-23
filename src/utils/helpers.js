@@ -96,7 +96,13 @@ export function getTimeSlots(activities, startTime = '09:00') {
   for (const a of activities) {
     if (a.status === 'nogo') { slots[a.id] = null; continue; }
     const dur = (a.durationHours || 0) * 60 + (a.durationMinutes || 0);
-    slots[a.id] = { start: minToTime(current), end: minToTime(current + dur) };
+    if (a.fixedStart) {
+      const fixedMin = timeToMin(a.fixedStart);
+      current = Math.max(current, fixedMin);
+      slots[a.id] = { start: minToTime(current), end: minToTime(current + dur), fixed: true };
+    } else {
+      slots[a.id] = { start: minToTime(current), end: minToTime(current + dur) };
+    }
     current += dur;
   }
   return slots;
@@ -488,7 +494,7 @@ export function getSkyGradient() {
 }
 
 // ─── Logic alerts ─────────────────────────────────────────
-export function getLogicAlerts(activities) {
+export function getLogicAlerts(activities, slots) {
   const alerts = [];
   const active = activities.filter(a => a.status !== 'nogo');
   const total = totalMinutes(active);
@@ -508,5 +514,37 @@ export function getLogicAlerts(activities) {
     alerts.push({ type: 'effort', icon: '🧘', message: `Grosse journée sportive (${formatDuration(sportMin)}) — pensez à du repos !` });
   }
 
+  if (slots) {
+    const fixedActs = active.filter(a => a.fixedStart && slots[a.id]);
+    for (let i = 0; i < fixedActs.length; i++) {
+      for (let j = i + 1; j < fixedActs.length; j++) {
+        const startI = timeToMin(fixedActs[i].fixedStart), endI = timeToMin(slots[fixedActs[i].id].end);
+        const startJ = timeToMin(fixedActs[j].fixedStart), endJ = timeToMin(slots[fixedActs[j].id].end);
+        if (startI < endJ && startJ < endI) {
+          alerts.push({ type: 'conflict', icon: '⚡', message: `Conflit horaire : "${fixedActs[i].title}" et "${fixedActs[j].title}" se chevauchent.` });
+        }
+      }
+    }
+  }
+
   return alerts;
+}
+
+export function nearestNeighborSort(activities) {
+  const withGeo = activities.filter(a => a.lat && a.lon && a.status !== 'nogo');
+  const other = activities.filter(a => !a.lat || !a.lon || a.status === 'nogo');
+  if (withGeo.length <= 1) return activities;
+  const result = [withGeo[0]];
+  const remaining = withGeo.slice(1);
+  while (remaining.length > 0) {
+    const last = result[result.length - 1];
+    let minDist = Infinity, minIdx = 0;
+    remaining.forEach((a, i) => {
+      const d = haversineKm(last.lat, last.lon, a.lat, a.lon);
+      if (d < minDist) { minDist = d; minIdx = i; }
+    });
+    result.push(remaining[minIdx]);
+    remaining.splice(minIdx, 1);
+  }
+  return [...result, ...other];
 }

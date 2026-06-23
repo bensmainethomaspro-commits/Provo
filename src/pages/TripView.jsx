@@ -12,7 +12,7 @@ import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
 import { useWeather } from '../hooks/useWeather';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES } from '../utils/helpers';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -105,6 +105,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
+    restoreTrip, addTravelBlock, setDayActivitiesOrder,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -124,9 +125,28 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [viewMode, setViewMode] = useState('list');
   const [reserveFilter, setReserveFilter] = useState('all');
   const [copyDone, setCopyDone] = useState(false);
+  const [undoVisible, setUndoVisible] = useState(false);
+  const [undoMsg, setUndoMsg] = useState('');
+  const undoRef = useRef(null);
+  const undoTimerRef = useRef(null);
   const tabContentRef = useRef(null);
   const tripRef = useRef(trip);
   useEffect(() => { tripRef.current = trip; }, [trip]);
+
+  const pushUndo = (snapshot, msg = 'Action annulée') => {
+    undoRef.current = snapshot;
+    setUndoMsg(msg);
+    setUndoVisible(true);
+    clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => { setUndoVisible(false); undoRef.current = null; }, 5000);
+  };
+
+  const handleUndo = () => {
+    if (undoRef.current) restoreTrip(tripId, undoRef.current);
+    clearTimeout(undoTimerRef.current);
+    setUndoVisible(false);
+    undoRef.current = null;
+  };
 
   const handleTouchDragStart = useTouchDnd({
     tripId, tripRef,
@@ -204,11 +224,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const handleStatusChange = (dayId, activityId, status) =>
     setActivityStatus(tripId, { type: 'day', dayId }, activityId, status);
 
-  const handleDeleteFromDay = (dayId, activityId) =>
+  const handleDeleteFromDay = (dayId, activityId) => {
+    pushUndo(trip, 'Activité supprimée');
     deleteActivity(tripId, { type: 'day', dayId }, activityId);
+  };
 
-  const handleDeleteFromReserve = (activityId) =>
+  const handleDeleteFromReserve = (activityId) => {
+    pushUndo(trip, 'Activité supprimée');
     deleteActivity(tripId, { type: 'reserve' }, activityId);
+  };
 
   const handleEditSave = (updates) => {
     if (!editingActivity) return;
@@ -412,7 +436,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   isPastTrip={isPast}
                   onStatusChange={handleStatusChange}
                   onDelete={handleDeleteFromDay}
-                  onMoveToReserve={(dayId, actId) => moveToReserve(tripId, dayId, actId)}
+                  onMoveToReserve={(dayId, actId) => { pushUndo(trip, 'Activité déplacée en réserve'); moveToReserve(tripId, dayId, actId); }}
                   onMoveToNextDay={(dayId, actId) => moveToNextDay(tripId, dayId, actId)}
                   onReorder={(dayId, actId, dir) => reorderActivity(tripId, dayId, actId, dir)}
                   onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
@@ -424,6 +448,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                   weather={weather?.byDate[day.date]}
                   onTouchDragStart={handleTouchDragStart}
+                  reserve={trip.reserve}
+                  onAddFromReserve={(dayId, actId) => { pushUndo(trip, 'Activité ajoutée depuis la réserve'); moveFromReserveToDay(tripId, dayId, actId); }}
+                  onAddTravel={(dayId, afterId, durationMin) => { pushUndo(trip); addTravelBlock(tripId, dayId, afterId, durationMin); }}
+                  onOptimizeOrder={(dayId) => {
+                    const d = trip.days.find(x => x.id === dayId);
+                    if (!d) return;
+                    pushUndo(trip, 'Ordre optimisé');
+                    setDayActivitiesOrder(tripId, dayId, nearestNeighborSort(d.activities));
+                  }}
                   {...sharedDayProps}
                 />
               ))
@@ -653,6 +686,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       {showCompare && compareActivities.length >= 2 && (
         <CompareModal activities={compareActivities} onClose={() => setShowCompare(false)} />
       )}
+
+      <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
+        <span>{undoMsg}</span>
+        <button className="undo-toast__btn" onClick={handleUndo}>↩ Annuler</button>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -14,7 +14,35 @@ export default function ActivityCard({
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
   const copyRef = useRef(null);
+  const SWIPE_MAX = 110;
+  const SWIPE_THRESHOLD = 55;
+
+  const handleSwipeTouchStart = useCallback((e) => {
+    if (compareMode || e.target.closest('.activity-card__drag-handle')) return;
+    if (swipeOffset < -SWIPE_THRESHOLD) { setSwipeOffset(0); return; }
+    swipeRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, isDragging: false };
+  }, [compareMode, swipeOffset]);
+
+  const handleSwipeTouchMove = useCallback((e) => {
+    const s = swipeRef.current;
+    if (s.startX === null) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const dy = Math.abs(e.touches[0].clientY - s.startY);
+    if (!s.isDragging) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > dy) s.isDragging = true;
+      else if (dy > 8) { s.startX = null; return; }
+      else return;
+    }
+    if (dx < 0) { e.stopPropagation(); setSwipeOffset(Math.max(-SWIPE_MAX, dx)); }
+  }, []);
+
+  const handleSwipeTouchEnd = useCallback(() => {
+    swipeRef.current.startX = null;
+    setSwipeOffset(p => Math.abs(p) > SWIPE_THRESHOLD ? -SWIPE_MAX : 0);
+  }, []);
 
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
@@ -39,6 +67,12 @@ export default function ActivityCard({
   return (
     <>
       <div
+        className="activity-card-swipe"
+        onTouchStart={handleSwipeTouchStart}
+        onTouchMove={handleSwipeTouchMove}
+        onTouchEnd={handleSwipeTouchEnd}
+      >
+      <div
         className={[
           'activity-card',
           `activity-card--${activity.status}`,
@@ -46,6 +80,7 @@ export default function ActivityCard({
           showPolaroid ? 'activity-card--polaroid' : '',
           compareSelected ? 'activity-card--compare-selected' : '',
         ].filter(Boolean).join(' ')}
+        style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeRef.current.isDragging ? 'none' : 'transform 0.2s ease' }}
         data-category={activity.category}
         draggable={!compareMode}
         onDragStart={handleDragStart}
@@ -78,7 +113,7 @@ export default function ActivityCard({
           <div className="activity-card__main">
             <div className="activity-card__title">{activity.title}</div>
             <div className="activity-card__meta">
-              {slot && <span className="time-slot">{slot.start} – {slot.end}</span>}
+              {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.fixed ? '📌 ' : ''}{slot.start} – {slot.end}</span>}
               {dur > 0 && <span className="activity-card__duration">⏱ {formatDuration(dur)}</span>}
               {activity.price > 0 && <span className="activity-card__price">💶 {formatPrice(parseFloat(activity.price))}</span>}
               {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
@@ -148,6 +183,26 @@ export default function ActivityCard({
             <button className="move-btn move-btn--danger" title="Supprimer" onClick={() => setDeleteConfirm(true)}>🗑️</button>
           </div>
         </div>
+      </div>
+
+      {swipeOffset < -20 && (
+        <div className="activity-card__swipe-actions">
+          <button className="swipe-action swipe-action--done"
+            onTouchEnd={(e) => { e.preventDefault(); onStatusChange('done'); setSwipeOffset(0); }}>
+            <span>✅</span><span>Fait</span>
+          </button>
+          {context === 'day' && onMoveToReserve && (
+            <button className="swipe-action swipe-action--reserve"
+              onTouchEnd={(e) => { e.preventDefault(); onMoveToReserve(); setSwipeOffset(0); }}>
+              <span>📦</span><span>Réserve</span>
+            </button>
+          )}
+          <button className="swipe-action swipe-action--delete"
+            onTouchEnd={(e) => { e.preventDefault(); setDeleteConfirm(true); setSwipeOffset(0); }}>
+            <span>🗑️</span><span>Suppr.</span>
+          </button>
+        </div>
+      )}
       </div>
 
       {deleteConfirm && (

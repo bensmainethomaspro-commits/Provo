@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
 
-const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
+const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '' };
+
+const timeToMin = (t) => { const [h, m] = (t || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 
 const DEFAULT_DURATIONS = {
   resto:  { h: 1, m: 30 },
@@ -50,6 +52,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           openingHours: editActivity.openingHours || '',
           lat: editActivity.lat || null,
           lon: editActivity.lon || null,
+          fixedStart: editActivity.fixedStart || '',
+          fixedEnd: '',
         });
       } else {
         setForm({ ...blank });
@@ -160,9 +164,11 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const handleSubmit = () => {
     const rawTitle = form.title.trim();
     const title = rawTitle || deduceTitle(form.category, form.address, form.notes);
+    const { fixedEnd, ...formRest } = form;
     const activity = {
-      ...form,
+      ...formRest,
       title,
+      fixedStart: form.fixedStart || null,
       durationHours: parseInt(form.durationHours) || 0,
       durationMinutes: parseInt(form.durationMinutes) || 0,
       price: parseFloat(form.price) || 0,
@@ -281,6 +287,46 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               <input className="form-input" type="number" min="0" max="59" step="15" value={form.durationMinutes}
                 onChange={e => set('durationMinutes', Math.max(0, parseInt(e.target.value) || 0))} />
               <span className="duration-label">min</span>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Heure prévue <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— optionnel</span></label>
+            <div className="time-range-row">
+              <span>De</span>
+              <input
+                type="time"
+                className="form-input"
+                value={form.fixedStart}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm(f => {
+                    const updated = { ...f, fixedStart: val };
+                    if (val && f.fixedEnd) {
+                      const mins = timeToMin(f.fixedEnd) - timeToMin(val);
+                      if (mins > 0) { updated.durationHours = Math.floor(mins / 60); updated.durationMinutes = mins % 60; }
+                    }
+                    return updated;
+                  });
+                }}
+              />
+              <span>à</span>
+              <input
+                type="time"
+                className="form-input"
+                value={form.fixedEnd}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm(f => {
+                    const updated = { ...f, fixedEnd: val };
+                    if (f.fixedStart && val) {
+                      const mins = timeToMin(val) - timeToMin(f.fixedStart);
+                      if (mins > 0) { updated.durationHours = Math.floor(mins / 60); updated.durationMinutes = mins % 60; }
+                    }
+                    return updated;
+                  });
+                }}
+              />
             </div>
           </div>
 

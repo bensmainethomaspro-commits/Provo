@@ -1,5 +1,5 @@
 import { useState, Fragment } from 'react';
-import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm } from '../utils/helpers';
+import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm, getCategoryMeta } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
 import ConfirmDialog from './ConfirmDialog';
@@ -17,6 +17,7 @@ export default function DaySection({
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
   weather, onTouchDragStart,
+  reserve, onAddFromReserve, onAddTravel, onOptimizeOrder,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -37,6 +38,13 @@ export default function DaySection({
 
   const todoActivities = day.activities.filter(a => a.status === 'todo');
   const hasTodo = todoActivities.length > 0;
+
+  const freeMin = Math.max(0, 8 * 60 - total);
+  const suggestions = freeMin >= 60 ? (reserve || [])
+    .filter(a => { const dur = (a.durationHours||0)*60 + (a.durationMinutes||0); return dur > 0 && dur <= freeMin + 30; })
+    .slice(0, 3) : [];
+
+  const geoCount = day.activities.filter(a => a.lat && a.lon && a.status !== 'nogo').length;
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -84,6 +92,9 @@ export default function DaySection({
             </span>
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
+          {geoCount >= 2 && onOptimizeOrder && (
+            <button className="btn btn--xs btn--ghost-white" onClick={() => onOptimizeOrder(day.id)} title="Optimiser l'ordre géographique">🗺</button>
+          )}
           <button
             className="btn btn--xs btn--ghost-white"
             onClick={() => setNotesOpen(o => !o)}
@@ -113,7 +124,7 @@ export default function DaySection({
         )}
       </div>
 
-      <LogicAlerts activities={day.activities} />
+      <LogicAlerts activities={day.activities} slots={slots} />
 
       <div
         className={`day-section__body${isDragOver ? ' day-section__body--drop-target' : ''}`}
@@ -175,6 +186,12 @@ export default function DaySection({
                   <div className="activity-bridge">
                     <span className="activity-bridge__line" />
                     <span className="activity-bridge__dist">↕ {formatDist(dist)}</span>
+                    {onAddTravel && (
+                      <>
+                        <button className="travel-btn" title="Ajouter trajet à pied" onClick={() => onAddTravel(day.id, activity.id, Math.round(dist * 12))}>🚶 {Math.round(dist * 12)}min</button>
+                        <button className="travel-btn" title="Ajouter trajet en voiture" onClick={() => onAddTravel(day.id, activity.id, Math.max(5, Math.round(dist * 2)))}>🚗 {Math.max(5, Math.round(dist * 2))}min</button>
+                      </>
+                    )}
                     <span className="activity-bridge__line" />
                   </div>
                 )}
@@ -183,6 +200,23 @@ export default function DaySection({
           })
         }
       </div>
+
+      {suggestions.length > 0 && onAddFromReserve && (
+        <div className="day-suggestions">
+          <div className="day-suggestions__header">✨ {Math.floor(freeMin / 60)}h{freeMin % 60 > 0 ? `${freeMin % 60}min` : ''} de libre — idées depuis la réserve :</div>
+          <div className="day-suggestions__list">
+            {suggestions.map(a => {
+              const meta = getCategoryMeta(a.category);
+              const dur = (a.durationHours||0)*60 + (a.durationMinutes||0);
+              return (
+                <button key={a.id} className="day-suggestion-pill" onClick={() => onAddFromReserve(day.id, a.id)}>
+                  {meta.emoji} {a.title} · {formatDuration(dur)} +
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {notesOpen && (
         <div className="day-section__notes">

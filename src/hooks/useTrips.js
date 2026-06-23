@@ -333,6 +333,33 @@ export function useTrips() {
     }));
   }, []);
 
+  const restoreTrip = useCallback((tripId, snapshot) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : snapshot));
+  }, []);
+
+  const addTravelBlock = useCallback((tripId, dayId, afterActivityId, durationMin) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      return {
+        ...t, days: t.days.map(d => {
+          if (d.id !== dayId) return d;
+          const idx = d.activities.findIndex(a => a.id === afterActivityId);
+          if (idx < 0) return d;
+          const travel = { id: genId(), title: 'Trajet', category: 'trajet', status: 'todo', durationHours: Math.floor(durationMin / 60), durationMinutes: durationMin % 60, address: '', notes: '', price: 0, link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: null };
+          const newActs = [...d.activities];
+          newActs.splice(idx + 1, 0, travel);
+          return { ...d, activities: newActs };
+        })
+      };
+    }));
+  }, []);
+
+  const setDayActivitiesOrder = useCallback((tripId, dayId, orderedActivities) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, days: t.days.map(d => d.id !== dayId ? d : { ...d, activities: orderedActivities })
+    }));
+  }, []);
+
   const importTrip = useCallback((tripData) => {
     const id = genId();
     const trip = { ...tripData, id, createdAt: new Date().toISOString() };
@@ -352,6 +379,7 @@ export function useTrips() {
     deleteActivity, setDayStartTime, importTrip, duplicateToDay,
     duplicateTrip, setDayNotes,
     addPackingItem, togglePackingItem, deletePackingItem,
-    setPackingOrder, sweepDayToReserve
+    setPackingOrder, sweepDayToReserve,
+    restoreTrip, addTravelBlock, setDayActivitiesOrder,
   };
 }
