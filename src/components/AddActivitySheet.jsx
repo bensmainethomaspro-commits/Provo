@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, getCategoryMeta } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
 
@@ -50,30 +50,52 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  const applyResult = (result, rawInput) => {
+    setForm(f => ({
+      ...f,
+      title: result.title || f.title,
+      address: result.address || f.address,
+      category: result.category || f.category,
+      ...(result.link ? { link: result.link } : {}),
+      photoUrl: result.photoUrl || f.photoUrl,
+      openingHours: result.openingHours || f.openingHours,
+      lat: result.lat ?? f.lat,
+      lon: result.lon ?? f.lon,
+    }));
+    setImportUrl('');
+  };
+
   const handleImport = async () => {
+    const raw = importUrl.trim();
     setImporting(true);
     setError('');
     try {
-      const result = await importFromGoogleMaps(importUrl.trim());
-      if (!result) {
-        setError('URL non reconnue. Colle un lien Google Maps (long ou court maps.app.goo.gl).');
-        return;
+      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app');
+
+      if (isUrl) {
+        // Try URL-based import first
+        const result = await importFromGoogleMaps(raw);
+        if (result) { applyResult(result, raw); return; }
+        // URL import failed — try treating the URL's place name as text search
+        const name = parseGoogleMapsUrl(raw);
+        if (name) {
+          const placeData = await fetchPlaceData(name);
+          if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
+          // At least save the title and link
+          const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          applyResult({ title: clean, link: raw }, raw);
+          setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés. Complète les détails manuellement.');
+          return;
+        }
+        setError('Lien non reconnu. Essaie de coller directement le nom du lieu.');
+      } else {
+        // Plain text: search Nominatim directly
+        const placeData = await fetchPlaceData(raw);
+        if (placeData) { applyResult(placeData, raw); return; }
+        setError('Lieu introuvable. Essaie un nom plus précis (ex: "Plage de Biarritz, France").');
       }
-      setForm(f => ({
-        ...f,
-        title: result.title || f.title,
-        address: result.address || f.address,
-        category: result.category || f.category,
-        link: result.link || importUrl.trim(),
-        photoUrl: result.photoUrl || f.photoUrl,
-        openingHours: result.openingHours || f.openingHours,
-        lat: result.lat ?? f.lat,
-        lon: result.lon ?? f.lon,
-      }));
-      setImportUrl('');
     } catch {
-      setForm(f => ({ ...f, link: importUrl.trim() }));
-      setImportUrl('');
+      setError('Erreur réseau. Vérifie ta connexion et réessaie.');
     } finally {
       setImporting(false);
     }
@@ -164,14 +186,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             </div>
           )}
 
-          {/* Google Maps import */}
+          {/* Google Maps import / place search */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Importer depuis Google Maps</label>
+            <label className="form-label">📍 Lien Google Maps ou nom du lieu</label>
             <div className="import-row">
               <input
                 className="form-input"
-                type="url"
-                placeholder="maps.google.com/… ou maps.app.goo.gl/…"
+                placeholder="maps.app.goo.gl/… ou tapez un nom de lieu"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}

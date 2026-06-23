@@ -147,33 +147,58 @@ export async function importFromGoogleMaps(url) {
   let resolvedUrl = url;
   let placeName = null;
 
-  // Fetch via CORS proxy for any Google Maps or short URL
   if (/google\.com\/maps|goo\.gl|maps\.app/.test(url)) {
     try {
       const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
       const data = await res.json();
+      const html = data.contents || '';
       const finalUrl = data.status?.url || '';
       if (finalUrl && finalUrl !== url) resolvedUrl = finalUrl;
 
-      // 1. Try parsing the resolved URL
+      // Strategy 1: Parse the resolved URL directly
       placeName = parseGoogleMapsUrl(resolvedUrl) || parseGoogleMapsUrl(url);
 
-      // 2. Extract from og:title in HTML if URL parsing failed
+      // Strategy 2: Find any Google Maps URL embedded in the HTML
+      // (covers JS redirects like: window.location='https://google.com/maps/place/...')
       if (!placeName) {
-        const html = data.contents || '';
-        const m = html.match(/property="og:title"\s+content="([^"]+)"/i)
-          || html.match(/content="([^"]+)"\s+property="og:title"/i);
-        if (m) placeName = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+        const embedded = html.match(/https?:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^"'<>\s\\]+/i);
+        if (embedded) {
+          placeName = parseGoogleMapsUrl(embedded[0]);
+          if (placeName) resolvedUrl = embedded[0];
+        }
       }
-      if (!placeName) {
-        const html = data.contents || '';
-        const t = html.match(/<title[^>]*>([^<]+)/i);
-        if (t) placeName = t[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+
+      // Strategy 3: DOMParser for og:title (works when allorigins fetches the real page)
+      if (!placeName && html) {
+        try {
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+          if (ogTitle) {
+            const cleaned = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+            if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+          }
+          if (!placeName) {
+            const title = doc.querySelector('title')?.textContent?.trim();
+            if (title) {
+              const cleaned = title.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+              if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+            }
+          }
+        } catch {}
+      }
+
+      // Strategy 4: Regex og:title fallback
+      if (!placeName && html) {
+        const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+        if (m) {
+          const cleaned = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+          if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+        }
       }
     } catch {}
   }
 
-  // Last resort: try URL directly
   if (!placeName) placeName = parseGoogleMapsUrl(url);
   if (!placeName) return null;
 
