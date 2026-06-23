@@ -242,9 +242,23 @@ async function reverseGeocode(lat, lon) {
   ];
   let category = 'visite';
   for (const [re, cat] of catRules) { if (re.test(typeText)) { category = cat; break; } }
+  let photoUrl = null;
+  const wikiRaw = ex.wikipedia || '';
+  const wikiLangMatch = wikiRaw.match(/^([a-z]{2}):/);
+  const wikiLang = wikiLangMatch?.[1] || 'en';
+  const wikiKey = wikiLangMatch ? wikiRaw.slice(wikiLangMatch[0].length) : wikiRaw;
+  if (wikiKey) {
+    try {
+      const wRes = await fetch(`https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`);
+      if (wRes.ok) { const w = await wRes.json(); photoUrl = w.thumbnail?.source?.replace(/\/\d+px-/, '/600px-') || null; }
+    } catch {}
+  }
+
   return {
     title: (p.name || p.display_name.split(',')[0]).trim(),
     address, category, lat, lon,
+    openingHours: ex.opening_hours || '',
+    ...(photoUrl ? { photoUrl } : {}),
   };
 }
 
@@ -294,11 +308,11 @@ function extractFromHtml(html) {
 }
 
 export async function importFromGoogleMaps(url) {
+  const cleaned = cleanGoogleMapsUrl(url);
   let resolvedUrl = url;
   let placeName = null;
 
   if (/google\.com\/maps|goo\.gl|maps\.app/.test(url)) {
-    const cleaned = cleanGoogleMapsUrl(url);
     const { html, finalUrl } = await fetchHtmlViaProxy(cleaned);
     if (finalUrl) resolvedUrl = finalUrl;
 
@@ -361,7 +375,7 @@ export async function importFromGoogleMaps(url) {
     // Strategy 6: extract coordinates → reverse geocode (robust fallback for short links)
     if (!placeName) {
       const coords = extractCoordsFromUrl(resolvedUrl)
-        || extractCoordsFromUrl(cleanGoogleMapsUrl(url))
+        || extractCoordsFromUrl(cleaned)
         || (html ? extractCoordsFromHtml(html) : null);
       if (coords) {
         const rev = await reverseGeocode(coords.lat, coords.lon).catch(() => null);
@@ -373,9 +387,16 @@ export async function importFromGoogleMaps(url) {
   if (!placeName) placeName = parseGoogleMapsUrl(url);
   if (!placeName) return null;
 
-  const placeData = await fetchPlaceData(placeName).catch(() => null);
   const cleanTitle = toTitleCase(placeName.replace(/\+/g, ' '));
 
+  // Prefer reverse geocoding when URL contains coordinates — gives accurate address
+  const urlCoords = extractCoordsFromUrl(resolvedUrl) || extractCoordsFromUrl(cleaned);
+  if (urlCoords) {
+    const revData = await reverseGeocode(urlCoords.lat, urlCoords.lon).catch(() => null);
+    if (revData) return { ...revData, title: cleanTitle, link: url };
+  }
+
+  const placeData = await fetchPlaceData(placeName).catch(() => null);
   if (placeData) return { ...placeData, title: placeData.title || cleanTitle, link: url };
   return { title: cleanTitle, link: url };
 }

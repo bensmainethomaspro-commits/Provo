@@ -1,7 +1,23 @@
 import { useState, useEffect } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
 
-const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
+const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
+
+const DEFAULT_DURATIONS = {
+  resto:  { h: 1, m: 30 },
+  visite: { h: 2, m: 0  },
+  balade: { h: 2, m: 0  },
+  plage:  { h: 3, m: 0  },
+  sport:  { h: 1, m: 30 },
+  repos:  { h: 1, m: 0  },
+  trajet: { h: 1, m: 0  },
+  fun:    { h: 2, m: 30 },
+};
+
+function isDefaultDuration(f) {
+  const total = (parseInt(f.durationHours) || 0) * 60 + (parseInt(f.durationMinutes) || 0);
+  return total === 0;
+}
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve }) {
@@ -51,17 +67,22 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   const applyResult = (result, rawInput) => {
-    setForm(f => ({
-      ...f,
-      title: result.title || f.title,
-      address: result.address || f.address,
-      category: result.category || f.category,
-      ...(result.link ? { link: result.link } : {}),
-      photoUrl: result.photoUrl || f.photoUrl,
-      openingHours: result.openingHours || f.openingHours,
-      lat: result.lat ?? f.lat,
-      lon: result.lon ?? f.lon,
-    }));
+    setForm(f => {
+      const newCat = result.category || f.category;
+      const dur = DEFAULT_DURATIONS[newCat];
+      return {
+        ...f,
+        title: result.title || f.title,
+        address: result.address || f.address,
+        category: newCat,
+        ...(result.link ? { link: result.link } : {}),
+        photoUrl: result.photoUrl || f.photoUrl,
+        openingHours: result.openingHours || f.openingHours,
+        lat: result.lat ?? f.lat,
+        lon: result.lon ?? f.lon,
+        ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
+      };
+    });
     setImportUrl('');
   };
 
@@ -237,7 +258,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 <button key={cat.id} type="button"
                   className={`category-btn${form.category === cat.id ? ' category-btn--active' : ''}`}
                   data-cat={cat.id}
-                  onClick={() => set('category', cat.id)}>
+                  onClick={() => {
+                    const dur = DEFAULT_DURATIONS[cat.id];
+                    setForm(f => {
+                      const autoFill = dur && isDefaultDuration(f);
+                      return { ...f, category: cat.id, ...(autoFill ? { durationHours: dur.h, durationMinutes: dur.m } : {}) };
+                    });
+                  }}>
                   <span>{cat.emoji}</span>
                   <span>{cat.label}</span>
                 </button>

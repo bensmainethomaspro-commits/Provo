@@ -201,12 +201,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
         </button>
+        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
+          🗺 Carte
+        </button>
         <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
           📝 Notes
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
-        </button>
-        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
-          🗺 Carte
         </button>
       </div>
 
