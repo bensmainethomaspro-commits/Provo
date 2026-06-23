@@ -18,11 +18,42 @@ const PRESETS = {
   autre:       ['Parapluie', 'Sac à dos', 'Guide de voyage', 'Cadenas', 'Réveil', 'Livre / liseuse'],
 };
 
-export default function PackingList({ items = [], onAdd, onToggle, onDelete }) {
+function ItemRow({ item, onToggle, onDelete, onDragStart, onDragOver, onDrop, onDragEnd, isDragging, isDragOver }) {
+  const catMeta = PACKING_CATS.find(c => c.id === item.category);
+  return (
+    <div
+      className={[
+        'packing-item',
+        item.checked ? 'packing-item--done' : '',
+        isDragging ? 'packing-item--dragging' : '',
+        isDragOver ? 'packing-item--drag-over' : '',
+      ].filter(Boolean).join(' ')}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <div className="packing-item__drag-handle" title="Glisser pour réordonner">⠿</div>
+      <button className="packing-item__check" onClick={() => onToggle(item.id)}>
+        {item.checked ? '✅' : '⬜'}
+      </button>
+      <span className="packing-item__text">{item.text}</span>
+      <span className="packing-item__cat-emoji" title={catMeta?.label}>{catMeta?.emoji || '🎒'}</span>
+      <button className="packing-item__delete" onClick={() => onDelete(item.id)}>✕</button>
+    </div>
+  );
+}
+
+export default function PackingList({ items = [], onAdd, onToggle, onDelete, onReorder }) {
   const [activeCat, setActiveCat] = useState('tous');
+  const [grouped, setGrouped] = useState(false);
+  const [collapsedCats, setCollapsedCats] = useState(new Set());
   const [newText, setNewText] = useState('');
   const [newCat, setNewCat] = useState('autre');
   const [showPresets, setShowPresets] = useState(false);
+  const [dragId, setDragId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   const checkedCount = items.filter(i => i.checked).length;
   const total = items.length;
@@ -41,6 +72,79 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete }) {
     setNewText('');
   };
 
+  const toggleCatCollapse = (catId) => {
+    setCollapsedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId); else next.add(catId);
+      return next;
+    });
+  };
+
+  // DnD handlers
+  const handleDragStart = (e, itemId) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDragId(itemId);
+  };
+  const handleDragOver = (e, itemId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverId(itemId);
+  };
+  const handleDrop = (e, targetId) => {
+    e.preventDefault();
+    if (!dragId || dragId === targetId) return;
+    const newList = [...items];
+    const fromIdx = newList.findIndex(i => i.id === dragId);
+    const toIdx = newList.findIndex(i => i.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = newList.splice(fromIdx, 1);
+    newList.splice(toIdx, 0, moved);
+    onReorder?.(newList);
+    setDragId(null);
+    setDragOverId(null);
+  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
+
+  const itemProps = (item) => ({
+    item,
+    onToggle,
+    onDelete,
+    isDragging: dragId === item.id,
+    isDragOver: dragOverId === item.id && dragId !== item.id,
+    onDragStart: (e) => handleDragStart(e, item.id),
+    onDragOver: (e) => handleDragOver(e, item.id),
+    onDrop: (e) => handleDrop(e, item.id),
+    onDragEnd: handleDragEnd,
+  });
+
+  const renderItems = (list) => list.map(item => (
+    <ItemRow key={item.id} {...itemProps(item)} />
+  ));
+
+  const renderGrouped = () => {
+    const visibleCats = PACKING_CATS.filter(cat => filtered.some(i => i.category === cat.id));
+    const uncategorized = filtered.filter(i => !PACKING_CATS.find(c => c.id === i.category));
+    return (
+      <>
+        {visibleCats.map(cat => {
+          const catItems = filtered.filter(i => i.category === cat.id);
+          const collapsed = collapsedCats.has(cat.id);
+          return (
+            <div key={cat.id} className="packing-group">
+              <button className="packing-group__header" onClick={() => toggleCatCollapse(cat.id)}>
+                <span>{cat.emoji} {cat.label}</span>
+                <span className="packing-group__count">{catItems.filter(i => i.checked).length}/{catItems.length}</span>
+                <span className="packing-group__chevron">{collapsed ? '▶' : '▼'}</span>
+              </button>
+              {!collapsed && renderItems(catItems)}
+            </div>
+          );
+        })}
+        {uncategorized.length > 0 && renderItems(uncategorized)}
+      </>
+    );
+  };
+
   return (
     <div className="packing-list">
       <div className="packing-list__progress-wrap">
@@ -52,25 +156,34 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete }) {
         </span>
       </div>
 
-      <div className="packing-list__cats">
+      <div className="packing-list__toolbar">
+        <div className="packing-list__cats">
+          <button
+            className={`packing-cat-btn${activeCat === 'tous' ? ' packing-cat-btn--active' : ''}`}
+            onClick={() => setActiveCat('tous')}
+          >
+            Tout{total > 0 ? ` (${total})` : ''}
+          </button>
+          {PACKING_CATS.map(cat => {
+            const count = items.filter(i => i.category === cat.id).length;
+            return (
+              <button
+                key={cat.id}
+                className={`packing-cat-btn${activeCat === cat.id ? ' packing-cat-btn--active' : ''}`}
+                onClick={() => setActiveCat(cat.id)}
+              >
+                {cat.emoji}{count > 0 ? ` ${count}` : ''}
+              </button>
+            );
+          })}
+        </div>
         <button
-          className={`packing-cat-btn${activeCat === 'tous' ? ' packing-cat-btn--active' : ''}`}
-          onClick={() => setActiveCat('tous')}
+          className={`btn btn--sm ${grouped ? 'btn--primary' : 'btn--secondary'}`}
+          onClick={() => setGrouped(g => !g)}
+          title={grouped ? 'Vue plate' : 'Grouper par catégorie'}
         >
-          Tout{total > 0 ? ` (${total})` : ''}
+          {grouped ? '☰' : '⊞'}
         </button>
-        {PACKING_CATS.map(cat => {
-          const count = items.filter(i => i.category === cat.id).length;
-          return (
-            <button
-              key={cat.id}
-              className={`packing-cat-btn${activeCat === cat.id ? ' packing-cat-btn--active' : ''}`}
-              onClick={() => setActiveCat(cat.id)}
-            >
-              {cat.emoji}{count > 0 ? ` ${count}` : ''}
-            </button>
-          );
-        })}
       </div>
 
       <div className="packing-list__items">
@@ -82,19 +195,7 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete }) {
             }
           </div>
         ) : (
-          filtered.map(item => {
-            const catMeta = PACKING_CATS.find(c => c.id === item.category);
-            return (
-              <div key={item.id} className={`packing-item${item.checked ? ' packing-item--done' : ''}`}>
-                <button className="packing-item__check" onClick={() => onToggle(item.id)}>
-                  {item.checked ? '✅' : '⬜'}
-                </button>
-                <span className="packing-item__text">{item.text}</span>
-                <span className="packing-item__cat-emoji" title={catMeta?.label}>{catMeta?.emoji || '🎒'}</span>
-                <button className="packing-item__delete" onClick={() => onDelete(item.id)}>✕</button>
-              </div>
-            );
-          })
+          grouped ? renderGrouped() : renderItems(filtered)
         )}
       </div>
 
@@ -123,7 +224,7 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete }) {
           className="btn btn--secondary btn--sm"
           onClick={() => setShowPresets(s => !s)}
         >
-          💡 {showPresets ? 'Masquer suggestions' : 'Suggestions'}
+          💡 {showPresets ? 'Masquer' : 'Suggestions'}
         </button>
         {showPresets && (
           <>

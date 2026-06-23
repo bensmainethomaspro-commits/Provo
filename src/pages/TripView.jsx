@@ -10,8 +10,92 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
+import TripSummary from '../components/TripSummary';
 import { useWeather } from '../hooks/useWeather';
 import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES } from '../utils/helpers';
+
+function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
+  const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
+
+  const handleTouchDragStart = (activityId, touch, sourceEl) => {
+    const s = stateRef.current;
+    s.id = activityId;
+    s.sourceEl = sourceEl;
+    const rect = sourceEl.getBoundingClientRect();
+    s.offset = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    const ghost = sourceEl.cloneNode(true);
+    Object.assign(ghost.style, {
+      position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
+      width: rect.width + 'px', pointerEvents: 'none', zIndex: '9999',
+      opacity: '0.88', transform: 'scale(1.03) rotate(1deg)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.3)', transition: 'none', borderRadius: '16px',
+    });
+    document.body.appendChild(ghost);
+    s.ghost = ghost;
+    sourceEl.classList.add('activity-card--dragging');
+  };
+
+  useEffect(() => {
+    const onMove = (e) => {
+      const s = stateRef.current;
+      if (!s.ghost) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
+      s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
+      s.ghost.style.visibility = 'hidden';
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      s.ghost.style.visibility = '';
+      const newZone = el?.closest('[data-drop-zone="true"]') || null;
+      if (newZone !== s.dropZone) {
+        s.dropZone?.classList.remove('day-section__body--drop-target');
+        newZone?.classList.add('day-section__body--drop-target');
+        s.dropZone = newZone;
+      }
+    };
+
+    const onEnd = (e) => {
+      const s = stateRef.current;
+      if (!s.ghost) return;
+      const touch = e.changedTouches[0];
+      s.ghost.style.visibility = 'hidden';
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      s.ghost.style.visibility = '';
+      const zone = el?.closest('[data-drop-zone="true"]') || s.dropZone;
+      if (zone && s.id) {
+        const zoneType = zone.dataset.zoneType;
+        const dayId = zone.dataset.dayId;
+        const itemId = s.id;
+        const trip = tripRef.current;
+        if (zoneType === 'day' && dayId) {
+          const isInReserve = trip.reserve.some(a => a.id === itemId);
+          if (isInReserve) moveFromReserveToDay(tripId, dayId, itemId);
+          else {
+            const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
+            if (srcDay && srcDay.id !== dayId) moveDayToDay(tripId, srcDay.id, dayId, itemId);
+          }
+        } else if (zoneType === 'reserve') {
+          const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
+          if (srcDay) moveToReserve(tripId, srcDay.id, itemId);
+        }
+      }
+      s.dropZone?.classList.remove('day-section__body--drop-target');
+      zone?.classList.remove('day-section__body--drop-target');
+      if (s.ghost) { s.ghost.remove(); s.ghost = null; }
+      s.sourceEl?.classList.remove('activity-card--dragging');
+      s.id = null; s.sourceEl = null; s.dropZone = null;
+    };
+
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    return () => {
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+  }, [tripId, moveFromReserveToDay, moveDayToDay, moveToReserve]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return handleTouchDragStart;
+}
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
@@ -19,7 +103,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     addToReserve, addToDay, reorderActivity, reorderInReserve,
     setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
-    setDayNotes, addPackingItem, togglePackingItem, deletePackingItem
+    setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
+    setPackingOrder, sweepDayToReserve,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -40,6 +125,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [reserveFilter, setReserveFilter] = useState('all');
   const [copyDone, setCopyDone] = useState(false);
   const tabContentRef = useRef(null);
+  const tripRef = useRef(trip);
+  useEffect(() => { tripRef.current = trip; }, [trip]);
+
+  const handleTouchDragStart = useTouchDnd({
+    tripId, tripRef,
+    moveFromReserveToDay, moveDayToDay, moveToReserve,
+  });
 
   // Auto-scroll during drag near viewport edges
   useEffect(() => {
@@ -329,11 +421,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   onOpenDetail={(day) => setDetailDay(day)}
                   onDrop={handleDropOnDay}
                   onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
+                  onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                   weather={weather?.byDate[day.date]}
+                  onTouchDragStart={handleTouchDragStart}
                   {...sharedDayProps}
                 />
               ))
             )}
+
+            <TripSummary trip={trip} />
 
             {/* Reserve mini-panel */}
             <div className="planning-reserve">
@@ -463,6 +559,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             onAdd={(text, category) => addPackingItem(tripId, text, category)}
             onToggle={(itemId) => togglePackingItem(tripId, itemId)}
             onDelete={(itemId) => deletePackingItem(tripId, itemId)}
+            onReorder={(newList) => setPackingOrder(tripId, newList)}
           />
         )}
 

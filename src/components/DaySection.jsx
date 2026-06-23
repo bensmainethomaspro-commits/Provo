@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react';
 import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
+import ConfirmDialog from './ConfirmDialog';
 
 function formatDist(km) {
   if (km < 1) return `${Math.round(km * 1000)} m`;
@@ -12,14 +13,16 @@ export default function DaySection({
   day, dayIndex, totalDays, isPastTrip,
   onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
   onReorder, onStartTimeChange, onEdit, onAddActivity,
-  onOpenDetail, onDrop, onNotesChange,
+  onOpenDetail, onDrop, onNotesChange, onSweep,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
-  weather,
+  weather, onTouchDragStart,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [sweepConfirm, setSweepConfirm] = useState(false);
+  const [sweepIds, setSweepIds] = useState(new Set());
   const isLast = dayIndex === totalDays - 1;
 
   const notDone = day.activities.filter(a => a.status !== 'done');
@@ -31,6 +34,9 @@ export default function DaySection({
   const budget = totalBudget(active);
   const overload = total > 8 * 60;
   const slots = getTimeSlots(sorted, day.startTime || '09:00');
+
+  const todoActivities = day.activities.filter(a => a.status === 'todo');
+  const hasTodo = todoActivities.length > 0;
 
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -45,6 +51,16 @@ export default function DaySection({
     if (activityId) onDrop?.(day.id, activityId);
   };
 
+  const handleSweepConfirm = () => {
+    const ids = new Set(todoActivities.map(a => a.id));
+    setSweepIds(ids);
+    setSweepConfirm(false);
+    setTimeout(() => {
+      onSweep?.(day.id);
+      setSweepIds(new Set());
+    }, 380);
+  };
+
   return (
     <div className="day-section">
       <div className="day-section__header">
@@ -52,7 +68,13 @@ export default function DaySection({
           <div className="day-section__title">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="day-section__date">{formatDate(day.date)}</div>
           {weather && (
-            <div className="day-section__weather">{weather.icon} {weather.max}°/{weather.min}°</div>
+            <div className="day-section__weather">
+              <span className="day-weather__icon">{weather.icon}</span>
+              <span className="day-weather__temps">{weather.max}°/{weather.min}°</span>
+              {weather.description && (
+                <span className="day-weather__desc">{weather.description}</span>
+              )}
+            </div>
           )}
         </div>
         <div className="day-section__right">
@@ -80,6 +102,15 @@ export default function DaySection({
           value={day.startTime || '09:00'}
           onChange={e => onStartTimeChange(day.id, e.target.value)}
         />
+        {hasTodo && onSweep && (
+          <button
+            className="btn btn--xs btn--ghost sweep-btn"
+            onClick={() => setSweepConfirm(true)}
+            title="Déplacer tout ce qu'il reste à faire dans la Réserve"
+          >
+            🪄 On verra demain
+          </button>
+        )}
       </div>
 
       <LogicAlerts activities={day.activities} />
@@ -109,33 +140,37 @@ export default function DaySection({
               && activity.status !== 'nogo' && next.status !== 'nogo')
               ? haversineKm(activity.lat, activity.lon, next.lat, next.lon)
               : null;
+            const isSweeping = sweepIds.has(activity.id);
             return (
               <Fragment key={activity.id}>
-                <ActivityCard
-                  activity={activity}
-                  context="day"
-                  isLastDay={isLast}
-                  slot={slots[activity.id]}
-                  isPastTrip={isPastTrip}
-                  onStatusChange={(s) => onStatusChange(day.id, activity.id, s)}
-                  onDelete={() => onDelete(day.id, activity.id)}
-                  onMoveToReserve={() => onMoveToReserve(day.id, activity.id)}
-                  onMoveToNextDay={!isLast ? () => onMoveToNextDay(day.id, activity.id) : null}
-                  onEdit={() => onEdit(activity, { type: 'day', dayId: day.id })}
-                  onReorderUp={() => onReorder(day.id, activity.id, 'up')}
-                  onReorderDown={() => onReorder(day.id, activity.id, 'down')}
-                  isFirst={origIdx === 0}
-                  isLast={origIdx === day.activities.length - 1}
-                  onDragStart={() => setLocalDragId(activity.id)}
-                  onDragEnd={() => setLocalDragId(null)}
-                  isDragging={localDragId === activity.id}
-                  days={days}
-                  currentDayId={day.id}
-                  onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
-                  compareMode={compareMode}
-                  compareSelected={compareSelectedIds?.has(activity.id)}
-                  onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
-                />
+                <div className={isSweeping ? 'activity-sweep-out' : undefined}>
+                  <ActivityCard
+                    activity={activity}
+                    context="day"
+                    isLastDay={isLast}
+                    slot={slots[activity.id]}
+                    isPastTrip={isPastTrip}
+                    onStatusChange={(s) => onStatusChange(day.id, activity.id, s)}
+                    onDelete={() => onDelete(day.id, activity.id)}
+                    onMoveToReserve={() => onMoveToReserve(day.id, activity.id)}
+                    onMoveToNextDay={!isLast ? () => onMoveToNextDay(day.id, activity.id) : null}
+                    onEdit={() => onEdit(activity, { type: 'day', dayId: day.id })}
+                    onReorderUp={() => onReorder(day.id, activity.id, 'up')}
+                    onReorderDown={() => onReorder(day.id, activity.id, 'down')}
+                    isFirst={origIdx === 0}
+                    isLast={origIdx === day.activities.length - 1}
+                    onDragStart={() => setLocalDragId(activity.id)}
+                    onDragEnd={() => setLocalDragId(null)}
+                    isDragging={localDragId === activity.id}
+                    days={days}
+                    currentDayId={day.id}
+                    onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
+                    compareMode={compareMode}
+                    compareSelected={compareSelectedIds?.has(activity.id)}
+                    onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
+                    onTouchDragStart={onTouchDragStart}
+                  />
+                </div>
                 {dist !== null && (
                   <div className="activity-bridge">
                     <span className="activity-bridge__line" />
@@ -158,6 +193,17 @@ export default function DaySection({
             onChange={e => onNotesChange?.(day.id, e.target.value)}
           />
         </div>
+      )}
+
+      {sweepConfirm && (
+        <ConfirmDialog
+          icon="🪄"
+          title="On verra demain ?"
+          message={`${todoActivities.length} activité${todoActivities.length > 1 ? 's' : ''} "à faire" seront déplacées au sommet de la Réserve.`}
+          confirmLabel="Balayer !"
+          onConfirm={handleSweepConfirm}
+          onCancel={() => setSweepConfirm(false)}
+        />
       )}
     </div>
   );

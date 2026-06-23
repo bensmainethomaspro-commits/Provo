@@ -292,6 +292,27 @@ export function useTrips() {
     }));
   }, []);
 
+  const setPackingOrder = useCallback((tripId, newList) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : { ...t, packingList: newList }));
+  }, []);
+
+  const sweepDayToReserve = useCallback((tripId, dayId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const day = t.days.find(d => d.id === dayId);
+      if (!day) return t;
+      const swept = day.activities.filter(a => a.status === 'todo');
+      if (swept.length === 0) return t;
+      return {
+        ...t,
+        days: t.days.map(d => d.id !== dayId ? d : {
+          ...d, activities: d.activities.filter(a => a.status !== 'todo')
+        }),
+        reserve: [...swept, ...t.reserve],
+      };
+    }));
+  }, []);
+
   const addPackingItem = useCallback((tripId, text, category = 'autre') => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, packingList: [...(t.packingList || []), { id: genId(), text, category, checked: false }]
@@ -330,6 +351,7 @@ export function useTrips() {
     reorderActivity, reorderInReserve,
     deleteActivity, setDayStartTime, importTrip, duplicateToDay,
     duplicateTrip, setDayNotes,
-    addPackingItem, togglePackingItem, deletePackingItem
+    addPackingItem, togglePackingItem, deletePackingItem,
+    setPackingOrder, sweepDayToReserve
   };
 }

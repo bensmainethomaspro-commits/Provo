@@ -9,6 +9,7 @@ export default function ActivityCard({
   onDragStart, onDragEnd, isDragging,
   days, currentDayId, onDuplicate,
   compareMode, compareSelected, onToggleCompare,
+  onTouchDragStart,
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [showCopyPicker, setShowCopyPicker] = useState(false);
@@ -62,7 +63,17 @@ export default function ActivityCard({
         )}
 
         <div className="activity-card__top">
-          {!compareMode && <div className="activity-card__drag-handle" title="Glisser">⠿</div>}
+          {!compareMode && (
+          <div
+            className="activity-card__drag-handle"
+            title="Glisser"
+            onTouchStart={(e) => {
+              if (!onTouchDragStart) return;
+              e.preventDefault();
+              onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.activity-card'));
+            }}
+          >⠿</div>
+        )}
           <div className="activity-card__emoji">{meta.emoji}</div>
           <div className="activity-card__main">
             <div className="activity-card__title">{activity.title}</div>

@@ -1369,3 +1369,162 @@ body {
 .packing-list__presets-done {
   font-size: 13px; color: var(--text-light); margin: 4px 0 0;
 }
+
+/* ─── PACKING LIST EXTRAS ────────────────────────────────── */
+.packing-list__toolbar {
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.packing-list__toolbar .packing-list__cats { flex: 1; }
+.packing-item__drag-handle {
+  cursor: grab; color: var(--text-light); font-size: 16px;
+  padding: 0 2px; flex-shrink: 0; touch-action: none;
+  user-select: none;
+}
+.packing-item--dragging { opacity: 0.35; }
+.packing-item--drag-over {
+  border-top: 2px solid var(--orange);
+}
+/* Category grouping */
+.packing-group { margin-bottom: 4px; }
+.packing-group__header {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 7px 12px;
+  background: var(--surface-sunken);
+  border: none; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 700; color: var(--text-muted);
+  cursor: pointer; text-align: left;
+  margin-bottom: 2px;
+}
+.packing-group__count { margin-left: auto; font-size: 12px; color: var(--text-light); }
+.packing-group__chevron { font-size: 10px; color: var(--text-light); }
+
+/* ─── WEATHER EXPANDED ───────────────────────────────────── */
+.day-section__weather {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 3px; flex-wrap: wrap;
+}
+.day-weather__icon { font-size: 14px; }
+.day-weather__temps {
+  font-size: 12px; font-weight: 700;
+  color: rgba(255,255,255,0.95);
+  white-space: nowrap;
+}
+.day-weather__desc {
+  font-size: 11px; color: rgba(255,255,255,0.75);
+  white-space: nowrap;
+}
+
+/* ─── SWEEP BUTTON ───────────────────────────────────────── */
+.sweep-btn {
+  margin-left: auto;
+  font-size: 12px; font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 20px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.sweep-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange);
+  background: rgba(255,107,53,0.06);
+}
+
+/* ─── SWEEP ANIMATION ────────────────────────────────────── */
+@keyframes sweepOut {
+  0% { opacity: 1; transform: translateX(0) scale(1); }
+  100% { opacity: 0; transform: translateX(64px) scale(0.95); }
+}
+.activity-sweep-out {
+  animation: sweepOut 380ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* ─── TRIP SUMMARY ───────────────────────────────────────── */
+.trip-summary {
+  margin-top: 8px; margin-bottom: 24px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.trip-summary__title {
+  font-size: 13px; font-weight: 800; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.8px;
+  margin-bottom: 12px;
+}
+.trip-summary__card {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.trip-summary__card:last-child { border-bottom: none; padding-bottom: 0; }
+.trip-summary__card--reserve { flex-direction: row; align-items: center; justify-content: space-between; }
+.trip-summary__card-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--text-light);
+}
+.trip-summary__progress-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.trip-summary__track {
+  flex: 1; height: 6px; background: var(--border-strong);
+  border-radius: 3px; overflow: hidden; position: relative;
+}
+.trip-summary__fill {
+  height: 100%; background: var(--orange);
+  border-radius: 3px; transition: width 0.5s ease;
+  min-width: 3px;
+}
+.trip-summary__stat {
+  font-size: 12px; font-weight: 700; color: var(--text-muted);
+  white-space: nowrap;
+}
+/* Category bars */
+.trip-summary__cats { display: flex; flex-direction: column; gap: 5px; }
+.trip-summary__cat-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.trip-summary__cat-label {
+  font-size: 12px; width: 88px; flex-shrink: 0; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trip-summary__cat-track {
+  flex: 1; height: 6px; background: var(--border);
+  border-radius: 3px; overflow: hidden;
+}
+.trip-summary__cat-bar {
+  height: 100%; background: var(--orange); border-radius: 3px;
+  transition: width 0.4s ease; min-width: 4px;
+}
+.trip-summary__cat-count {
+  font-size: 12px; font-weight: 700; color: var(--text-light); width: 16px; text-align: right;
+}
+/* Day chart */
+.trip-summary__day-chart {
+  display: flex; align-items: flex-end; gap: 6px;
+  height: 72px; padding-bottom: 18px; position: relative;
+}
+.trip-summary__day-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  height: 100%; position: relative;
+}
+.trip-summary__day-bar-wrap {
+  flex: 1; width: 100%; display: flex; flex-direction: column;
+  justify-content: flex-end; align-items: center; gap: 2px;
+  min-height: 0;
+}
+.trip-summary__day-time {
+  font-size: 9px; color: var(--text-light); white-space: nowrap; line-height: 1;
+}
+.trip-summary__day-bar {
+  width: 100%; background: var(--orange); border-radius: 3px 3px 0 0;
+  transition: height 0.4s ease; min-height: 4px;
+}
+.trip-summary__day-label {
+  font-size: 10px; font-weight: 700; color: var(--text-light);
+  position: absolute; bottom: 0;
+}
