@@ -143,6 +143,43 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/(?:^|\s|-|')\S/g, c => c.toUpperCase());
 }
 
+function extractFromHtml(html) {
+  // a) <link rel="canonical">
+  const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
+    || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["']/i);
+  if (canonical?.[1]) { const n = parseGoogleMapsUrl(canonical[1]); if (n) return { name: n, url: canonical[1] }; }
+
+  // b) og:url meta
+  const ogUrl = html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i);
+  if (ogUrl?.[1]) { const n = parseGoogleMapsUrl(ogUrl[1]); if (n) return { name: n, url: ogUrl[1] }; }
+
+  // c) JS redirect: window.location(.replace/.href) = "..." or window.location.replace("...")
+  const jsRedir = html.match(/window\.location(?:\.(?:replace|href))?\s*[=(]\s*["']([^"']+)["']/i);
+  if (jsRedir?.[1]) {
+    const t = jsRedir[1];
+    const n = parseGoogleMapsUrl(t); if (n) return { name: n, url: t };
+  }
+
+  // d) meta http-equiv refresh
+  const refresh = html.match(/http-equiv=["']refresh["'][^>]+content=["'][^;]*;\s*url=([^"'\s>]+)/i)
+    || html.match(/content=["'][^;]*;\s*url=([^"'\s>]+)[^>]*http-equiv=["']refresh["']/i);
+  if (refresh?.[1]) {
+    const t = refresh[1].trim();
+    const n = parseGoogleMapsUrl(t); if (n) return { name: n, url: t };
+  }
+
+  // e) any google maps URL in the HTML (broadest net)
+  const anywhere = html.match(/https?:\/\/(?:www\.|maps\.)?google\.[a-z.]{2,6}\/maps[^"'<>\s\\]*/gi);
+  if (anywhere) {
+    for (const u of anywhere) {
+      const n = parseGoogleMapsUrl(u); if (n) return { name: n, url: u };
+    }
+  }
+
+  return null;
+}
+
 export async function importFromGoogleMaps(url) {
   let resolvedUrl = url;
   let placeName = null;
@@ -155,33 +192,33 @@ export async function importFromGoogleMaps(url) {
       const finalUrl = data.status?.url || '';
       if (finalUrl && finalUrl !== url) resolvedUrl = finalUrl;
 
-      // Strategy 1: Parse the resolved URL directly
+      // Strategy 1: Parse the resolved/original URL directly
       placeName = parseGoogleMapsUrl(resolvedUrl) || parseGoogleMapsUrl(url);
 
-      // Strategy 2: Find any Google Maps URL embedded in the HTML
-      // (covers JS redirects like: window.location='https://google.com/maps/place/...')
-      if (!placeName) {
-        const embedded = html.match(/https?:\/\/(?:www\.)?google\.com\/maps\/(?:place|search)\/[^"'<>\s\\]+/i);
-        if (embedded) {
-          placeName = parseGoogleMapsUrl(embedded[0]);
-          if (placeName) resolvedUrl = embedded[0];
-        }
+      // Strategy 2: Extract URL from HTML (canonical, og:url, JS redirect, meta refresh, raw search)
+      if (!placeName && html) {
+        const extracted = extractFromHtml(html);
+        if (extracted) { placeName = extracted.name; resolvedUrl = extracted.url; }
       }
 
-      // Strategy 3: DOMParser for og:title (works when allorigins fetches the real page)
+      // Strategy 3: DOMParser for og:url / og:title / <title>
       if (!placeName && html) {
         try {
           const doc = new DOMParser().parseFromString(html, 'text/html');
-          const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
-          if (ogTitle) {
-            const cleaned = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-            if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+          const ogUrlEl = doc.querySelector('meta[property="og:url"]');
+          if (ogUrlEl?.content) { const n = parseGoogleMapsUrl(ogUrlEl.content); if (n) { placeName = n; resolvedUrl = ogUrlEl.content; } }
+          if (!placeName) {
+            const ogTitle = doc.querySelector('meta[property="og:title"]')?.content;
+            if (ogTitle) {
+              const c = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+              if (c && c.toLowerCase() !== 'google maps') placeName = c;
+            }
           }
           if (!placeName) {
-            const title = doc.querySelector('title')?.textContent?.trim();
-            if (title) {
-              const cleaned = title.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-              if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+            const t = doc.querySelector('title')?.textContent?.trim();
+            if (t) {
+              const c = t.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+              if (c && c.toLowerCase() !== 'google maps') placeName = c;
             }
           }
         } catch {}
@@ -192,8 +229,8 @@ export async function importFromGoogleMaps(url) {
         const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
           || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
         if (m) {
-          const cleaned = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-          if (cleaned && cleaned.toLowerCase() !== 'google maps') placeName = cleaned;
+          const c = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+          if (c && c.toLowerCase() !== 'google maps') placeName = c;
         }
       }
     } catch {}
@@ -251,13 +288,16 @@ export async function fetchPlaceData(query) {
     if (re.test(typeText)) { category = cat; break; }
   }
 
-  // Wikipedia thumbnail
+  // Wikipedia thumbnail (preserve the language code)
   let photoUrl = null;
-  const wikiKey = (ex.wikipedia || '').replace(/^[a-z]{2}:/, '');
+  const wikiRaw = ex.wikipedia || '';
+  const wikiLangMatch = wikiRaw.match(/^([a-z]{2}):/);
+  const wikiLang = wikiLangMatch?.[1] || 'en';
+  const wikiKey = wikiLangMatch ? wikiRaw.slice(wikiLangMatch[0].length) : wikiRaw;
   if (wikiKey) {
     try {
       const wRes = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`
+        `https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`
       );
       if (wRes.ok) {
         const w = await wRes.json();

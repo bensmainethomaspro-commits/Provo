@@ -10,6 +10,7 @@ export default function DaySection({
   onOpenDetail, onDrop,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
+  weather,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -44,6 +45,9 @@ export default function DaySection({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="day-section__title">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="day-section__date">{formatDate(day.date)}</div>
+          {weather && (
+            <div className="day-section__weather">{weather.icon} {weather.max}°/{weather.min}°</div>
+          )}
         </div>
         <div className="day-section__right">
           {day.activities.length > 0 && (

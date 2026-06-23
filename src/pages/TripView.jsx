@@ -8,6 +8,8 @@ import ShareModal from '../components/ShareModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
+import MapView from '../components/MapView';
+import { useWeather } from '../hooks/useWeather';
 import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark, colorTheme, onCycleTheme }) {
@@ -19,6 +21,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, color
   } = useTripsContext();
 
   const trip = getTripById(tripId);
+  const weather = useWeather(trip);
   const [tab, setTab] = useState('planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
@@ -207,6 +210,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, color
           📝 Notes
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
         </button>
+        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
+          🗺 Carte
+        </button>
       </div>
 
       {/* Compare + view toolbar */}
@@ -266,6 +272,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, color
                   onAddActivity={openAddSheet}
                   onOpenDetail={(day) => setDetailDay(day)}
                   onDrop={handleDropOnDay}
+                  weather={weather?.byDate[day.date]}
                   {...sharedDayProps}
                 />
               ))
@@ -392,10 +399,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, color
             />
           </div>
         )}
+
+        {/* ── MAP TAB ── */}
+        {tab === 'map' && (
+          <MapView days={trip.days} reserve={trip.reserve} />
+        )}
       </div>
 
-      {/* FAB — hidden on notes tab */}
-      {tab !== 'notes' && (
+      {/* FAB — hidden on notes and map tabs */}
+      {tab !== 'notes' && tab !== 'map' && (
         <div className="fab">
           <button className="fab__btn" onClick={() => openAddSheet(null)}>
             + Ajouter une activité

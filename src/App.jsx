@@ -5,11 +5,21 @@ import TripView from './pages/TripView';
 import { decodeTrip, getSkyGradient } from './utils/helpers';
 
 const THEMES = [
-  { id: 'default', label: 'Soleil',      emoji: '🟠' },
-  { id: 'ocean',   label: 'Océan',       emoji: '🔵' },
-  { id: 'nature',  label: 'Nature',      emoji: '🟢' },
-  { id: 'sunset',  label: 'Crépuscule',  emoji: '🟣' },
-  { id: 'caramel', label: 'Caramel',     emoji: '🟤' },
+  { id: 'default', label: 'Soleil',      emoji: '🟠',
+    lightBg: null, // time-based sky
+    darkBg:  'linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)' },
+  { id: 'ocean',   label: 'Océan',       emoji: '🔵',
+    lightBg: 'linear-gradient(160deg, #0ea5e9 0%, #0284c7 55%, #0c4a6e 100%)',
+    darkBg:  'linear-gradient(160deg, #0b1929 0%, #0a1f3a 50%, #071e30 100%)' },
+  { id: 'nature',  label: 'Nature',      emoji: '🟢',
+    lightBg: 'linear-gradient(160deg, #16a34a 0%, #15803d 50%, #14532d 100%)',
+    darkBg:  'linear-gradient(160deg, #0a1f10 0%, #0d2a14 50%, #081c0a 100%)' },
+  { id: 'sunset',  label: 'Crépuscule',  emoji: '🟣',
+    lightBg: 'linear-gradient(160deg, #9333ea 0%, #7c3aed 45%, #4c1d95 100%)',
+    darkBg:  'linear-gradient(160deg, #1a0b2e 0%, #1e1038 50%, #150a28 100%)' },
+  { id: 'caramel', label: 'Caramel',     emoji: '🟤',
+    lightBg: 'linear-gradient(160deg, #d97706 0%, #b45309 50%, #78350f 100%)',
+    darkBg:  'linear-gradient(160deg, #1c0d00 0%, #2e1600 50%, #1e0e00 100%)' },
 ];
 
 function AppInner() {
@@ -29,21 +39,20 @@ function AppInner() {
   const colorTheme = THEMES[colorThemeIdx];
   const cycleTheme = () => setColorThemeIdx(i => (i + 1) % THEMES.length);
 
-  // Apply sky gradient and dark mode
+  // Apply background gradient (theme + dark mode + time-based for default)
   useEffect(() => {
     function applyBackground() {
-      if (!darkMode) {
-        document.body.style.background = getSkyGradient();
-        document.body.style.backgroundAttachment = 'fixed';
-      } else {
-        document.body.style.background = 'linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)';
-        document.body.style.backgroundAttachment = 'fixed';
-      }
+      const bg = darkMode
+        ? colorTheme.darkBg
+        : (colorTheme.lightBg || getSkyGradient());
+      document.body.style.background = bg;
+      document.body.style.backgroundAttachment = 'fixed';
     }
     applyBackground();
-    const timer = setInterval(applyBackground, 60000);
-    return () => clearInterval(timer);
-  }, [darkMode]);
+    // Refresh time-based gradient every minute (only needed for default light theme)
+    const timer = !darkMode && !colorTheme.lightBg ? setInterval(applyBackground, 60000) : null;
+    return () => { if (timer) clearInterval(timer); };
+  }, [darkMode, colorTheme]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
