@@ -127,11 +127,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [copyDone, setCopyDone] = useState(false);
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
+  const [tripMenuOpen, setTripMenuOpen] = useState(false);
   const undoRef = useRef(null);
   const undoTimerRef = useRef(null);
   const tabContentRef = useRef(null);
   const tripRef = useRef(trip);
+  const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
+
+  useEffect(() => {
+    if (!tripMenuOpen) return;
+    const handle = (e) => { if (tripMenuRef.current && !tripMenuRef.current.contains(e.target)) setTripMenuOpen(false); };
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('touchstart', handle, { passive: true });
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
+  }, [tripMenuOpen]);
 
   const pushUndo = (snapshot, msg = 'Action annulée') => {
     undoRef.current = snapshot;
@@ -336,11 +346,23 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
-          <button className="btn btn--ghost-white btn--sm" onClick={copyItinerary} title="Copier l'itinéraire">
-            {copyDone ? '✅' : '📋'}
-          </button>
-          <button className="btn btn--ghost-white btn--sm" onClick={() => setShowShare(true)}>🔗</button>
-          <button className="btn btn--ghost-white btn--sm" onClick={() => setShowDeleteTrip(true)}>🗑️</button>
+          <div className="trip-header-menu-wrap" ref={tripMenuRef}>
+            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options">⋯</button>
+            {tripMenuOpen && (
+              <div className="trip-header-menu">
+                <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
+                  {copyDone ? '✅ Copié !' : '📋 Copier l\'itinéraire'}
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
+                  🔗 Partager
+                </button>
+                <div className="trip-header-menu__divider" />
+                <button className="trip-header-menu__item trip-header-menu__item--danger" onClick={() => { setShowDeleteTrip(true); setTripMenuOpen(false); }}>
+                  🗑️ Supprimer le voyage
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -387,30 +409,29 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </button>
       </div>
 
-      {/* Compare + view toolbar */}
-      <div className="compare-bar">
-        {compareMode && compareSelectedIds.size >= 2 && (
-          <button className="btn btn--primary btn--sm" onClick={() => setShowCompare(true)}>
-            ⚖️ Voir ({compareSelectedIds.size})
-          </button>
-        )}
-        {compareMode && compareSelectedIds.size > 0 && (
-          <span className="compare-bar__hint">{compareSelectedIds.size} sélectionné{compareSelectedIds.size > 1 ? 's' : ''}</span>
-        )}
-        <button
-          className={`btn btn--sm ${compareMode ? 'btn--danger' : 'btn--secondary'}`}
-          onClick={() => { setCompareMode(p => !p); setCompareSelectedIds(new Set()); setShowCompare(false); }}
-        >
-          {compareMode ? '✕ Annuler' : '⚖️ Comparer'}
-        </button>
-        {tab === 'planning' && !compareMode && (
-          <button
-            className="btn btn--sm btn--secondary"
-            onClick={() => setViewMode(v => v === 'list' ? 'timeline' : 'list')}
-            title={viewMode === 'list' ? 'Vue timeline' : 'Vue liste'}
-          >
-            {viewMode === 'list' ? '🗓' : '☰'}
-          </button>
+      {/* Planning tools */}
+      <div className="planning-tools">
+        {compareMode ? (
+          <>
+            {compareSelectedIds.size > 0 && (
+              <span className="planning-tools__hint">{compareSelectedIds.size} sélectionné{compareSelectedIds.size > 1 ? 's' : ''}</span>
+            )}
+            {compareSelectedIds.size >= 2 && (
+              <button className="btn btn--primary btn--xs" onClick={() => setShowCompare(true)}>⚖️ Voir ({compareSelectedIds.size})</button>
+            )}
+            <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
+              ✕ Annuler
+            </button>
+          </>
+        ) : (
+          <>
+            {tab === 'planning' && (
+              <button className="tool-btn" onClick={() => setViewMode(v => v === 'list' ? 'timeline' : 'list')} title={viewMode === 'list' ? 'Vue timeline' : 'Vue liste'}>
+                {viewMode === 'list' ? '🗓' : '☰'}
+              </button>
+            )}
+            <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
+          </>
         )}
       </div>
 

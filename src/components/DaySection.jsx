@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, useRef, useEffect, Fragment } from 'react';
 import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm, getCategoryMeta } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
@@ -24,6 +24,16 @@ export default function DaySection({
   const [notesOpen, setNotesOpen] = useState(false);
   const [sweepConfirm, setSweepConfirm] = useState(false);
   const [sweepIds, setSweepIds] = useState(new Set());
+  const [dayMenuOpen, setDayMenuOpen] = useState(false);
+  const dayMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!dayMenuOpen) return;
+    const handle = (e) => { if (dayMenuRef.current && !dayMenuRef.current.contains(e.target)) setDayMenuOpen(false); };
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('touchstart', handle, { passive: true });
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
+  }, [dayMenuOpen]);
   const isLast = dayIndex === totalDays - 1;
 
   const notDone = day.activities.filter(a => a.status !== 'done');
@@ -92,16 +102,28 @@ export default function DaySection({
             </span>
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
-          {geoCount >= 2 && onOptimizeOrder && (
-            <button className="btn btn--xs btn--ghost-white" onClick={() => onOptimizeOrder(day.id)} title="Optimiser l'ordre géographique">🗺</button>
-          )}
-          <button
-            className="btn btn--xs btn--ghost-white"
-            onClick={() => setNotesOpen(o => !o)}
-            title="Notes du jour"
-            style={day.notes ? { background: 'rgba(255,255,255,0.4)' } : {}}
-          >📝{day.notes && !notesOpen ? ' •' : ''}</button>
-          <button className="btn btn--xs btn--ghost-white" onClick={() => onOpenDetail(day)}>↗ Détail</button>
+          <div className="day-menu-wrap" ref={dayMenuRef}>
+            <button
+              className={`btn btn--xs btn--ghost-white${day.notes ? ' day-menu-btn--noted' : ''}`}
+              onClick={() => setDayMenuOpen(o => !o)}
+              title="Options du jour"
+            >⋯{day.notes ? ' •' : ''}</button>
+            {dayMenuOpen && (
+              <div className="day-menu">
+                <button className="day-menu__item" onClick={() => { setNotesOpen(o => !o); setDayMenuOpen(false); }}>
+                  📝 Notes{day.notes ? ' •' : ''}
+                </button>
+                {geoCount >= 2 && onOptimizeOrder && (
+                  <button className="day-menu__item" onClick={() => { onOptimizeOrder(day.id); setDayMenuOpen(false); }}>
+                    🗺 Optimiser l'ordre
+                  </button>
+                )}
+                <button className="day-menu__item" onClick={() => { onOpenDetail(day); setDayMenuOpen(false); }}>
+                  ↗ Détail du jour
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
