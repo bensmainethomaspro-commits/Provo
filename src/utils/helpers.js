@@ -151,13 +151,18 @@ function cleanGoogleMapsUrl(url) {
   } catch { return url; }
 }
 
+function makeAbortSignal(ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return { signal: ctrl.signal, clear: () => clearTimeout(id) };
+}
+
 async function fetchHtmlViaProxy(url) {
-  // Primary: allorigins.win (follows redirects, returns final URL)
+  // Primary: allorigins.win — follows HTTP redirects, returns final URL in status.url
   try {
-    const r = await fetch(
-      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const { signal, clear } = makeAbortSignal(12000);
+    const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal });
+    clear();
     if (r.ok) {
       const d = await r.json();
       const html = d.contents || '';
@@ -168,10 +173,9 @@ async function fetchHtmlViaProxy(url) {
 
   // Fallback: corsproxy.io
   try {
-    const r = await fetch(
-      `https://corsproxy.io/?${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const { signal, clear } = makeAbortSignal(12000);
+    const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { signal });
+    clear();
     if (r.ok) {
       const html = await r.text();
       if (html) return { html, finalUrl: null };
@@ -179,6 +183,69 @@ async function fetchHtmlViaProxy(url) {
   } catch {}
 
   return { html: '', finalUrl: null };
+}
+
+function extractCoordsFromUrl(url) {
+  try {
+    const u = new URL(url);
+    const pathMatch = u.pathname.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+    if (pathMatch) return { lat: parseFloat(pathMatch[1]), lon: parseFloat(pathMatch[2]) };
+    const ll = u.searchParams.get('ll') || u.searchParams.get('center') || u.searchParams.get('near');
+    if (ll) {
+      const [lat, lon] = ll.split(',').map(parseFloat);
+      if (!isNaN(lat) && !isNaN(lon)) return { lat, lon };
+    }
+    const q = u.searchParams.get('q');
+    if (q && /^-?\d+\.\d+,-?\d+\.\d+$/.test(q.trim())) {
+      const [lat, lon] = q.split(',').map(parseFloat);
+      if (!isNaN(lat) && !isNaN(lon)) return { lat, lon };
+    }
+  } catch {}
+  return null;
+}
+
+function extractCoordsFromHtml(html) {
+  // @lat,lon in embedded Google Maps URLs
+  const urlCoords = html.match(/\/@(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})[,/]/);
+  if (urlCoords) return { lat: parseFloat(urlCoords[1]), lon: parseFloat(urlCoords[2]) };
+  // ll=lat,lon pattern
+  const llParam = html.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (llParam) return { lat: parseFloat(llParam[1]), lon: parseFloat(llParam[2]) };
+  // q=lat,lon pattern (app deep links)
+  const qParam = html.match(/[?&](?:q|center)=(-?\d+\.\d{4,}),(-?\d+\.\d{4,})/);
+  if (qParam) return { lat: parseFloat(qParam[1]), lon: parseFloat(qParam[2]) };
+  return null;
+}
+
+async function reverseGeocode(lat, lon) {
+  const r = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&extratags=1`
+  );
+  if (!r.ok) return null;
+  const p = await r.json();
+  if (!p?.display_name) return null;
+  const a = p.address || {};
+  const ex = p.extratags || {};
+  const road = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ');
+  const address = [road, a.city || a.town || a.village || a.municipality, a.country]
+    .filter(Boolean).join(', ') || p.display_name.split(',').slice(0, 3).join(',').trim();
+  const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop]
+    .filter(Boolean).join(' ').toLowerCase();
+  const catRules = [
+    [/restaurant|cafe|coffee|brasserie|bar|pub|fast_food|bistro|snack/, 'resto'],
+    [/beach|plage|coast|swimming_area/, 'plage'],
+    [/sport|fitness|gym|stadium|climbing|tennis|golf/, 'sport'],
+    [/hotel|hostel|lodge|inn|guesthouse|accommodation/, 'repos'],
+    [/airport|train_station|bus_station|ferry|metro|subway|tram/, 'trajet'],
+    [/park|forest|trail|hiking|viewpoint|peak|waterfall|garden|nature/, 'balade'],
+    [/nightclub|casino|cinema|theatre|amusement|theme_park|arcade/, 'fun'],
+  ];
+  let category = 'visite';
+  for (const [re, cat] of catRules) { if (re.test(typeText)) { category = cat; break; } }
+  return {
+    title: (p.name || p.display_name.split(',')[0]).trim(),
+    address, category, lat, lon,
+  };
 }
 
 function extractFromHtml(html) {
@@ -207,7 +274,15 @@ function extractFromHtml(html) {
     const n = parseGoogleMapsUrl(t); if (n) return { name: n, url: t };
   }
 
-  // e) any google maps URL in the HTML (broadest net)
+  // e) Firebase Dynamic Links JS variables (webUrl / DESKTOPFALLBACKLINK / fallbackUrl)
+  const fbVar = html.match(/(?:webUrl|DESKTOPFALLBACKLINK|fallbackUrl|deepLink)\s*[=:]\s*["']([^"']+)["']/i);
+  if (fbVar?.[1]) { const n = parseGoogleMapsUrl(fbVar[1]); if (n) return { name: n, url: fbVar[1] }; }
+
+  // f) <a href="https://www.google.com/maps/..."> fallback link in redirect pages
+  const aHref = html.match(/href=["'](https?:\/\/(?:www\.)?google\.com\/maps[^"'<>\s]+)["']/i);
+  if (aHref?.[1]) { const n = parseGoogleMapsUrl(aHref[1]); if (n) return { name: n, url: aHref[1] }; }
+
+  // g) any google maps URL in the HTML (broadest net)
   const anywhere = html.match(/https?:\/\/(?:www\.|maps\.)?google\.[a-z.]{2,6}\/maps[^"'<>\s\\]*/gi);
   if (anywhere) {
     for (const u of anywhere) {
@@ -272,7 +347,7 @@ export async function importFromGoogleMaps(url) {
       }
     }
 
-    // Strategy 5: any place name embedded in redirect URL params (q= or daddr=)
+    // Strategy 5: any place name in redirect URL params in the HTML
     if (!placeName && html) {
       const urlInHtml = html.match(/https?:\/\/(?:www\.)?google\.[a-z.]{2,6}\/maps[^"'<>\s\\]*/gi);
       if (urlInHtml) {
@@ -280,6 +355,17 @@ export async function importFromGoogleMaps(url) {
           const n = parseGoogleMapsUrl(u);
           if (n) { placeName = n; resolvedUrl = u; break; }
         }
+      }
+    }
+
+    // Strategy 6: extract coordinates → reverse geocode (robust fallback for short links)
+    if (!placeName) {
+      const coords = extractCoordsFromUrl(resolvedUrl)
+        || extractCoordsFromUrl(cleanGoogleMapsUrl(url))
+        || (html ? extractCoordsFromHtml(html) : null);
+      if (coords) {
+        const rev = await reverseGeocode(coords.lat, coords.lon).catch(() => null);
+        if (rev) return { ...rev, link: url };
       }
     }
   }

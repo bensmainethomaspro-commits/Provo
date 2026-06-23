@@ -87,7 +87,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés. Complète les détails manuellement.');
           return;
         }
-        setError('Lien non reconnu. Essaie de coller directement le nom du lieu.');
+        const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
+        setError(isShortLink
+          ? 'Lien iOS non résolu. Entre directement le nom du lieu (ex : "Tour Eiffel Paris"), ou ouvre le lien dans Safari et copie l\'URL depuis la barre d\'adresse.'
+          : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
       } else {
         // Plain text: search Nominatim directly
         const placeData = await fetchPlaceData(raw);
