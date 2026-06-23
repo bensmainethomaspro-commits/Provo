@@ -139,6 +139,51 @@ export function parseGoogleMapsUrl(url) {
   return null;
 }
 
+function toTitleCase(str) {
+  return str.toLowerCase().replace(/(?:^|\s|-|')\S/g, c => c.toUpperCase());
+}
+
+export async function importFromGoogleMaps(url) {
+  let resolvedUrl = url;
+  let placeName = null;
+
+  // Fetch via CORS proxy for any Google Maps or short URL
+  if (/google\.com\/maps|goo\.gl|maps\.app/.test(url)) {
+    try {
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+      const data = await res.json();
+      const finalUrl = data.status?.url || '';
+      if (finalUrl && finalUrl !== url) resolvedUrl = finalUrl;
+
+      // 1. Try parsing the resolved URL
+      placeName = parseGoogleMapsUrl(resolvedUrl) || parseGoogleMapsUrl(url);
+
+      // 2. Extract from og:title in HTML if URL parsing failed
+      if (!placeName) {
+        const html = data.contents || '';
+        const m = html.match(/property="og:title"\s+content="([^"]+)"/i)
+          || html.match(/content="([^"]+)"\s+property="og:title"/i);
+        if (m) placeName = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+      }
+      if (!placeName) {
+        const html = data.contents || '';
+        const t = html.match(/<title[^>]*>([^<]+)/i);
+        if (t) placeName = t[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+      }
+    } catch {}
+  }
+
+  // Last resort: try URL directly
+  if (!placeName) placeName = parseGoogleMapsUrl(url);
+  if (!placeName) return null;
+
+  const placeData = await fetchPlaceData(placeName).catch(() => null);
+  const cleanTitle = toTitleCase(placeName.replace(/\+/g, ' '));
+
+  if (placeData) return { ...placeData, title: placeData.title || cleanTitle, link: url };
+  return { title: cleanTitle, link: url };
+}
+
 export async function resolveShortUrl(url) {
   if (!/goo\.gl|maps\.app/.test(url)) return url;
   try {
@@ -158,10 +203,11 @@ export async function fetchPlaceData(query) {
   const a = p.address || {};
   const ex = p.extratags || {};
 
-  // Richer address: road + number, city, country
+  // Richer address: road + number, city, country — fallback to display_name excerpt
   const road = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ');
   const address = [road, a.city || a.town || a.village || a.municipality, a.country]
-    .filter(Boolean).join(', ');
+    .filter(Boolean).join(', ')
+    || p.display_name.split(',').slice(0, 3).join(',').trim();
 
   // Category from ALL available tags (class + type + extratags)
   const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop, ex.sport]

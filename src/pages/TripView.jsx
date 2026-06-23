@@ -384,6 +384,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         defaultDayId={sheetDefaultDayId}
         onAddToReserve={(a) => addToReserve(tripId, a)}
         onAddToDay={(dayId, a) => addToDay(tripId, dayId, a)}
+        reserveActivities={trip.reserve}
+        onMoveFromReserve={(actId) => { if (sheetDefaultDayId) moveFromReserveToDay(tripId, sheetDefaultDayId, actId); }}
       />
 
       {editingActivity && (

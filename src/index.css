@@ -881,6 +881,42 @@ body {
 .copy-picker__item:last-child { border-bottom: none; }
 .copy-picker__item:hover { background: var(--surface-sunken); }
 
+/* ─── RESERVE PICKER (in AddActivitySheet) ───────────────── */
+.reserve-picker {
+  margin-bottom: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1.5px solid var(--border-strong);
+}
+.reserve-picker__title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-light);
+  padding: 8px 12px 6px;
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+}
+.reserve-picker__item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  padding: 10px 12px;
+  border: none; background: var(--surface-raised); cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.reserve-picker__item:last-of-type { border-bottom: none; }
+.reserve-picker__item:hover { background: var(--surface-sunken); }
+.reserve-picker__emoji { font-size: 16px; flex-shrink: 0; }
+.reserve-picker__name {
+  flex: 1; font-size: 13px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.reserve-picker__arrow { color: var(--orange); font-weight: 700; flex-shrink: 0; }
+.reserve-picker__divider {
+  text-align: center; font-size: 11px; color: var(--text-light);
+  padding: 8px; background: var(--surface-sunken);
+  border-top: 1px solid var(--border);
+}
+
 /* ─── IMPORT SECTION ─────────────────────────────────────── */
 .import-section {
   background: var(--surface-raised);

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, parseGoogleMapsUrl, fetchPlaceData, resolveShortUrl } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, getCategoryMeta } from '../utils/helpers';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
-  defaultDayId, editActivity, onEditSave }) {
+  defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
   const [closing, setClosing] = useState(false);
@@ -54,25 +54,22 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImporting(true);
     setError('');
     try {
-      const resolved = await resolveShortUrl(importUrl.trim());
-      const name = parseGoogleMapsUrl(resolved);
-      if (!name) { setError('URL non reconnue. Utilise un lien Google Maps (maps.google.com ou maps.app.goo.gl).'); setImporting(false); return; }
-      const data = await fetchPlaceData(name);
-      if (data) {
-        setForm(f => ({
-          ...f,
-          title: data.title || name,
-          address: data.address || f.address,
-          category: data.category || f.category,
-          link: importUrl.trim(),
-          photoUrl: data.photoUrl || f.photoUrl,
-          openingHours: data.openingHours || f.openingHours,
-          lat: data.lat ?? f.lat,
-          lon: data.lon ?? f.lon,
-        }));
-      } else {
-        setForm(f => ({ ...f, title: f.title || name, link: importUrl.trim() }));
+      const result = await importFromGoogleMaps(importUrl.trim());
+      if (!result) {
+        setError('URL non reconnue. Colle un lien Google Maps (long ou court maps.app.goo.gl).');
+        return;
       }
+      setForm(f => ({
+        ...f,
+        title: result.title || f.title,
+        address: result.address || f.address,
+        category: result.category || f.category,
+        link: result.link || importUrl.trim(),
+        photoUrl: result.photoUrl || f.photoUrl,
+        openingHours: result.openingHours || f.openingHours,
+        lat: result.lat ?? f.lat,
+        lon: result.lon ?? f.lon,
+      }));
       setImportUrl('');
     } catch {
       setForm(f => ({ ...f, link: importUrl.trim() }));
@@ -148,6 +145,25 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         </div>
 
         <div className="sheet__body">
+          {/* Reserve picker (when adding to a specific day) */}
+          {!isEdit && defaultDayId && reserveActivities?.length > 0 && (
+            <div className="reserve-picker">
+              <div className="reserve-picker__title">📦 Depuis la réserve</div>
+              {reserveActivities.map(a => {
+                const meta = getCategoryMeta(a.category);
+                return (
+                  <button key={a.id} type="button" className="reserve-picker__item"
+                    onClick={() => { onMoveFromReserve?.(a.id); close(); }}>
+                    <span className="reserve-picker__emoji">{meta.emoji}</span>
+                    <span className="reserve-picker__name">{a.title}</span>
+                    <span className="reserve-picker__arrow">→</span>
+                  </button>
+                );
+              })}
+              <div className="reserve-picker__divider">— ou créer une nouvelle activité —</div>
+            </div>
+          )}
+
           {/* Google Maps import */}
           <div className="form-group import-section">
             <label className="form-label">📍 Importer depuis Google Maps</label>
