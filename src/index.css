@@ -105,8 +105,8 @@ body {
 .btn--ghost { background: transparent; color: var(--text-muted); }
 .btn--ghost:hover { background: rgba(0,0,0,0.06); }
 [data-theme="dark"] .btn--ghost:hover { background: rgba(255,255,255,0.07); }
-.btn--ghost-white { background: rgba(255,255,255,0.18); color: white; border: 1px solid rgba(255,255,255,0.4); text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
-.btn--ghost-white:hover { background: rgba(255,255,255,0.28); }
+.btn--ghost-white { background: rgba(255,255,255,0.22); color: white; border: none; text-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 20px; }
+.btn--ghost-white:hover { background: rgba(255,255,255,0.35); }
 .btn--sm  { font-size: 13px; padding: 6px 12px; border-radius: 8px; }
 .btn--xs  { font-size: 12px; padding: 4px 8px; border-radius: 6px; }
 .btn--full { width: 100%; }
@@ -294,7 +294,7 @@ body {
   flex: 1;
   background: var(--surface-sunken);
   border-radius: 24px 24px 0 0;
-  padding: 16px 16px 120px;
+  padding: 16px 16px 160px;
   margin-top: 12px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -614,6 +614,81 @@ body {
 .trip-meta { padding: 0 16px 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .trip-meta__item { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 .trip-budget { font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.2); color: white; padding: 3px 10px; border-radius: 20px; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+/* ─── RESERVE IN PLANNING ───────────────────────────────── */
+.planning-reserve { margin-top: 8px; border-radius: var(--radius-md); border: 1.5px dashed var(--border-strong); overflow: hidden; }
+.planning-reserve__toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; cursor: pointer;
+  font-size: 14px; font-weight: 700; color: var(--text-muted);
+  background: var(--surface); border: none; width: 100%; text-align: left;
+  transition: background 0.1s;
+}
+.planning-reserve__toggle:hover { background: var(--surface-sunken); }
+.planning-reserve__count { font-size: 11px; font-weight: 800; background: var(--orange); color: white; border-radius: 20px; padding: 1px 7px; }
+.planning-reserve__body {
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border);
+  padding: 6px 8px 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.planning-reserve__hint {
+  font-size: 11px; color: var(--text-light); text-align: center; padding: 4px 0 6px;
+  font-style: italic;
+}
+.reserve-mini-card {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* ─── DAY DETAIL MODAL ───────────────────────────────────── */
+.day-detail-overlay {
+  position: fixed; inset: 0; z-index: 250;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: flex-end; justify-content: center;
+  backdrop-filter: blur(2px);
+  animation: fadeIn 0.2s ease;
+}
+.day-detail-overlay.closing { animation: fadeOut 0.25s ease forwards; }
+.day-detail-sheet {
+  background: var(--surface-sunken);
+  width: 100%; max-width: 480px;
+  border-radius: 24px 24px 0 0;
+  max-height: 92dvh;
+  display: flex; flex-direction: column;
+  animation: slideUp 0.28s cubic-bezier(0.22,1,0.36,1);
+}
+.day-detail-overlay.closing .day-detail-sheet { animation: slideDown 0.25s cubic-bezier(0.5,0,0.75,0) forwards; }
+.day-detail__header {
+  padding: 16px 20px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+}
+.day-detail__title { font-size: 18px; font-weight: 800; color: var(--text); }
+.day-detail__subtitle { font-size: 13px; color: var(--text-muted); margin-top: 1px; font-weight: 600; }
+.day-detail__body {
+  flex: 1; overflow-y: auto; padding: 16px 16px 32px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── BUDGET REMAINING ───────────────────────────────────── */
+.budget-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.budget-pill {
+  font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px;
+  white-space: nowrap;
+}
+.budget-pill--total    { background: rgba(255,255,255,0.2); color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.budget-pill--spent    { background: rgba(239,68,68,0.2); color: #fee2e2; }
+.budget-pill--remaining { background: rgba(34,197,94,0.25); color: #dcfce7; }
+
+/* Empty day add button */
+.day-section__empty-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
 
 /* ─── MISC UTILS ─────────────────────────────────────────── */
 .badge { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 20px; }

@@ -6,12 +6,18 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function buildDays(startDate, endDate) {
   const days = [];
-  const cursor = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T00:00:00');
+  const [sy, sm, sd] = startDate.split('-').map(Number);
+  const [ey, em, ed] = endDate.split('-').map(Number);
+  const cursor = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
   while (cursor <= end) {
-    days.push({ id: genId(), date: cursor.toISOString().split('T')[0], activities: [], startTime: '09:00' });
+    days.push({ id: genId(), date: localDateStr(cursor), activities: [], startTime: '09:00' });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
@@ -19,7 +25,8 @@ function buildDays(startDate, endDate) {
 
 function isPast(endDate) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  return new Date(endDate + 'T00:00:00') < today;
+  const [y, m, d] = endDate.split('-').map(Number);
+  return new Date(y, m - 1, d) < today;
 }
 
 function load() {

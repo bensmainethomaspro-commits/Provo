@@ -6,14 +6,13 @@ import LogicAlerts from './LogicAlerts';
 export default function DaySection({
   day, dayIndex, totalDays, isPastTrip,
   onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
-  onReorder, onStartTimeChange, onEdit,
-  onDrop, dragInfo
+  onReorder, onStartTimeChange, onEdit, onAddActivity,
+  onOpenDetail, onDrop
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
   const isLast = dayIndex === totalDays - 1;
 
-  // Put done at bottom for display, preserve original for indexing
   const notDone = day.activities.filter(a => a.status !== 'done');
   const done = day.activities.filter(a => a.status === 'done');
   const sorted = [...notDone, ...done];
@@ -40,7 +39,7 @@ export default function DaySection({
   return (
     <div className="day-section">
       <div className="day-section__header">
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="day-section__title">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="day-section__date">{formatDate(day.date)}</div>
         </div>
@@ -51,6 +50,7 @@ export default function DaySection({
             </span>
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
+          <button className="btn btn--xs btn--secondary" onClick={() => onOpenDetail(day)}>↗ Détail</button>
         </div>
       </div>
 
@@ -76,8 +76,15 @@ export default function DaySection({
         onDrop={handleDrop}
       >
         {sorted.length === 0
-          ? <div className="day-section__empty">Glisse une activité ici ✨</div>
-          : sorted.map((activity, i) => {
+          ? (
+            <div className="day-section__empty">
+              <div className="day-section__empty-actions">
+                <span>Glisse ou ajoute une activité</span>
+                <button className="btn btn--primary btn--xs" onClick={() => onAddActivity(day.id)}>+ Ajouter</button>
+              </div>
+            </div>
+          )
+          : sorted.map((activity) => {
             const origIdx = day.activities.findIndex(a => a.id === activity.id);
             return (
               <ActivityCard

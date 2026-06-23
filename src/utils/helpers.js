@@ -67,8 +67,15 @@ export function totalBudget(activities) {
 }
 
 export function formatPrice(amount) {
-  if (!amount) return null;
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount);
+  if (!amount && amount !== 0) return null;
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
+}
+
+export function budgetStats(activities) {
+  const active = activities.filter(a => a.status !== 'nogo');
+  const total = active.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const spent = active.filter(a => a.status === 'done').reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  return { total, spent, remaining: total - spent };
 }
 
 // ─── Time cascade ─────────────────────────────────────────
