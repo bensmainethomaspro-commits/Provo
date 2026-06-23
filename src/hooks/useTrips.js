@@ -266,6 +266,52 @@ export function useTrips() {
     }));
   }, []);
 
+  const duplicateTrip = useCallback((tripId) => {
+    setTrips(p => {
+      const orig = p.find(t => t.id === tripId);
+      if (!orig) return p;
+      const copy = {
+        ...orig,
+        id: genId(),
+        name: `${orig.name} (copie)`,
+        createdAt: new Date().toISOString(),
+        days: orig.days.map(d => ({
+          ...d,
+          id: genId(),
+          activities: d.activities.map(a => ({ ...a, id: genId(), status: 'todo' })),
+        })),
+        reserve: orig.reserve.map(a => ({ ...a, id: genId(), status: 'todo' })),
+      };
+      return [copy, ...p];
+    });
+  }, []);
+
+  const setDayNotes = useCallback((tripId, dayId, notes) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, days: t.days.map(d => d.id !== dayId ? d : { ...d, notes })
+    }));
+  }, []);
+
+  const addPackingItem = useCallback((tripId, text, category = 'autre') => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, packingList: [...(t.packingList || []), { id: genId(), text, category, checked: false }]
+    }));
+  }, []);
+
+  const togglePackingItem = useCallback((tripId, itemId) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, packingList: (t.packingList || []).map(item =>
+        item.id === itemId ? { ...item, checked: !item.checked } : item
+      )
+    }));
+  }, []);
+
+  const deletePackingItem = useCallback((tripId, itemId) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, packingList: (t.packingList || []).filter(item => item.id !== itemId)
+    }));
+  }, []);
+
   const importTrip = useCallback((tripData) => {
     const id = genId();
     const trip = { ...tripData, id, createdAt: new Date().toISOString() };
@@ -282,6 +328,8 @@ export function useTrips() {
     setActivityStatus, updateActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     reorderActivity, reorderInReserve,
-    deleteActivity, setDayStartTime, importTrip, duplicateToDay
+    deleteActivity, setDayStartTime, importTrip, duplicateToDay,
+    duplicateTrip, setDayNotes,
+    addPackingItem, togglePackingItem, deletePackingItem
   };
 }

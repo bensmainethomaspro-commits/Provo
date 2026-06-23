@@ -1161,3 +1161,231 @@ body {
   min-width: unset;
   display: inline-block;
 }
+
+/* ─── TRIP CARD PROGRESS ─────────────────────────────────── */
+.trip-card__progress {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 5px;
+}
+.trip-card__progress-bar {
+  height: 4px;
+  background: var(--orange);
+  border-radius: 2px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+  flex-shrink: 0;
+}
+.trip-card__progress {
+  background: rgba(255,255,255,0.12);
+  border-radius: 2px;
+  height: 4px;
+  position: relative;
+  flex: 1;
+  max-width: 100px;
+  overflow: hidden;
+}
+.trip-card__progress-bar {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: var(--orange);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.trip-card__progress-label {
+  font-size: 11px; font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  white-space: nowrap;
+}
+
+/* ─── ACTIVITY DISTANCE BRIDGE ───────────────────────────── */
+.activity-bridge {
+  display: flex; align-items: center; gap: 6px;
+  margin: 2px 12px;
+  color: rgba(255,255,255,0.45);
+  font-size: 11px; font-weight: 600;
+}
+.activity-bridge__line {
+  flex: 1; height: 1px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 1px;
+}
+.activity-bridge__dist {
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+/* ─── DAY NOTES ──────────────────────────────────────────── */
+.day-section__notes-btn--active {
+  color: var(--orange) !important;
+}
+.day-section__notes {
+  padding: 0 12px 12px;
+}
+.day-notes-textarea {
+  width: 100%; box-sizing: border-box;
+  min-height: 72px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid rgba(255,255,255,0.18);
+  background: rgba(255,255,255,0.07);
+  color: var(--text);
+  font-size: 13px; line-height: 1.5;
+  padding: 8px 10px;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.day-notes-textarea::placeholder { color: var(--text-light); }
+.day-notes-textarea:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px var(--primary-shadow);
+}
+
+/* ─── RESERVE CATEGORY FILTER ────────────────────────────── */
+.reserve-filter {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 0 12px;
+}
+.reserve-filter__pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.reserve-filter__pill:hover { background: rgba(255,255,255,0.18); }
+.reserve-filter__pill--active {
+  background: var(--orange);
+  color: #fff;
+  border-color: var(--orange);
+}
+
+/* ─── PACKING LIST ───────────────────────────────────────── */
+.packing-list {
+  padding: 12px 0 80px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.packing-list__progress-wrap {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 0 4px;
+}
+.packing-list__progress-track {
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.packing-list__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--orange), #ff9f43);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+.packing-list__progress-label {
+  font-size: 12px; font-weight: 600;
+  color: rgba(255,255,255,0.65);
+  text-align: right;
+}
+.packing-list__cats {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.packing-cat-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.packing-cat-btn:hover { background: rgba(255,255,255,0.15); }
+.packing-cat-btn--active {
+  background: var(--orange);
+  color: #fff;
+  border-color: var(--orange);
+}
+.packing-list__items {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.packing-list__empty {
+  padding: 28px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.packing-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: opacity 0.15s;
+}
+.packing-item--done {
+  opacity: 0.55;
+}
+.packing-item--done .packing-item__text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.packing-item__check {
+  background: none; border: none; cursor: pointer;
+  font-size: 18px; padding: 0; flex-shrink: 0;
+  line-height: 1;
+}
+.packing-item__text {
+  flex: 1; font-size: 14px; color: var(--text);
+  min-width: 0;
+}
+.packing-item__cat-emoji {
+  font-size: 14px; flex-shrink: 0; opacity: 0.6;
+}
+.packing-item__delete {
+  background: none; border: none; cursor: pointer;
+  font-size: 12px; color: var(--text-muted);
+  padding: 2px 4px; border-radius: 4px;
+  flex-shrink: 0; opacity: 0;
+  transition: opacity 0.15s;
+}
+.packing-item:hover .packing-item__delete { opacity: 1; }
+.packing-list__add {
+  display: flex; gap: 8px; align-items: center;
+}
+.packing-list__add-cat {
+  flex-shrink: 0; width: auto; max-width: 140px;
+  font-size: 13px;
+}
+.packing-list__add-input {
+  flex: 1; min-width: 0;
+}
+.packing-list__presets-section {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.packing-list__presets {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.preset-pill {
+  padding: 5px 12px;
+  border-radius: 16px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.07);
+  border: 1.5px dashed rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.75);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.preset-pill:hover {
+  background: rgba(255,107,53,0.15);
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.packing-list__presets-done {
+  font-size: 13px; color: var(--text-light);
+  margin: 4px 0 0;
+}

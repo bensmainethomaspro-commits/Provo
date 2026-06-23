@@ -1,19 +1,25 @@
-import { useState } from 'react';
-import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice } from '../utils/helpers';
+import { useState, Fragment } from 'react';
+import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
+
+function formatDist(km) {
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
 
 export default function DaySection({
   day, dayIndex, totalDays, isPastTrip,
   onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
   onReorder, onStartTimeChange, onEdit, onAddActivity,
-  onOpenDetail, onDrop,
+  onOpenDetail, onDrop, onNotesChange,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
   weather,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const isLast = dayIndex === totalDays - 1;
 
   const notDone = day.activities.filter(a => a.status !== 'done');
@@ -56,6 +62,11 @@ export default function DaySection({
             </span>
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
+          <button
+            className={`btn btn--xs btn--ghost-white${day.notes ? ' day-section__notes-btn--active' : ''}`}
+            onClick={() => setNotesOpen(o => !o)}
+            title="Notes du jour"
+          >📝{day.notes && !notesOpen ? ' •' : ''}</button>
           <button className="btn btn--xs btn--ghost-white" onClick={() => onOpenDetail(day)}>↗ Détail</button>
         </div>
       </div>
@@ -90,39 +101,63 @@ export default function DaySection({
               </div>
             </div>
           )
-          : sorted.map((activity) => {
+          : sorted.map((activity, sortedIdx) => {
             const origIdx = day.activities.findIndex(a => a.id === activity.id);
+            const next = sorted[sortedIdx + 1];
+            const dist = (next && activity.lat && activity.lon && next.lat && next.lon
+              && activity.status !== 'nogo' && next.status !== 'nogo')
+              ? haversineKm(activity.lat, activity.lon, next.lat, next.lon)
+              : null;
             return (
-              <ActivityCard
-                key={activity.id}
-                activity={activity}
-                context="day"
-                isLastDay={isLast}
-                slot={slots[activity.id]}
-                isPastTrip={isPastTrip}
-                onStatusChange={(s) => onStatusChange(day.id, activity.id, s)}
-                onDelete={() => onDelete(day.id, activity.id)}
-                onMoveToReserve={() => onMoveToReserve(day.id, activity.id)}
-                onMoveToNextDay={!isLast ? () => onMoveToNextDay(day.id, activity.id) : null}
-                onEdit={() => onEdit(activity, { type: 'day', dayId: day.id })}
-                onReorderUp={() => onReorder(day.id, activity.id, 'up')}
-                onReorderDown={() => onReorder(day.id, activity.id, 'down')}
-                isFirst={origIdx === 0}
-                isLast={origIdx === day.activities.length - 1}
-                onDragStart={() => setLocalDragId(activity.id)}
-                onDragEnd={() => setLocalDragId(null)}
-                isDragging={localDragId === activity.id}
-                days={days}
-                currentDayId={day.id}
-                onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
-                compareMode={compareMode}
-                compareSelected={compareSelectedIds?.has(activity.id)}
-                onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
-              />
+              <Fragment key={activity.id}>
+                <ActivityCard
+                  activity={activity}
+                  context="day"
+                  isLastDay={isLast}
+                  slot={slots[activity.id]}
+                  isPastTrip={isPastTrip}
+                  onStatusChange={(s) => onStatusChange(day.id, activity.id, s)}
+                  onDelete={() => onDelete(day.id, activity.id)}
+                  onMoveToReserve={() => onMoveToReserve(day.id, activity.id)}
+                  onMoveToNextDay={!isLast ? () => onMoveToNextDay(day.id, activity.id) : null}
+                  onEdit={() => onEdit(activity, { type: 'day', dayId: day.id })}
+                  onReorderUp={() => onReorder(day.id, activity.id, 'up')}
+                  onReorderDown={() => onReorder(day.id, activity.id, 'down')}
+                  isFirst={origIdx === 0}
+                  isLast={origIdx === day.activities.length - 1}
+                  onDragStart={() => setLocalDragId(activity.id)}
+                  onDragEnd={() => setLocalDragId(null)}
+                  isDragging={localDragId === activity.id}
+                  days={days}
+                  currentDayId={day.id}
+                  onDuplicate={onDuplicate ? (targetDayId) => onDuplicate(activity.id, targetDayId) : null}
+                  compareMode={compareMode}
+                  compareSelected={compareSelectedIds?.has(activity.id)}
+                  onToggleCompare={onToggleCompare ? () => onToggleCompare(activity.id) : null}
+                />
+                {dist !== null && (
+                  <div className="activity-bridge">
+                    <span className="activity-bridge__line" />
+                    <span className="activity-bridge__dist">↕ {formatDist(dist)}</span>
+                    <span className="activity-bridge__line" />
+                  </div>
+                )}
+              </Fragment>
             );
           })
         }
       </div>
+
+      {notesOpen && (
+        <div className="day-section__notes">
+          <textarea
+            className="day-notes-textarea"
+            placeholder="Notes du jour : hébergement, infos pratiques, adresse…"
+            value={day.notes || ''}
+            onChange={e => onNotesChange?.(day.id, e.target.value)}
+          />
+        </div>
+      )}
     </div>
   );
 }

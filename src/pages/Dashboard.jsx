@@ -5,7 +5,7 @@ import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Dashboard({ onNavigate, darkMode, onToggleDark }) {
-  const { currentTrips, pastTrips, trips, createTrip, updateTrip, deleteTrip, addToReserve, addToDay } = useTripsContext();
+  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip } = useTripsContext();
   const [showNew, setShowNew] = useState(false);
   const [editingTrip, setEditingTrip] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -51,6 +51,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark }) {
                 onClick={() => onNavigate('trip', trip.id)}
                 onEdit={() => setEditingTrip(trip)}
                 onDelete={() => setDeletingId(trip.id)}
+                onDuplicate={() => duplicateTrip(trip.id)}
               />
             ))
           }
@@ -71,6 +72,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark }) {
                       onClick={() => onNavigate('trip', trip.id)}
                       onEdit={() => setEditingTrip(trip)}
                       onDelete={() => setDeletingId(trip.id)}
+                      onDuplicate={() => duplicateTrip(trip.id)}
                     />
                   </div>
                 </div>

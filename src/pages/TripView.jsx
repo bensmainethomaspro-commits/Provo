@@ -9,15 +9,17 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import MapView from '../components/MapView';
+import PackingList from '../components/PackingList';
 import { useWeather } from '../hooks/useWeather';
-import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES } from '../utils/helpers';
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     addToReserve, addToDay, reorderActivity, reorderInReserve,
-    setDayStartTime, deleteTrip, duplicateToDay, updateTrip
+    setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
+    setDayNotes, addPackingItem, togglePackingItem, deletePackingItem
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -35,6 +37,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
   const [viewMode, setViewMode] = useState('list');
+  const [reserveFilter, setReserveFilter] = useState('all');
+  const [copyDone, setCopyDone] = useState(false);
   const tabContentRef = useRef(null);
 
   // Auto-scroll during drag near viewport edges
@@ -128,6 +132,54 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
+  const copyItinerary = async () => {
+    const lines = [];
+    lines.push(`${trip.emoji || '✈️'} ${trip.name}`);
+    if (trip.destination) lines.push(`📍 ${trip.destination}`);
+    lines.push(`${formatDateShort(trip.startDate)} → ${formatDateShort(trip.endDate)} · ${trip.days.length} jour${trip.days.length > 1 ? 's' : ''}`);
+    lines.push('');
+    trip.days.forEach((day, i) => {
+      lines.push(`── Jour ${i + 1} · ${formatDate(day.date)} ──`);
+      if (day.activities.length === 0) {
+        lines.push('  (aucune activité planifiée)');
+      } else {
+        const slots = {};
+        let cur = day.startTime || '09:00';
+        day.activities.forEach(a => {
+          slots[a.id] = cur;
+          const mins = (parseInt(a.durationHours) || 0) * 60 + (parseInt(a.durationMinutes) || 0);
+          const [h, m] = cur.split(':').map(Number);
+          const next = h * 60 + m + mins;
+          cur = `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+        });
+        day.activities.forEach(a => {
+          const icon = a.status === 'done' ? '✅' : a.status === 'nogo' ? '❌' : '•';
+          const dur = (a.durationHours || 0) * 60 + (a.durationMinutes || 0);
+          const durStr = dur > 0 ? ` (${formatDuration(dur)})` : '';
+          const priceStr = (parseFloat(a.price) || 0) > 0 ? ` · ${formatPrice(a.price)}` : '';
+          lines.push(`  ${icon} ${slots[a.id]} ${a.title}${durStr}${priceStr}`);
+          if (a.address) lines.push(`       📍 ${a.address}`);
+        });
+      }
+      if (day.notes) lines.push(`  📝 ${day.notes}`);
+      lines.push('');
+    });
+    if (trip.reserve.length > 0) {
+      lines.push(`── 📦 Réserve (${trip.reserve.length} idée${trip.reserve.length > 1 ? 's' : ''}) ──`);
+      trip.reserve.forEach(a => lines.push(`  • ${a.title}`));
+      lines.push('');
+    }
+    if (trip.tripNotes?.trim()) {
+      lines.push('── 📝 Notes ──');
+      lines.push(trip.tripNotes.trim());
+    }
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+    } catch {}
+  };
+
   // ─── Drag & Drop ─────────────────────────────────────
   const handleDropOnDay = (targetDayId, activityId) => {
     if (!activityId) return;
@@ -168,6 +220,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
+          <button className="btn btn--ghost-white btn--sm" onClick={copyItinerary} title="Copier l'itinéraire">
+            {copyDone ? '✅' : '📋'}
+          </button>
           <button className="btn btn--ghost-white btn--sm" onClick={() => setShowShare(true)}>🔗</button>
           <button className="btn btn--ghost-white btn--sm" onClick={() => setShowDeleteTrip(true)}>🗑️</button>
         </div>
@@ -200,6 +255,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <button className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => setTab('reserve')}>
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
+        </button>
+        <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => setTab('valise')}>
+          🎒 Valise
+          {(trip.packingList?.length || 0) > 0 && (
+            <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
+          )}
         </button>
         <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
           🗺 Carte
@@ -267,6 +328,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   onAddActivity={openAddSheet}
                   onOpenDetail={(day) => setDetailDay(day)}
                   onDrop={handleDropOnDay}
+                  onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
                   weather={weather?.byDate[day.date]}
                   {...sharedDayProps}
                 />
@@ -336,16 +398,30 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               </div>
             ) : (
               <>
-                <p className="reserve-section__count">
-                  {trip.reserve.length} idée{trip.reserve.length > 1 ? 's' : ''} en attente
-                </p>
+                <div className="reserve-filter">
+                  <button
+                    className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
+                    onClick={() => setReserveFilter('all')}
+                  >Tout ({trip.reserve.length})</button>
+                  {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
+                    const count = trip.reserve.filter(a => a.category === cat.id).length;
+                    return (
+                      <button key={cat.id}
+                        className={`reserve-filter__pill${reserveFilter === cat.id ? ' reserve-filter__pill--active' : ''}`}
+                        onClick={() => setReserveFilter(cat.id)}
+                      >{cat.emoji} {count}</button>
+                    );
+                  })}
+                </div>
                 <div
                   style={{ borderRadius: 'var(--radius-md)', border: reserveDragOver ? '2px dashed var(--orange)' : '2px dashed transparent', transition: 'border-color 0.15s', marginBottom: 10, minHeight: 8 }}
                   onDragOver={(e) => { e.preventDefault(); setReserveDragOver(true); }}
                   onDragLeave={() => setReserveDragOver(false)}
                   onDrop={handleDropOnReserve}
                 />
-                {trip.reserve.map((activity, i) => (
+                {trip.reserve
+                  .filter(a => reserveFilter === 'all' || a.category === reserveFilter)
+                  .map((activity, i, arr) => (
                   <div key={activity.id} className="reserve-card">
                     <ActivityCard
                       activity={activity}
@@ -357,7 +433,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       onReorderUp={() => reorderInReserve(tripId, activity.id, 'up')}
                       onReorderDown={() => reorderInReserve(tripId, activity.id, 'down')}
                       isFirst={i === 0}
-                      isLast={i === trip.reserve.length - 1}
+                      isLast={i === arr.length - 1}
                       onDragStart={() => {}}
                       onDragEnd={() => {}}
                       compareMode={compareMode}
@@ -378,6 +454,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               </>
             )}
           </>
+        )}
+
+        {/* ── VALISE TAB ── */}
+        {tab === 'valise' && (
+          <PackingList
+            items={trip.packingList || []}
+            onAdd={(text, category) => addPackingItem(tripId, text, category)}
+            onToggle={(itemId) => togglePackingItem(tripId, itemId)}
+            onDelete={(itemId) => deletePackingItem(tripId, itemId)}
+          />
         )}
 
         {/* ── NOTES TAB ── */}
@@ -401,8 +487,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         )}
       </div>
 
-      {/* FAB — hidden on notes and map tabs */}
-      {tab !== 'notes' && tab !== 'map' && (
+      {/* FAB — hidden on notes, map, and valise tabs */}
+      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && (
         <div className="fab">
           <button className="fab__btn" onClick={() => openAddSheet(null)}>
             + Ajouter une activité

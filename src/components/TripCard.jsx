@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { formatDateShort } from '../utils/helpers';
 
-export default function TripCard({ trip, onClick, onEdit, onDelete }) {
+export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -10,7 +10,9 @@ export default function TripCard({ trip, onClick, onEdit, onDelete }) {
     return new Date(trip.endDate + 'T00:00:00') < today;
   })();
 
-  const actCount = trip.days.reduce((s, d) => s + d.activities.length, 0) + trip.reserve.length;
+  const dayActs = trip.days.reduce((s, d) => s + d.activities.length, 0);
+  const doneActs = trip.days.reduce((s, d) => s + d.activities.filter(a => a.status === 'done').length, 0);
+  const actCount = dayActs + trip.reserve.length;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -36,6 +38,12 @@ export default function TripCard({ trip, onClick, onEdit, onDelete }) {
           {' · '}{trip.days.length}j
           {actCount > 0 && ` · ${actCount} activité${actCount > 1 ? 's' : ''}`}
         </div>
+        {dayActs > 0 && (
+          <div className="trip-card__progress">
+            <div className="trip-card__progress-bar" style={{ width: `${Math.round(doneActs / dayActs * 100)}%` }} />
+            <span className="trip-card__progress-label">{doneActs}/{dayActs} faites</span>
+          </div>
+        )}
       </div>
       <span className={`trip-card__badge trip-card__badge--${isPast ? 'past' : 'upcoming'}`}>
         {isPast ? 'Passé' : 'À venir'}
@@ -49,6 +57,11 @@ export default function TripCard({ trip, onClick, onEdit, onDelete }) {
             <button className="trip-card__dropdown-item" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onEdit(); }}>
               ✏️ Modifier
             </button>
+            {onDuplicate && (
+              <button className="trip-card__dropdown-item" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDuplicate(); }}>
+                📋 Dupliquer
+              </button>
+            )}
             <button className="trip-card__dropdown-item trip-card__dropdown-item--danger" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onDelete(); }}>
               🗑️ Supprimer
             </button>
