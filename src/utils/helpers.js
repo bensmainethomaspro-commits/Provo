@@ -139,31 +139,79 @@ export function parseGoogleMapsUrl(url) {
   return null;
 }
 
+export async function resolveShortUrl(url) {
+  if (!/goo\.gl|maps\.app/.test(url)) return url;
+  try {
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    return data.status?.url || url;
+  } catch { return url; }
+}
+
 export async function fetchPlaceData(query) {
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=1`
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`
   );
   const data = await res.json();
   if (!data?.length) return null;
   const p = data[0];
   const a = p.address || {};
-  const address = [a.road || a.pedestrian, a.city || a.town || a.village, a.country]
+  const ex = p.extratags || {};
+
+  // Richer address: road + number, city, country
+  const road = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ');
+  const address = [road, a.city || a.town || a.village || a.municipality, a.country]
     .filter(Boolean).join(', ');
-  const type = (p.type || p.class || '').toLowerCase();
-  const catMap = [
-    [/restaurant|cafe|bar|fast_food|pub|food|bistro|brasserie/, 'resto'],
-    [/beach|coastline|bay|plage/, 'plage'],
-    [/sport|fitness|swimming|stadium/, 'sport'],
-    [/hotel|hostel|motel|accommodation/, 'repos'],
-    [/bus_stop|train|airport|ferry|subway|station/, 'trajet'],
-    [/park|forest|nature|trail|viewpoint|peak|garden/, 'balade'],
-    [/theme_park|nightclub|cinema|theatre|entertainment|casino|amusement/, 'fun'],
+
+  // Category from ALL available tags (class + type + extratags)
+  const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop, ex.sport]
+    .filter(Boolean).join(' ').toLowerCase();
+  const catRules = [
+    [/restaurant|cafe|coffee|brasserie|bar|pub|fast_food|food_court|bistro|snack|tabac_presse/, 'resto'],
+    [/beach|plage|coast|swimming_area|baignade/, 'plage'],
+    [/sport|fitness|gym|swimming_pool|stadium|climbing|tennis|golf|ski|surf/, 'sport'],
+    [/hotel|hostel|motel|lodge|inn|guesthouse|resort|chalet|accommodation/, 'repos'],
+    [/airport|train_station|bus_station|ferry_terminal|metro|subway|tram/, 'trajet'],
+    [/park|forest|trail|hiking|viewpoint|peak|waterfall|garden|nature_reserve|bay|lake|river|wood/, 'balade'],
+    [/nightclub|casino|cinema|theatre|amusement|theme_park|arcade|entertainment|concert/, 'fun'],
   ];
   let category = 'visite';
-  for (const [re, cat] of catMap) {
-    if (re.test(type)) { category = cat; break; }
+  for (const [re, cat] of catRules) {
+    if (re.test(typeText)) { category = cat; break; }
   }
-  return { title: (p.name || p.display_name.split(',')[0]).trim(), address, category };
+
+  // Wikipedia thumbnail
+  let photoUrl = null;
+  const wikiKey = (ex.wikipedia || '').replace(/^[a-z]{2}:/, '');
+  if (wikiKey) {
+    try {
+      const wRes = await fetch(
+        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`
+      );
+      if (wRes.ok) {
+        const w = await wRes.json();
+        photoUrl = w.thumbnail?.source?.replace(/\/\d+px-/, '/600px-') || null;
+      }
+    } catch {}
+  }
+
+  return {
+    title: (p.name || p.display_name.split(',')[0]).trim(),
+    address,
+    category,
+    photoUrl,
+    openingHours: ex.opening_hours || '',
+    lat: parseFloat(p.lat),
+    lon: parseFloat(p.lon),
+  };
+}
+
+export function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 // ─── Dynamic sky ──────────────────────────────────────────

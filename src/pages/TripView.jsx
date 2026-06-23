@@ -7,6 +7,7 @@ import AddActivitySheet from '../components/AddActivitySheet';
 import ShareModal from '../components/ShareModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
+import TimelineView from '../components/TimelineView';
 import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
@@ -30,6 +31,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
+  const [viewMode, setViewMode] = useState('list');
   const tabContentRef = useRef(null);
 
   // Auto-scroll during drag near viewport edges
@@ -198,7 +200,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </button>
       </div>
 
-      {/* Compare toolbar */}
+      {/* Compare + view toolbar */}
       <div className="compare-bar">
         {compareMode && compareSelectedIds.size >= 2 && (
           <button className="btn btn--primary btn--sm" onClick={() => setShowCompare(true)}>
@@ -214,6 +216,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         >
           {compareMode ? '✕ Annuler' : '⚖️ Comparer'}
         </button>
+        {tab === 'planning' && !compareMode && (
+          <button
+            className="btn btn--sm btn--secondary"
+            onClick={() => setViewMode(v => v === 'list' ? 'timeline' : 'list')}
+            title={viewMode === 'list' ? 'Vue timeline' : 'Vue liste'}
+          >
+            {viewMode === 'list' ? '🗓' : '☰'}
+          </button>
+        )}
       </div>
 
       {/* Tab content */}
@@ -222,26 +233,33 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
-            {trip.days.map((day, i) => (
-              <DaySection
-                key={day.id}
-                day={day}
-                dayIndex={i}
-                totalDays={trip.days.length}
-                isPastTrip={isPast}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDeleteFromDay}
-                onMoveToReserve={(dayId, actId) => moveToReserve(tripId, dayId, actId)}
-                onMoveToNextDay={(dayId, actId) => moveToNextDay(tripId, dayId, actId)}
-                onReorder={(dayId, actId, dir) => reorderActivity(tripId, dayId, actId, dir)}
-                onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
-                onEdit={(activity, location) => setEditingActivity({ activity, location })}
-                onAddActivity={openAddSheet}
+            {viewMode === 'timeline' ? (
+              <TimelineView
+                days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
-                onDrop={handleDropOnDay}
-                {...sharedDayProps}
               />
-            ))}
+            ) : (
+              trip.days.map((day, i) => (
+                <DaySection
+                  key={day.id}
+                  day={day}
+                  dayIndex={i}
+                  totalDays={trip.days.length}
+                  isPastTrip={isPast}
+                  onStatusChange={handleStatusChange}
+                  onDelete={handleDeleteFromDay}
+                  onMoveToReserve={(dayId, actId) => moveToReserve(tripId, dayId, actId)}
+                  onMoveToNextDay={(dayId, actId) => moveToNextDay(tripId, dayId, actId)}
+                  onReorder={(dayId, actId, dir) => reorderActivity(tripId, dayId, actId, dir)}
+                  onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
+                  onEdit={(activity, location) => setEditingActivity({ activity, location })}
+                  onAddActivity={openAddSheet}
+                  onOpenDetail={(day) => setDetailDay(day)}
+                  onDrop={handleDropOnDay}
+                  {...sharedDayProps}
+                />
+              ))
+            )}
 
             {/* Reserve mini-panel */}
             <div className="planning-reserve">

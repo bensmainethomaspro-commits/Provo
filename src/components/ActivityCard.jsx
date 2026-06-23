@@ -50,6 +50,10 @@ export default function ActivityCard({
         onDragStart={handleDragStart}
         onDragEnd={() => onDragEnd?.()}
       >
+        {activity.photoUrl && (
+          <img src={activity.photoUrl} className="activity-card__photo" alt="" />
+        )}
+
         {compareMode && (
           <label className="activity-card__compare-check" onClick={e => e.stopPropagation()}>
             <input type="checkbox" checked={!!compareSelected} onChange={onToggleCompare} />
@@ -67,6 +71,7 @@ export default function ActivityCard({
               {dur > 0 && <span className="activity-card__duration">⏱ {formatDuration(dur)}</span>}
               {activity.price > 0 && <span className="activity-card__price">💶 {formatPrice(parseFloat(activity.price))}</span>}
               {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
+              {activity.openingHours && <span className="activity-card__hours">🕐 {activity.openingHours}</span>}
             </div>
             {activity.link && (
               <div className="activity-card__link">

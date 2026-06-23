@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, parseGoogleMapsUrl, fetchPlaceData } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, parseGoogleMapsUrl, fetchPlaceData, resolveShortUrl } from '../utils/helpers';
 
-const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [] };
+const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 30, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null };
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave }) {
@@ -30,6 +30,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           price: editActivity.price || '',
           link: editActivity.link || '',
           screenshots: editActivity.screenshots || [],
+          photoUrl: editActivity.photoUrl || '',
+          openingHours: editActivity.openingHours || '',
+          lat: editActivity.lat || null,
+          lon: editActivity.lon || null,
         });
       } else {
         setForm({ ...blank });
@@ -47,20 +51,31 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   const handleImport = async () => {
-    const name = parseGoogleMapsUrl(importUrl.trim());
-    if (!name) { setError('URL Google Maps non reconnue. Utilise une URL complète (maps.google.com/…).'); return; }
     setImporting(true);
     setError('');
     try {
+      const resolved = await resolveShortUrl(importUrl.trim());
+      const name = parseGoogleMapsUrl(resolved);
+      if (!name) { setError('URL non reconnue. Utilise un lien Google Maps (maps.google.com ou maps.app.goo.gl).'); setImporting(false); return; }
       const data = await fetchPlaceData(name);
       if (data) {
-        setForm(f => ({ ...f, title: data.title || name, address: data.address || f.address, category: data.category || f.category, link: importUrl.trim() }));
+        setForm(f => ({
+          ...f,
+          title: data.title || name,
+          address: data.address || f.address,
+          category: data.category || f.category,
+          link: importUrl.trim(),
+          photoUrl: data.photoUrl || f.photoUrl,
+          openingHours: data.openingHours || f.openingHours,
+          lat: data.lat ?? f.lat,
+          lon: data.lon ?? f.lon,
+        }));
       } else {
         setForm(f => ({ ...f, title: f.title || name, link: importUrl.trim() }));
       }
       setImportUrl('');
     } catch {
-      setForm(f => ({ ...f, title: f.title || name, link: importUrl.trim() }));
+      setForm(f => ({ ...f, link: importUrl.trim() }));
       setImportUrl('');
     } finally {
       setImporting(false);
@@ -140,7 +155,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               <input
                 className="form-input"
                 type="url"
-                placeholder="Colle une URL Google Maps…"
+                placeholder="maps.google.com/… ou maps.app.goo.gl/…"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}
@@ -155,6 +170,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
           </div>
+
+          {/* Photo preview from import */}
+          {form.photoUrl && (
+            <div className="form-group">
+              <label className="form-label">Photo du lieu</label>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <img src={form.photoUrl} alt="" className="import-photo-preview" />
+                <button type="button" className="screenshot-remove"
+                  style={{ top: -5, right: -5 }}
+                  onClick={() => set('photoUrl', '')}>✕</button>
+              </div>
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Titre <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— déduit si vide</span></label>
@@ -207,6 +235,14 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             <input className="form-input" type="url" placeholder="https://..." value={form.link}
               onChange={e => set('link', e.target.value)} />
           </div>
+
+          {form.openingHours && (
+            <div className="form-group">
+              <label className="form-label">Horaires</label>
+              <input className="form-input" value={form.openingHours}
+                onChange={e => set('openingHours', e.target.value)} />
+            </div>
+          )}
 
           <div className="form-group">
             <label className="form-label">Notes</label>
