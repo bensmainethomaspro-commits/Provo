@@ -1,18 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
 import { formatDateShort } from '../utils/helpers';
 
-export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate }) {
+export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate, onPreview }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
-  const isPast = (() => {
-    const today = new Date(); today.setHours(0,0,0,0);
-    return new Date(trip.endDate + 'T00:00:00') < today;
-  })();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const startDate = new Date(trip.startDate + 'T00:00:00');
+  const endDate = new Date(trip.endDate + 'T00:00:00');
+  const isPast = endDate < today;
+  const isActive = !isPast && startDate <= today && today <= endDate;
+  const daysUntil = Math.round((startDate - today) / 86400000);
+  const dayIdx = isActive ? Math.round((today - startDate) / 86400000) : -1;
 
   const dayActs = trip.days.reduce((s, d) => s + d.activities.length, 0);
   const doneActs = trip.days.reduce((s, d) => s + d.activities.filter(a => a.status === 'done').length, 0);
   const actCount = dayActs + trip.reserve.length;
+
+  let badgeText, badgeVariant;
+  if (isPast) { badgeText = 'Passé'; badgeVariant = 'past'; }
+  else if (isActive) { badgeText = `Jour ${dayIdx + 1}/${trip.days.length}`; badgeVariant = 'active'; }
+  else if (daysUntil === 0) { badgeText = 'Aujourd\'hui !'; badgeVariant = 'urgent'; }
+  else if (daysUntil === 1) { badgeText = 'Demain !'; badgeVariant = 'urgent'; }
+  else { badgeText = `Dans ${daysUntil}j`; badgeVariant = 'upcoming'; }
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -28,8 +38,16 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate 
   }, [menuOpen]);
 
   return (
-    <div className={`trip-card${isPast ? ' trip-card--past' : ''}`}>
-      <div className="trip-card__emoji">{trip.emoji || '✈️'}</div>
+    <div className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}`}>
+      <div
+        className="trip-card__emoji"
+        onClick={onPreview ? (e) => { e.stopPropagation(); onPreview(); } : undefined}
+        style={onPreview ? { cursor: 'pointer' } : {}}
+        title={onPreview ? 'Aperçu rapide' : undefined}
+      >
+        {trip.emoji || '✈️'}
+        {onPreview && <span className="trip-card__emoji-hint">ℹ</span>}
+      </div>
       <div className="trip-card__info trip-card--clickable" onClick={onClick} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
         <div className="trip-card__name">{trip.name}</div>
         {trip.destination && <div className="trip-card__dest">📍 {trip.destination}</div>}
@@ -47,8 +65,8 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate 
           </div>
         )}
       </div>
-      <span className={`trip-card__badge trip-card__badge--${isPast ? 'past' : 'upcoming'}`}>
-        {isPast ? 'Passé' : 'À venir'}
+      <span className={`trip-card__badge trip-card__badge--${badgeVariant}`}>
+        {badgeText}
       </span>
       <div className="trip-card__menu" ref={menuRef}>
         <button className="trip-card__menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }} title="Options">
