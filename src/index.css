@@ -1163,36 +1163,23 @@ body {
 }
 
 /* ─── TRIP CARD PROGRESS ─────────────────────────────────── */
-.trip-card__progress {
+.trip-card__progress-row {
   display: flex; align-items: center; gap: 6px;
   margin-top: 5px;
 }
+.trip-card__progress-track {
+  flex: 1; max-width: 80px; height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px; overflow: hidden; position: relative;
+}
 .trip-card__progress-bar {
-  height: 4px;
-  background: var(--orange);
-  border-radius: 2px;
+  height: 100%; background: var(--orange);
+  border-radius: 2px; transition: width 0.4s ease;
   min-width: 2px;
-  transition: width 0.3s ease;
-  flex-shrink: 0;
-}
-.trip-card__progress {
-  background: rgba(255,255,255,0.12);
-  border-radius: 2px;
-  height: 4px;
-  position: relative;
-  flex: 1;
-  max-width: 100px;
-  overflow: hidden;
-}
-.trip-card__progress-bar {
-  position: absolute; top: 0; left: 0; height: 100%;
-  background: var(--orange);
-  border-radius: 2px;
-  transition: width 0.4s ease;
 }
 .trip-card__progress-label {
   font-size: 11px; font-weight: 600;
-  color: rgba(255,255,255,0.7);
+  color: var(--text-light);
   white-space: nowrap;
 }
 
@@ -1200,12 +1187,12 @@ body {
 .activity-bridge {
   display: flex; align-items: center; gap: 6px;
   margin: 2px 12px;
-  color: rgba(255,255,255,0.45);
+  color: var(--text-light);
   font-size: 11px; font-weight: 600;
 }
 .activity-bridge__line {
   flex: 1; height: 1px;
-  background: rgba(255,255,255,0.15);
+  background: var(--border);
   border-radius: 1px;
 }
 .activity-bridge__dist {
@@ -1214,18 +1201,16 @@ body {
 }
 
 /* ─── DAY NOTES ──────────────────────────────────────────── */
-.day-section__notes-btn--active {
-  color: var(--orange) !important;
-}
 .day-section__notes {
   padding: 0 12px 12px;
+  background: var(--surface);
 }
 .day-notes-textarea {
   width: 100%; box-sizing: border-box;
   min-height: 72px;
   border-radius: var(--radius-sm);
-  border: 1.5px solid rgba(255,255,255,0.18);
-  background: rgba(255,255,255,0.07);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-raised);
   color: var(--text);
   font-size: 13px; line-height: 1.5;
   padding: 8px 10px;
@@ -1249,14 +1234,14 @@ body {
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px; font-weight: 600;
-  background: rgba(255,255,255,0.1);
-  color: rgba(255,255,255,0.75);
-  border: 1.5px solid transparent;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border-strong);
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.reserve-filter__pill:hover { background: rgba(255,255,255,0.18); }
+.reserve-filter__pill:hover { background: var(--surface-sunken); }
 .reserve-filter__pill--active {
   background: var(--orange);
   color: #fff;
@@ -1274,7 +1259,7 @@ body {
 }
 .packing-list__progress-track {
   height: 8px;
-  background: rgba(255,255,255,0.1);
+  background: var(--border-strong);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -1287,7 +1272,7 @@ body {
 }
 .packing-list__progress-label {
   font-size: 12px; font-weight: 600;
-  color: rgba(255,255,255,0.65);
+  color: var(--text-muted);
   text-align: right;
 }
 .packing-list__cats {
@@ -1297,14 +1282,14 @@ body {
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 12px; font-weight: 600;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.7);
-  border: 1.5px solid transparent;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border-strong);
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
-.packing-cat-btn:hover { background: rgba(255,255,255,0.15); }
+.packing-cat-btn:hover { background: var(--surface-sunken); }
 .packing-cat-btn--active {
   background: var(--orange);
   color: #fff;
@@ -1323,28 +1308,24 @@ body {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
   transition: opacity 0.15s;
 }
-.packing-item--done {
-  opacity: 0.55;
-}
+.packing-item--done { opacity: 0.55; }
 .packing-item--done .packing-item__text {
   text-decoration: line-through;
   color: var(--text-muted);
 }
 .packing-item__check {
   background: none; border: none; cursor: pointer;
-  font-size: 18px; padding: 0; flex-shrink: 0;
-  line-height: 1;
+  font-size: 18px; padding: 0; flex-shrink: 0; line-height: 1;
 }
 .packing-item__text {
-  flex: 1; font-size: 14px; color: var(--text);
-  min-width: 0;
+  flex: 1; font-size: 14px; color: var(--text); min-width: 0;
 }
 .packing-item__cat-emoji {
-  font-size: 14px; flex-shrink: 0; opacity: 0.6;
+  font-size: 14px; flex-shrink: 0; opacity: 0.5;
 }
 .packing-item__delete {
   background: none; border: none; cursor: pointer;
@@ -1354,38 +1335,37 @@ body {
   transition: opacity 0.15s;
 }
 .packing-item:hover .packing-item__delete { opacity: 1; }
+/* On touch devices, always show delete */
+@media (hover: none) { .packing-item__delete { opacity: 0.6; } }
 .packing-list__add {
   display: flex; gap: 8px; align-items: center;
 }
 .packing-list__add-cat {
-  flex-shrink: 0; width: auto; max-width: 140px;
-  font-size: 13px;
+  flex-shrink: 0; width: auto; max-width: 140px; font-size: 13px;
 }
-.packing-list__add-input {
-  flex: 1; min-width: 0;
-}
+.packing-list__add-input { flex: 1; min-width: 0; }
 .packing-list__presets-section {
   display: flex; flex-direction: column; gap: 10px;
 }
 .packing-list__presets {
   display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 4px;
 }
 .preset-pill {
   padding: 5px 12px;
   border-radius: 16px;
   font-size: 12px; font-weight: 600;
-  background: rgba(255,255,255,0.07);
-  border: 1.5px dashed rgba(255,255,255,0.25);
-  color: rgba(255,255,255,0.75);
+  background: var(--surface-sunken);
+  border: 1.5px dashed var(--border-strong);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s;
 }
 .preset-pill:hover {
-  background: rgba(255,107,53,0.15);
+  background: rgba(255,107,53,0.08);
   border-color: var(--orange);
   color: var(--orange);
 }
 .packing-list__presets-done {
-  font-size: 13px; color: var(--text-light);
-  margin: 4px 0 0;
+  font-size: 13px; color: var(--text-light); margin: 4px 0 0;
 }

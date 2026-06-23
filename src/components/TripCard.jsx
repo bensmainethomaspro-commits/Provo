@@ -39,9 +39,11 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate 
           {actCount > 0 && ` · ${actCount} activité${actCount > 1 ? 's' : ''}`}
         </div>
         {dayActs > 0 && (
-          <div className="trip-card__progress">
-            <div className="trip-card__progress-bar" style={{ width: `${Math.round(doneActs / dayActs * 100)}%` }} />
-            <span className="trip-card__progress-label">{doneActs}/{dayActs} faites</span>
+          <div className="trip-card__progress-row">
+            <div className="trip-card__progress-track">
+              <div className="trip-card__progress-bar" style={{ width: `${Math.round(doneActs / dayActs * 100)}%` }} />
+            </div>
+            <span className="trip-card__progress-label">{doneActs}/{dayActs}</span>
           </div>
         )}
       </div>

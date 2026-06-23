@@ -63,9 +63,10 @@ export default function DaySection({
           )}
           {budget > 0 && <span className="day-section__budget">💶 {formatPrice(budget)}</span>}
           <button
-            className={`btn btn--xs btn--ghost-white${day.notes ? ' day-section__notes-btn--active' : ''}`}
+            className="btn btn--xs btn--ghost-white"
             onClick={() => setNotesOpen(o => !o)}
             title="Notes du jour"
+            style={day.notes ? { background: 'rgba(255,255,255,0.4)' } : {}}
           >📝{day.notes && !notesOpen ? ' •' : ''}</button>
           <button className="btn btn--xs btn--ghost-white" onClick={() => onOpenDetail(day)}>↗ Détail</button>
         </div>
