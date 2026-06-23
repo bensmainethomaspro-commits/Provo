@@ -1067,3 +1067,48 @@ body {
 .tl-activity__time { font-weight: 700; color: var(--orange); }
 .tl-activity__dur { }
 .tl-activity__price { color: #15803d; font-weight: 700; }
+
+/* ─── NOTES TAB ──────────────────────────────────────────── */
+.notes-tab {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px 24px;
+  gap: 10px;
+  flex: 1;
+}
+.notes-tab__hint {
+  font-size: 12px; color: var(--text-light);
+  font-style: italic; line-height: 1.5;
+}
+.notes-textarea {
+  flex: 1;
+  min-height: 55vh;
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  resize: none;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s;
+}
+.notes-textarea:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(255,107,53,0.15);
+}
+.notes-textarea::placeholder { color: var(--text-light); }
+
+/* Dot indicator on tab badge */
+.tab-badge--dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--orange);
+  padding: 0;
+  min-width: unset;
+  display: inline-block;
+}

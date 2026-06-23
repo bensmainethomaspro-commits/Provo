@@ -15,7 +15,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
     addToReserve, addToDay, reorderActivity, reorderInReserve,
-    setDayStartTime, deleteTrip, duplicateToDay
+    setDayStartTime, deleteTrip, duplicateToDay, updateTrip
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -198,6 +198,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
         </button>
+        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
+          📝 Notes
+          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
+        </button>
       </div>
 
       {/* Compare + view toolbar */}
@@ -367,14 +371,31 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             )}
           </>
         )}
+
+        {/* ── NOTES TAB ── */}
+        {tab === 'notes' && (
+          <div className="notes-tab">
+            <p className="notes-tab__hint">
+              Numéros de vol, adresses d'hôtels, contacts, check-list de départ…
+            </p>
+            <textarea
+              className="notes-textarea"
+              placeholder={'Ex:\n✈️ Vol: AB1234 — départ 14h30 Terminal 2\n🏨 Hôtel Le Palais — 5 rue Victor Hugo\n📞 Urgence: +33 6 12 34 56 78\n\n☐ Passeport\n☐ Assurance voyage\n☐ Adaptateur prise'}
+              value={trip.tripNotes || ''}
+              onChange={e => updateTrip(tripId, { tripNotes: e.target.value })}
+            />
+          </div>
+        )}
       </div>
 
-      {/* FAB */}
-      <div className="fab">
-        <button className="fab__btn" onClick={() => openAddSheet(null)}>
-          + Ajouter une activité
-        </button>
-      </div>
+      {/* FAB — hidden on notes tab */}
+      {tab !== 'notes' && (
+        <div className="fab">
+          <button className="fab__btn" onClick={() => openAddSheet(null)}>
+            + Ajouter une activité
+          </button>
+        </div>
+      )}
 
       {/* Modals & sheets */}
       <AddActivitySheet
