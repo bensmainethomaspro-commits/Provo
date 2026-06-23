@@ -4,7 +4,7 @@ import TripCard from '../components/TripCard';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-export default function Dashboard({ onNavigate, darkMode, onToggleDark, colorTheme, onCycleTheme }) {
+export default function Dashboard({ onNavigate, darkMode, onToggleDark }) {
   const { currentTrips, pastTrips, trips, createTrip, updateTrip, deleteTrip, addToReserve, addToDay } = useTripsContext();
   const [showNew, setShowNew] = useState(false);
   const [editingTrip, setEditingTrip] = useState(null);
@@ -29,11 +29,6 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, colorThe
         <span className="dashboard__logo-icon">🧭</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
-          {onCycleTheme && (
-            <button className="btn btn--ghost-white btn--sm" onClick={onCycleTheme} title={`Thème : ${colorTheme?.label || 'Soleil'}`}>
-              {colorTheme?.emoji || '🟠'}
-            </button>
-          )}
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>

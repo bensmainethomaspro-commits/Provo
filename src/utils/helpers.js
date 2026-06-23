@@ -143,6 +143,44 @@ function toTitleCase(str) {
   return str.toLowerCase().replace(/(?:^|\s|-|')\S/g, c => c.toUpperCase());
 }
 
+function cleanGoogleMapsUrl(url) {
+  try {
+    const u = new URL(url);
+    ['g_st', 'g_ep', 'g_cp', 'g_ch', 'entry'].forEach(p => u.searchParams.delete(p));
+    return u.toString();
+  } catch { return url; }
+}
+
+async function fetchHtmlViaProxy(url) {
+  // Primary: allorigins.win (follows redirects, returns final URL)
+  try {
+    const r = await fetch(
+      `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const html = d.contents || '';
+      const finalUrl = d.status?.url || '';
+      if (html) return { html, finalUrl: finalUrl && finalUrl !== url ? finalUrl : null };
+    }
+  } catch {}
+
+  // Fallback: corsproxy.io
+  try {
+    const r = await fetch(
+      `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (r.ok) {
+      const html = await r.text();
+      if (html) return { html, finalUrl: null };
+    }
+  } catch {}
+
+  return { html: '', finalUrl: null };
+}
+
 function extractFromHtml(html) {
   // a) <link rel="canonical">
   const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)
@@ -185,55 +223,65 @@ export async function importFromGoogleMaps(url) {
   let placeName = null;
 
   if (/google\.com\/maps|goo\.gl|maps\.app/.test(url)) {
-    try {
-      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      const html = data.contents || '';
-      const finalUrl = data.status?.url || '';
-      if (finalUrl && finalUrl !== url) resolvedUrl = finalUrl;
+    const cleaned = cleanGoogleMapsUrl(url);
+    const { html, finalUrl } = await fetchHtmlViaProxy(cleaned);
+    if (finalUrl) resolvedUrl = finalUrl;
 
-      // Strategy 1: Parse the resolved/original URL directly
-      placeName = parseGoogleMapsUrl(resolvedUrl) || parseGoogleMapsUrl(url);
+    // Strategy 1: parse the final/cleaned URL directly
+    placeName = parseGoogleMapsUrl(resolvedUrl) || parseGoogleMapsUrl(cleaned) || parseGoogleMapsUrl(url);
 
-      // Strategy 2: Extract URL from HTML (canonical, og:url, JS redirect, meta refresh, raw search)
-      if (!placeName && html) {
-        const extracted = extractFromHtml(html);
-        if (extracted) { placeName = extracted.name; resolvedUrl = extracted.url; }
-      }
+    // Strategy 2: extract from HTML (canonical, og:url, JS redirect, meta refresh, raw match)
+    if (!placeName && html) {
+      const extracted = extractFromHtml(html);
+      if (extracted) { placeName = extracted.name; resolvedUrl = extracted.url; }
+    }
 
-      // Strategy 3: DOMParser for og:url / og:title / <title>
-      if (!placeName && html) {
-        try {
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          const ogUrlEl = doc.querySelector('meta[property="og:url"]');
-          if (ogUrlEl?.content) { const n = parseGoogleMapsUrl(ogUrlEl.content); if (n) { placeName = n; resolvedUrl = ogUrlEl.content; } }
-          if (!placeName) {
-            const ogTitle = doc.querySelector('meta[property="og:title"]')?.content;
-            if (ogTitle) {
-              const c = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-              if (c && c.toLowerCase() !== 'google maps') placeName = c;
-            }
+    // Strategy 3: DOMParser for og:url / og:title / <title>
+    if (!placeName && html) {
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const ogUrlEl = doc.querySelector('meta[property="og:url"]');
+        if (ogUrlEl?.content) {
+          const n = parseGoogleMapsUrl(ogUrlEl.content);
+          if (n) { placeName = n; resolvedUrl = ogUrlEl.content; }
+        }
+        if (!placeName) {
+          const ogTitle = doc.querySelector('meta[property="og:title"]')?.content;
+          if (ogTitle) {
+            const c = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+            if (c && c.toLowerCase() !== 'google maps') placeName = c;
           }
-          if (!placeName) {
-            const t = doc.querySelector('title')?.textContent?.trim();
-            if (t) {
-              const c = t.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-              if (c && c.toLowerCase() !== 'google maps') placeName = c;
-            }
+        }
+        if (!placeName) {
+          const t = doc.querySelector('title')?.textContent?.trim();
+          if (t) {
+            const c = t.replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+            if (c && c.toLowerCase() !== 'google maps') placeName = c;
           }
-        } catch {}
-      }
+        }
+      } catch {}
+    }
 
-      // Strategy 4: Regex og:title fallback
-      if (!placeName && html) {
-        const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
-          || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
-        if (m) {
-          const c = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
-          if (c && c.toLowerCase() !== 'google maps') placeName = c;
+    // Strategy 4: regex og:title fallback
+    if (!placeName && html) {
+      const m = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      if (m) {
+        const c = m[1].replace(/\s*[-–—]\s*(?:Google Maps|Maps)\s*$/i, '').trim();
+        if (c && c.toLowerCase() !== 'google maps') placeName = c;
+      }
+    }
+
+    // Strategy 5: any place name embedded in redirect URL params (q= or daddr=)
+    if (!placeName && html) {
+      const urlInHtml = html.match(/https?:\/\/(?:www\.)?google\.[a-z.]{2,6}\/maps[^"'<>\s\\]*/gi);
+      if (urlInHtml) {
+        for (const u of urlInHtml) {
+          const n = parseGoogleMapsUrl(u);
+          if (n) { placeName = n; resolvedUrl = u; break; }
         }
       }
-    } catch {}
+    }
   }
 
   if (!placeName) placeName = parseGoogleMapsUrl(url);
@@ -248,11 +296,9 @@ export async function importFromGoogleMaps(url) {
 
 export async function resolveShortUrl(url) {
   if (!/goo\.gl|maps\.app/.test(url)) return url;
-  try {
-    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-    const data = await res.json();
-    return data.status?.url || url;
-  } catch { return url; }
+  const cleaned = cleanGoogleMapsUrl(url);
+  const { finalUrl } = await fetchHtmlViaProxy(cleaned);
+  return finalUrl || cleaned;
 }
 
 export async function fetchPlaceData(query) {

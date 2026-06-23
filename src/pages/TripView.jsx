@@ -12,7 +12,7 @@ import MapView from '../components/MapView';
 import { useWeather } from '../hooks/useWeather';
 import { formatDateShort, budgetStats, formatPrice, formatDate } from '../utils/helpers';
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark, colorTheme, onCycleTheme }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -165,11 +165,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, color
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
-          {onCycleTheme && (
-            <button className="btn btn--ghost-white btn--sm" onClick={onCycleTheme} title={`Thème : ${colorTheme?.label || 'Soleil'}`}>
-              {colorTheme?.emoji || '🟠'}
-            </button>
-          )}
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>

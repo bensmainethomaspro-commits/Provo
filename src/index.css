@@ -25,12 +25,7 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ─── COLOR THEMES ───────────────────────────────────────── */
 :root { --primary-shadow: rgba(255,107,53,0.4); }
-[data-color-theme="ocean"]   { --orange: #0ea5e9; --yellow: #38bdf8; --primary-shadow: rgba(14,165,233,0.4); }
-[data-color-theme="nature"]  { --orange: #16a34a; --yellow: #4ade80; --primary-shadow: rgba(22,163,74,0.4); }
-[data-color-theme="sunset"]  { --orange: #9333ea; --yellow: #c084fc; --primary-shadow: rgba(147,51,234,0.4); }
-[data-color-theme="caramel"] { --orange: #b45309; --yellow: #fbbf24; --primary-shadow: rgba(180,83,9,0.4); }
 
 /* ─── DARK MODE VARS ─────────────────────────────────────── */
 [data-theme="dark"] {
