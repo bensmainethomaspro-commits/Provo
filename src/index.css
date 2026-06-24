@@ -3502,3 +3502,111 @@ body {
   font-size: 14px; pointer-events: none; z-index: 1;
   opacity: 0.55;
 }
+
+/* ── Traveler cards in expenses ──────────────────────────────────────────── */
+.traveler-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: none;
+  border-radius: 14px; padding: 14px 16px;
+  margin-bottom: 8px; width: 100%; text-align: left;
+  cursor: pointer; transition: background 0.12s;
+  box-shadow: var(--shadow-sm);
+}
+.traveler-card:active { background: var(--surface-sunken); transform: scale(0.99); }
+[data-theme="dark"] .traveler-card { box-shadow: none; border: 0.5px solid var(--border); }
+.traveler-card__avatar { font-size: 28px; flex-shrink: 0; line-height: 1; }
+.traveler-card__info { flex: 1; min-width: 0; }
+.traveler-card__name { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+.traveler-card__detail { font-size: 13px; color: var(--text-muted); margin-top: 2px; font-weight: 500; }
+.traveler-card__balance { font-size: 15px; font-weight: 700; flex-shrink: 0; }
+.traveler-card__balance--pos { color: #16a34a; }
+.traveler-card__balance--neg { color: var(--red); }
+[data-theme="dark"] .traveler-card__balance--pos { color: #4ade80; }
+.traveler-card__chevron { font-size: 20px; color: var(--text-light); flex-shrink: 0; line-height: 1; }
+
+/* ── Traveler Balance Sheet ───────────────────────────────────────────────── */
+.tbs { max-height: 88dvh; }
+.tbs__hero {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 20px 20px; gap: 6px;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface);
+  border-radius: 26px 26px 0 0;
+}
+.tbs__avatar { font-size: 52px; line-height: 1; margin-bottom: 2px; }
+.tbs__name { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
+.tbs__balance-chip {
+  font-size: 13px; font-weight: 600;
+  padding: 5px 14px; border-radius: 20px;
+  margin-top: 2px;
+}
+.tbs__balance-chip--pos { background: #dcfce7; color: #15803d; }
+.tbs__balance-chip--neg { background: #fee2e2; color: var(--red); }
+[data-theme="dark"] .tbs__balance-chip--pos { background: #052e16; color: #4ade80; }
+[data-theme="dark"] .tbs__balance-chip--neg { background: #3b0f0f; color: #f87171; }
+
+.tbs__stats {
+  display: flex; align-items: stretch; gap: 0;
+  background: var(--surface); border-radius: 14px;
+  box-shadow: var(--shadow-sm); overflow: hidden;
+  margin-bottom: 16px;
+}
+[data-theme="dark"] .tbs__stats { border: 0.5px solid var(--border); box-shadow: none; }
+.tbs__stat { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 14px 8px; gap: 3px; }
+.tbs__stat-sep { width: 0.5px; background: var(--border); margin: 10px 0; }
+.tbs__stat-value { font-size: 17px; font-weight: 700; color: var(--text); }
+.tbs__stat-value--pos { color: #16a34a; }
+.tbs__stat-value--neg { color: var(--red); }
+[data-theme="dark"] .tbs__stat-value--pos { color: #4ade80; }
+.tbs__stat-label { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+
+.tbs__section { margin-bottom: 16px; }
+.tbs__section-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.7px; color: var(--text-muted);
+  margin-bottom: 8px; padding-left: 2px;
+}
+.tbs__settled {
+  background: var(--surface); border-radius: 12px; padding: 14px;
+  text-align: center; font-size: 14px; font-weight: 600; color: var(--text-muted);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .tbs__settled { border: 0.5px solid var(--border); box-shadow: none; }
+
+.tbs__transfer {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 6px;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .tbs__transfer { border: 0.5px solid var(--border); box-shadow: none; }
+.tbs__transfer-avatar { font-size: 22px; line-height: 1; flex-shrink: 0; }
+.tbs__transfer-text { flex: 1; font-size: 14px; color: var(--text); line-height: 1.4; }
+.tbs__transfer-amount { font-weight: 700; color: var(--text); }
+.tbs__transfer-label { color: var(--text-muted); }
+.tbs__transfer-name { font-weight: 600; }
+.tbs__transfer-badge {
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 20px; flex-shrink: 0;
+}
+.tbs__transfer-badge--owes { background: #fee2e2; color: var(--red); }
+.tbs__transfer-badge--owed { background: #dcfce7; color: #15803d; }
+[data-theme="dark"] .tbs__transfer-badge--owes { background: #3b0f0f; color: #f87171; }
+[data-theme="dark"] .tbs__transfer-badge--owed { background: #052e16; color: #4ade80; }
+
+.tbs__exp-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 4px;
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .tbs__exp-row { border: 0.5px solid var(--border); box-shadow: none; }
+.tbs__exp-info { flex: 1; min-width: 0; }
+.tbs__exp-desc { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbs__exp-meta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+.tbs__exp-badge {
+  font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px;
+  background: var(--surface-sunken); color: var(--text-muted); flex-shrink: 0;
+}
+.tbs__exp-badge--paid { background: rgba(255,107,53,0.12); color: var(--orange); }
+[data-theme="dark"] .tbs__exp-badge--paid { background: rgba(255,107,53,0.2); }

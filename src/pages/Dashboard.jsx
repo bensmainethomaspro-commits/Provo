@@ -139,9 +139,6 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
                 <h2 className="dashboard__empty-title">Bienvenue sur Provo !</h2>
                 <p className="dashboard__empty-text">Planifie tes voyages, gère le programme jour par jour, retrouve tout hors-ligne.</p>
                 <p className="dashboard__empty-offline">📵 Fonctionne 100% sans connexion</p>
-                <div className="dashboard__empty-actions">
-                  <button className="btn btn--primary" onClick={() => setShowNew(true)}>✈️ Créer un voyage</button>
-                </div>
               </div>
             ) : (
               <div className="dashboard__empty">

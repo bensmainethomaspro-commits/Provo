@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatPrice, CATEGORIES } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
+import TravelerBalanceSheet from './TravelerBalanceSheet';
 
 function calcDebts(expenses, travelers) {
   if (!travelers.length) return [];
@@ -106,7 +107,7 @@ function DonutChart({ byCategory, total }) {
   );
 }
 
-export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
+export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDeleteTraveler }) {
   const travelers = trip.tripTravelers || [];
   const expenses = trip.expenses || [];
   const allActivities = trip.days.flatMap(d => d.activities);
@@ -114,6 +115,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
   const [form, setForm] = useState({ ...BLANK });
   const [error, setError] = useState('');
   const [activeSection, setActiveSection] = useState('list'); // 'list' | 'categories' | 'travelers'
+  const [selectedTraveler, setSelectedTraveler] = useState(null);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -184,6 +186,16 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
 
   return (
     <div className="expenses-tab">
+      {selectedTraveler && (
+        <TravelerBalanceSheet
+          traveler={selectedTraveler}
+          travelers={travelers}
+          expenses={expenses}
+          debts={debts}
+          onClose={() => setSelectedTraveler(null)}
+          onDelete={(id) => { onDeleteTraveler?.(id); setSelectedTraveler(null); }}
+        />
+      )}
       {/* Budget alert */}
       {budgetOver && (
         <div className="budget-alert">
@@ -282,20 +294,30 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
       {/* Per-traveler */}
       {activeSection === 'travelers' && (
         <div className="traveler-summary">
-          {travelerTotals.map(t => (
-            <div key={t.id} className="traveler-summary-row">
-              <span className="traveler-summary-emoji">{t.emoji}</span>
-              <div className="traveler-summary-info">
-                <div className="traveler-summary-name">{t.name}</div>
-                <div className="traveler-summary-detail">
-                  A payé: <strong>{formatPrice(t.paid)}</strong> · Part réelle: {formatPrice(t.share)}
+          {travelerTotals.map(t => {
+            const myOwes = debts.filter(d => d.from === t.id);
+            const myOwed = debts.filter(d => d.to === t.id);
+            return (
+              <button key={t.id} className="traveler-card" onClick={() => setSelectedTraveler(t)}>
+                <span className="traveler-card__avatar">{t.emoji}</span>
+                <div className="traveler-card__info">
+                  <div className="traveler-card__name">{t.name}</div>
+                  <div className="traveler-card__detail">
+                    {myOwes.length > 0
+                      ? `Doit ${myOwes.reduce((s, d) => s + d.amount, 0).toFixed(2)}€`
+                      : myOwed.length > 0
+                        ? `À recevoir ${myOwed.reduce((s, d) => s + d.amount, 0).toFixed(2)}€`
+                        : 'Équilibré ✅'
+                    }
+                  </div>
                 </div>
-              </div>
-              <span className={`traveler-summary-balance ${t.balance >= 0 ? 'positive' : 'negative'}`}>
-                {t.balance >= 0 ? '+' : ''}{formatPrice(t.balance)}
-              </span>
-            </div>
-          ))}
+                <span className={`traveler-card__balance${t.balance >= 0 ? ' traveler-card__balance--pos' : ' traveler-card__balance--neg'}`}>
+                  {t.balance >= 0 ? '+' : ''}{formatPrice(t.balance)}
+                </span>
+                <span className="traveler-card__chevron">›</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

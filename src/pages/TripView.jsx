@@ -984,6 +984,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             trip={trip}
             onAddExpense={(exp) => addExpense(tripId, exp)}
             onDeleteExpense={(expId) => deleteExpense(tripId, expId)}
+            onDeleteTraveler={(id) => updateTrip(tripId, { tripTravelers: (trip.tripTravelers || []).filter(t => t.id !== id) })}
           />
         )}
 
