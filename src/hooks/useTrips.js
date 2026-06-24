@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'provo_trips';
 
@@ -33,12 +34,59 @@ function load() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
 }
 
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 export function useTrips() {
   const [trips, setTrips] = useState(load);
+  const syncedHashRef = useRef({});
 
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); } catch {}
   }, [trips]);
+
+  // Push shared trips to Supabase on change (debounced)
+  useEffect(() => {
+    const sharedTrips = trips.filter(t => t.shareId);
+    if (sharedTrips.length === 0) return;
+    const timer = setTimeout(async () => {
+      for (const trip of sharedTrips) {
+        const hash = JSON.stringify(trip);
+        if (syncedHashRef.current[trip.shareId] === hash) continue;
+        syncedHashRef.current[trip.shareId] = hash;
+        supabase.from('shared_trips').upsert({ share_id: trip.shareId, data: trip }, { onConflict: 'share_id' }).then();
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [trips]);
+
+  // Realtime subscriptions for shared trips
+  const sharedIds = trips.filter(t => t.shareId).map(t => t.shareId).join(',');
+  useEffect(() => {
+    if (!sharedIds) return;
+    const channels = sharedIds.split(',').map(shareId => {
+      return supabase
+        .channel(`trip_${shareId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shared_trips', filter: `share_id=eq.${shareId}` }, (payload) => {
+          const remoteTrip = payload.new?.data;
+          if (!remoteTrip) return;
+          const remoteHash = JSON.stringify(remoteTrip);
+          setTrips(p => {
+            const current = p.find(t => t.shareId === shareId);
+            if (!current) return p;
+            if (JSON.stringify(current) === remoteHash) return p; // our own echo
+            syncedHashRef.current[shareId] = remoteHash; // prevent re-push
+            return p.map(t => t.shareId === shareId ? remoteTrip : t);
+          });
+        })
+        .subscribe();
+    });
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
+  }, [sharedIds]);
 
   const createTrip = useCallback((data) => {
     const id = genId();
@@ -369,6 +417,37 @@ export function useTrips() {
     return id;
   }, []);
 
+  const tripsRef = useRef(trips);
+  useEffect(() => { tripsRef.current = trips; }, [trips]);
+
+  const enableSharing = useCallback(async (tripId) => {
+    const trip = tripsRef.current.find(t => t.id === tripId);
+    if (!trip) throw new Error('Trip not found');
+    if (trip.shareId) return trip.shareId;
+
+    const shareId = generateUUID();
+    const tripWithShare = { ...trip, shareId };
+    const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: tripWithShare });
+    if (error) throw error;
+    syncedHashRef.current[shareId] = JSON.stringify(tripWithShare);
+    setTrips(p => p.map(t => t.id !== tripId ? t : tripWithShare));
+    return shareId;
+  }, []);
+
+  const loadSharedTrip = useCallback(async (shareId) => {
+    const { data, error } = await supabase.from('shared_trips').select('data').eq('share_id', shareId).single();
+    if (error) throw error;
+    const remoteTrip = data.data;
+    if (!remoteTrip) throw new Error('Empty trip data');
+    syncedHashRef.current[shareId] = JSON.stringify(remoteTrip);
+    setTrips(p => {
+      const exists = p.find(t => t.shareId === shareId);
+      if (exists) return p.map(t => t.shareId === shareId ? remoteTrip : t);
+      return [remoteTrip, ...p];
+    });
+    return remoteTrip.id;
+  }, []);
+
   return {
     trips,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
@@ -383,5 +462,6 @@ export function useTrips() {
     addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
+    enableSharing, loadSharedTrip,
   };
 }

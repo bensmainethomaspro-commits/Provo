@@ -5,7 +5,7 @@ import TripView from './pages/TripView';
 import { decodeTrip, getSkyGradient } from './utils/helpers';
 
 function AppInner() {
-  const { importTrip } = useTripsContext();
+  const { importTrip, loadSharedTrip } = useTripsContext();
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -16,6 +16,12 @@ function AppInner() {
       return true;
     }
     return false;
+  });
+  const [pendingShareId] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const s = p.get('share');
+    if (s) { window.history.replaceState(null, '', window.location.pathname); return s; }
+    return null;
   });
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('provo_theme');
@@ -63,6 +69,13 @@ function AppInner() {
         window.history.replaceState(null, '', window.location.pathname);
       } catch { /* invalid */ }
     }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingShareId) return;
+    loadSharedTrip(pendingShareId)
+      .then(tripId => navigate('trip', tripId))
+      .catch(() => alert('Voyage introuvable ou lien expiré.'));
   }, []);
 
   const navigate = (page, tripId = null) => setRoute({ page, tripId });

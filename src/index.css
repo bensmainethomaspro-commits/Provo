@@ -634,7 +634,18 @@ body {
 
 /* ─── SHARE MODAL ────────────────────────────────────────── */
 .share-url { background: var(--surface-sunken); border-radius: 8px; padding: 10px 12px; font-size: 11px; word-break: break-all; color: var(--text-muted); font-family: monospace; line-height: 1.5; margin-bottom: 10px; border: 1px solid var(--border); max-height: 100px; overflow-y: auto; }
+.share-url--collab { border-color: var(--orange); color: var(--text); }
 .share-copied { text-align: center; color: var(--green); font-size: 14px; font-weight: 700; margin-top: 6px; }
+.share-error { text-align: center; color: var(--red); font-size: 13px; margin-bottom: 8px; }
+.share-section { display: flex; flex-direction: column; gap: 10px; }
+.share-section__label { display: flex; flex-direction: column; gap: 3px; }
+.share-section__badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; background: var(--surface-sunken); border-radius: 6px; padding: 3px 8px; border: 1px solid var(--border); color: var(--text-muted); width: fit-content; }
+.share-section__badge--collab { background: rgba(255,107,53,0.12); border-color: var(--orange); color: var(--orange); }
+.share-section__desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.share-divider { text-align: center; font-size: 12px; color: var(--text-light); position: relative; line-height: 2; }
+.share-divider::before, .share-divider::after { content: ''; position: absolute; top: 50%; width: 38%; height: 1px; background: var(--border); }
+.share-divider::before { left: 0; }
+.share-divider::after { right: 0; }
 
 /* ─── TRIP HEADER BUDGET ─────────────────────────────────── */
 .trip-meta { padding: 0 16px 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
