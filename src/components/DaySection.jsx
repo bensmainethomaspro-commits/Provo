@@ -19,6 +19,7 @@ export default function DaySection({
   weather, onTouchDragStart,
   reserve, onAddFromReserve, onAddTravel, onOptimizeOrder,
   onSwipeDay,
+  distFromPrev, getTravelTime,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -114,6 +115,11 @@ export default function DaySection({
               {weather.description && (
                 <span className="day-weather__desc">{weather.description}</span>
               )}
+            </div>
+          )}
+          {distFromPrev != null && (
+            <div className="day-dist-prev">
+              🛣 {distFromPrev < 1 ? `${Math.round(distFromPrev * 1000)} m` : `${distFromPrev.toFixed(1)} km`} depuis le jour précédent
             </div>
           )}
         </div>
@@ -226,19 +232,28 @@ export default function DaySection({
                     onTouchDragStart={onTouchDragStart}
                   />
                 </div>
-                {dist !== null && (
-                  <div className="activity-bridge">
-                    <span className="activity-bridge__line" />
-                    <span className="activity-bridge__dist">↕ {formatDist(dist)}</span>
-                    {onAddTravel && (
-                      <>
-                        <button className="travel-btn" title="Ajouter trajet à pied" onClick={() => onAddTravel(day.id, activity.id, Math.round(dist * 12))}>🚶 {Math.round(dist * 12)}min</button>
-                        <button className="travel-btn" title="Ajouter trajet en voiture" onClick={() => onAddTravel(day.id, activity.id, Math.max(5, Math.round(dist * 2)))}>🚗 {Math.max(5, Math.round(dist * 2))}min</button>
-                      </>
-                    )}
-                    <span className="activity-bridge__line" />
-                  </div>
-                )}
+                {dist !== null && (() => {
+                  const osrm = getTravelTime?.(activity.id, next?.id);
+                  const driveMin = osrm ? osrm.minutes : Math.max(5, Math.round(dist * 2));
+                  const walkMin = Math.round(dist * 12);
+                  return (
+                    <div className="activity-bridge">
+                      <span className="activity-bridge__line" />
+                      <span className="activity-bridge__dist">↕ {formatDist(dist)}</span>
+                      {osrm
+                        ? <span className="activity-bridge__osrm">🚗 {osrm.minutes}min</span>
+                        : null
+                      }
+                      {onAddTravel && (
+                        <>
+                          {!osrm && <button className="travel-btn" title="Ajouter trajet à pied" onClick={() => onAddTravel(day.id, activity.id, walkMin)}>🚶 {walkMin}min</button>}
+                          <button className="travel-btn" title="Ajouter trajet en voiture" onClick={() => onAddTravel(day.id, activity.id, driveMin)}>🚗 {driveMin}min</button>
+                        </>
+                      )}
+                      <span className="activity-bridge__line" />
+                    </div>
+                  );
+                })()}
               </Fragment>
             );
           })

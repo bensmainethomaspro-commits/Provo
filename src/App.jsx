@@ -3,9 +3,12 @@ import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import { decodeTrip, getSkyGradient } from './utils/helpers';
+import { useSettings } from './hooks/useSettings';
+import OnboardingOverlay from './components/OnboardingOverlay';
 
 function AppInner() {
   const { importTrip, loadSharedTrip } = useTripsContext();
+  const { settings, setSetting } = useSettings();
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -88,6 +91,9 @@ function AppInner() {
 
   return (
     <div className="app">
+      {!settings.onboardingDone && (
+        <OnboardingOverlay onDone={() => setSetting('onboardingDone', true)} />
+      )}
       {!isOnline && (
         <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
       )}

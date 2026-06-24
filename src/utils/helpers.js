@@ -411,6 +411,29 @@ export async function importFromGoogleMaps(url) {
   return { title: cleanTitle, link: url };
 }
 
+export async function fetchUrlMetadata(url) {
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 7000);
+    const res = await fetch(
+      `https://api.microlink.io/?url=${encodeURIComponent(url)}&palette=false&audio=false&video=false&iframe=false`,
+      { signal: controller.signal }
+    );
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status !== 'success' || !data.data) return null;
+    const d = data.data;
+    return {
+      title: d.title || '',
+      photoUrl: d.image?.url || '',
+      link: url,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveShortUrl(url) {
   if (!/goo\.gl|maps\.app/.test(url)) return url;
   const cleaned = cleanGoogleMapsUrl(url);

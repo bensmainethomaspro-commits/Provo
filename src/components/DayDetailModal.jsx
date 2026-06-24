@@ -75,10 +75,7 @@ export default function DayDetailModal({
             {sorted.length === 0
               ? (
                 <div className="day-section__empty">
-                  <div className="day-section__empty-actions">
-                    <span>Aucune activité</span>
-                    <button className="btn btn--primary btn--xs" onClick={() => { close(); onAddActivity(day.id); }}>+ Ajouter</button>
-                  </div>
+                  <span>Aucune activité planifiée</span>
                 </div>
               )
               : sorted.map((activity) => {

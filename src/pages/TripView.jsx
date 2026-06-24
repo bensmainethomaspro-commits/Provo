@@ -13,8 +13,12 @@ import LiveDayCard from '../components/LiveDayCard';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
+import ExpensesTab from '../components/ExpensesTab';
 import { useWeather } from '../hooks/useWeather';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort } from '../utils/helpers';
+import { useSettings } from '../hooks/useSettings';
+import { useTravelTimes } from '../hooks/useTravelTimes';
+import TripSettingsSheet from '../components/TripSettingsSheet';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -108,10 +112,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
+    reorderDay, addToAllDays,
+    addExpense, deleteExpense,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
+  const { settings, setSetting } = useSettings();
+  const [showTripSettings, setShowTripSettings] = useState(false);
   const [tab, setTab] = useState('planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
@@ -124,7 +132,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
-  const [viewMode, setViewMode] = useState('timeline');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('provo_viewMode') || 'timeline');
   const [reserveFilter, setReserveFilter] = useState('all');
   const [reserveSearch, setReserveSearch] = useState('');
   const [reserveSort, setReserveSort] = useState('default');
@@ -138,6 +146,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const tripRef = useRef(trip);
   const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
+  useEffect(() => { localStorage.setItem('provo_viewMode', viewMode); }, [viewMode]);
 
   useEffect(() => {
     if (!tripMenuOpen) return;
@@ -229,6 +238,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
   const stats = budgetStats(allActivities);
+
+  const allTripActivities = trip.days.flatMap(d => d.activities);
+  const { getTime: getTravelTime } = useTravelTimes(allTripActivities);
+
+  const dayDistances = trip.days.map((day, i) => {
+    if (i === 0) return null;
+    const prevDay = trip.days[i - 1];
+    const lastGeo = [...prevDay.activities].reverse().find(a => a.lat && a.lon && a.status !== 'nogo');
+    const firstGeo = day.activities.find(a => a.lat && a.lon && a.status !== 'nogo');
+    if (!lastGeo || !firstGeo) return null;
+    return haversineKm(lastGeo.lat, lastGeo.lon, firstGeo.lat, firstGeo.lon);
+  });
   const actTotal = trip.days.reduce((s, d) => s + d.activities.length, 0);
 
   const initBudget = parseFloat(trip.initialBudget) || 0;
@@ -256,6 +277,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     });
   };
   const compareActivities = allActivities.filter(a => compareSelectedIds.has(a.id));
+
+  // Auto-open compare panel when 2+ activities are selected
+  useEffect(() => {
+    if (compareSelectedIds.size >= 2) setShowCompare(true);
+  }, [compareSelectedIds.size]);
+
+  const VIEW_MODES = [
+    { id: 'timeline', icon: '🗓', label: 'Timeline' },
+    { id: 'list',     icon: '☰',  label: 'Liste' },
+    { id: 'agenda',   icon: '📆', label: 'Agenda' },
+  ];
+  const cycleView = () => {
+    const idx = VIEW_MODES.findIndex(v => v.id === viewMode);
+    setViewMode(VIEW_MODES[(idx + 1) % VIEW_MODES.length].id);
+  };
+  const currentViewMeta = VIEW_MODES.find(v => v.id === viewMode);
 
   // ─── Handlers ────────────────────────────────────────
   const handleStatusChange = (dayId, activityId, status) =>
@@ -398,7 +435,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   };
 
   return (
-    <div className="trip-view">
+    <div className="trip-view" style={{ '--trip-accent': trip.color || '#FF6B35' }}>
       {/* Header */}
       <div className="header">
         <button className="header__back" onClick={onBack}>←</button>
@@ -422,6 +459,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
+                  ⚙️ Paramètres du voyage
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item trip-header-menu__item--danger" onClick={() => { setShowDeleteTrip(true); setTripMenuOpen(false); }}>
@@ -477,6 +517,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
         </button>
+        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => setTab('depenses')}>
+          💸 Dépenses
+          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
+        </button>
         <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
           📝 Notes
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
@@ -487,24 +531,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       <div className="planning-tools">
         {compareMode ? (
           <>
-            {compareSelectedIds.size > 0 && (
-              <span className="planning-tools__hint">{compareSelectedIds.size} sélectionné{compareSelectedIds.size > 1 ? 's' : ''}</span>
-            )}
-            {compareSelectedIds.size >= 2 && (
-              <button className="btn btn--primary btn--xs" onClick={() => setShowCompare(true)}>⚖️ Voir ({compareSelectedIds.size})</button>
-            )}
+            <div className="compare-toolbar__state">
+              <span className="compare-toolbar__count">
+                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
+              </span>
+              {compareSelectedIds.size >= 2 && (
+                <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
+              )}
+            </div>
             <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-              ✕ Annuler
+              ✕ Quitter
             </button>
           </>
         ) : (
           <>
             {tab === 'planning' && (
-              <>
-                <button className={`tool-btn${viewMode === 'list' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('list')} title="Vue liste">☰</button>
-                <button className={`tool-btn${viewMode === 'timeline' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('timeline')} title="Vue timeline">🗓</button>
-                <button className={`tool-btn${viewMode === 'agenda' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('agenda')} title="Vue agenda compacte">📆</button>
-              </>
+              <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
+                <span className="tool-btn__icon">{currentViewMeta.icon}</span>
+                <span className="tool-btn__label">{currentViewMeta.label}</span>
+                <span className="tool-btn__chevron">›</span>
+              </button>
             )}
             <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
           </>
@@ -529,6 +575,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
                 compareMode={compareMode}
+                onReorderDay={(dayId, dir) => reorderDay(tripId, dayId, dir)}
               />
             ) : viewMode === 'timeline' ? (
               <TimelineView
@@ -565,6 +612,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   weather={weather?.byDate[day.date]}
                   onTouchDragStart={handleTouchDragStart}
                   reserve={trip.reserve}
+                  distFromPrev={dayDistances[i]}
+                  getTravelTime={getTravelTime}
                   onAddFromReserve={(dayId, actId) => { pushUndo(trip, 'Activité ajoutée depuis la réserve'); moveFromReserveToDay(tripId, dayId, actId); }}
                   onAddTravel={(dayId, afterId, durationMin) => { pushUndo(trip); addTravelBlock(tripId, dayId, afterId, durationMin); }}
                   onOptimizeOrder={(dayId) => {
@@ -740,6 +789,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           />
         )}
 
+        {/* ── DÉPENSES TAB ── */}
+        {tab === 'depenses' && (
+          <ExpensesTab
+            trip={trip}
+            onAddExpense={(exp) => addExpense(tripId, exp)}
+            onDeleteExpense={(expId) => deleteExpense(tripId, expId)}
+          />
+        )}
+
         {/* ── NOTES TAB ── */}
         {tab === 'notes' && (
           <div className="notes-tab">
@@ -757,12 +815,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
-          <MapView days={trip.days} reserve={trip.reserve} />
+          <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} />
         )}
       </div>
 
-      {/* FAB — hidden on notes, map, and valise tabs */}
-      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && (
+      {/* FAB — hidden on notes, map, valise and depenses tabs */}
+      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && (
         <div className="fab">
           <button className="fab__btn" onClick={() => openAddSheet(null)}>
             + Ajouter une activité
@@ -780,6 +838,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onAddToDay={(dayId, a) => addToDay(tripId, dayId, a)}
         reserveActivities={trip.reserve}
         onMoveFromReserve={(actId) => { if (sheetDefaultDayId) moveFromReserveToDay(tripId, sheetDefaultDayId, actId); }}
+        tripTravelers={trip.tripTravelers || []}
+        onAddToAllDays={(a) => addToAllDays(tripId, a)}
+        tripLat={weather?.lat}
+        tripLon={weather?.lon}
       />
 
       {editingActivity && (
@@ -828,8 +890,31 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       )}
 
       {showCompare && compareActivities.length >= 2 && (
-        <CompareModal activities={compareActivities} onClose={() => setShowCompare(false)} />
+        <CompareModal
+          activities={compareActivities}
+          onClose={() => setShowCompare(false)}
+          onChoose={(chosen) => {
+            // Mark chosen as todo, others as nogo — find each in their day or reserve
+            compareActivities.forEach(a => {
+              const status = a.id === chosen.id ? 'todo' : 'nogo';
+              const day = trip.days.find(d => d.activities.some(x => x.id === a.id));
+              if (day) setActivityStatus(tripId, { type: 'day', dayId: day.id }, a.id, status);
+              else setActivityStatus(tripId, { type: 'reserve' }, a.id, status);
+            });
+            setCompareMode(false);
+            setCompareSelectedIds(new Set());
+          }}
+        />
       )}
+
+      <TripSettingsSheet
+        trip={trip}
+        isOpen={showTripSettings}
+        onClose={() => setShowTripSettings(false)}
+        onUpdateTrip={updateTrip}
+        settings={settings}
+        setSetting={setSetting}
+      />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
         <span>{undoMsg}</span>

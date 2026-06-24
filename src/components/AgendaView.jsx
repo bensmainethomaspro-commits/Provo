@@ -1,6 +1,6 @@
 import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta } from '../utils/helpers';
 
-export default function AgendaView({ days, onOpenDetail, compareMode }) {
+export default function AgendaView({ days, onOpenDetail, compareMode, onReorderDay }) {
   return (
     <div className="agenda-view">
       {days.map((day, i) => {
@@ -21,6 +21,12 @@ export default function AgendaView({ days, onOpenDetail, compareMode }) {
             <div className="agenda-day__header">
               <span className="agenda-day__label">{getDayLabel(i, days.length)}</span>
               <span className="agenda-day__date">{formatDateShort(day.date)}</span>
+              {onReorderDay && (
+                <div className="agenda-day__reorder" onClick={e => e.stopPropagation()}>
+                  <button className="agenda-reorder-btn" onClick={() => onReorderDay(day.id, 'up')} disabled={i === 0}>▲</button>
+                  <button className="agenda-reorder-btn" onClick={() => onReorderDay(day.id, 'down')} disabled={i === days.length - 1}>▼</button>
+                </div>
+              )}
             </div>
             {total > 0 ? (
               <>

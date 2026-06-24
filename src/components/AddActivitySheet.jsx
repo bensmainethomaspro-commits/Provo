@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, fetchUrlMetadata, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 
-const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '' };
+const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
 const TEMPLATES = [
   { emoji: '✈️', label: 'Vol', category: 'trajet', durationHours: 2, durationMinutes: 30 },
@@ -33,15 +34,18 @@ function isDefaultDuration(f) {
 }
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
-  defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve }) {
+  defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve,
+  tripTravelers, onAddToAllDays, tripLat, tripLon }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
+  const { suggestions } = usePlaceSuggestions(tripLat, tripLon, isOpen && !isEdit);
   const [closing, setClosing] = useState(false);
   const [dest, setDest] = useState('reserve');
   const [selectedDayId, setSelectedDayId] = useState('');
   const [error, setError] = useState('');
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
+  const [recurring, setRecurring] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -65,11 +69,16 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           lon: editActivity.lon || null,
           fixedStart: editActivity.fixedStart || '',
           fixedEnd: '',
+          mustDo: editActivity.mustDo || false,
+          pdfs: editActivity.pdfs || [],
+          travelerIds: editActivity.travelerIds || [],
         });
       } else {
-        setForm({ ...blank });
+        const allTravelerIds = (tripTravelers || []).map(t => t.id);
+        setForm({ ...blank, travelerIds: allTravelerIds });
         setDest(defaultDayId ? 'day' : 'reserve');
         setSelectedDayId(defaultDayId || days?.[0]?.id || '');
+        setRecurring(false);
       }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -110,24 +119,40 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app');
 
       if (isUrl) {
-        // Try URL-based import first
-        const result = await importFromGoogleMaps(raw);
-        if (result) { applyResult(result, raw); return; }
-        // URL import failed — try treating the URL's place name as text search
-        const name = parseGoogleMapsUrl(raw);
-        if (name) {
-          const placeData = await fetchPlaceData(name);
-          if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
-          // At least save the title and link
-          const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          applyResult({ title: clean, link: raw }, raw);
-          setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés. Complète les détails manuellement.');
+        // Google Maps: dedicated parser
+        const isGoogleMaps = /google\.com\/maps|goo\.gl|maps\.app/.test(raw);
+        if (isGoogleMaps) {
+          const result = await importFromGoogleMaps(raw);
+          if (result) { applyResult(result, raw); return; }
+          const name = parseGoogleMapsUrl(raw);
+          if (name) {
+            const placeData = await fetchPlaceData(name);
+            if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
+            const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            applyResult({ title: clean, link: raw }, raw);
+            setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés.');
+            return;
+          }
+          const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
+          setError(isShortLink
+            ? 'Lien iOS non résolu. Entre directement le nom du lieu, ou copie l\'URL depuis Safari.'
+            : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
           return;
         }
-        const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
-        setError(isShortLink
-          ? 'Lien iOS non résolu. Entre directement le nom du lieu (ex : "Tour Eiffel Paris"), ou ouvre le lien dans Safari et copie l\'URL depuis la barre d\'adresse.'
-          : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
+        // Any website URL — try Microlink for metadata
+        const meta = await fetchUrlMetadata(raw);
+        if (meta?.title) {
+          const placeData = await fetchPlaceData(meta.title).catch(() => null);
+          applyResult({
+            title: meta.title,
+            photoUrl: meta.photoUrl,
+            link: raw,
+            ...(placeData ? { address: placeData.address, lat: placeData.lat, lon: placeData.lon, category: placeData.category } : {}),
+          }, raw);
+          if (!placeData) setError('Titre importé. Ajoute l\'adresse manuellement si besoin.');
+          return;
+        }
+        setError('Impossible d\'extraire les infos de ce site. Essaie un nom de lieu ou un lien Google Maps.');
       } else {
         // Plain text: search Nominatim directly
         const placeData = await fetchPlaceData(raw);
@@ -173,6 +198,25 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     set('screenshots', (form.screenshots || []).filter((_, idx) => idx !== i));
   };
 
+  const handlePdf = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { setError('PDF trop volumineux (max 3 Mo).'); return; }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      set('pdfs', [...(form.pdfs || []), { name: file.name, data: ev.target.result }]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const removePdf = (i) => set('pdfs', (form.pdfs || []).filter((_, idx) => idx !== i));
+
+  const toggleTraveler = (id) => {
+    const ids = form.travelerIds || [];
+    set('travelerIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  };
+
   const handleSubmit = () => {
     const rawTitle = form.title.trim();
     const title = rawTitle || deduceTitle(form.category, form.address, form.notes);
@@ -185,11 +229,16 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       durationMinutes: parseInt(form.durationMinutes) || 0,
       price: parseFloat(form.price) || 0,
       screenshots: form.screenshots || [],
+      pdfs: form.pdfs || [],
+      mustDo: form.mustDo || false,
+      travelerIds: form.travelerIds || [],
     };
     if (isEdit) {
       onEditSave(activity);
     } else if (dest === 'reserve') {
       onAddToReserve(activity);
+    } else if (recurring && onAddToAllDays) {
+      onAddToAllDays(activity);
     } else {
       if (!selectedDayId) { setError('Choisis un jour.'); return; }
       onAddToDay(selectedDayId, activity);
@@ -270,6 +319,37 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
           </div>
+
+          {/* Nearby place suggestions */}
+          {suggestions.length > 0 && !isEdit && (
+            <div className="form-group suggestions-row-wrap">
+              <label className="form-label">📍 À proximité</label>
+              <div className="suggestions-row">
+                {suggestions.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="suggestion-chip"
+                    onClick={() => {
+                      const dur = DEFAULT_DURATIONS[s.category];
+                      setForm(f => ({
+                        ...f,
+                        title: s.title,
+                        address: s.address || f.address,
+                        lat: s.lat,
+                        lon: s.lon,
+                        category: s.category,
+                        ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
+                      }));
+                    }}
+                  >
+                    <span>{getCategoryMeta(s.category).emoji}</span>
+                    <span>{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Photo preview from import */}
           {form.photoUrl && (
@@ -418,7 +498,58 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleScreenshots} />
               </label>
             )}
+            {/* PDF attachments */}
+            {(form.pdfs || []).length > 0 && (
+              <div className="pdf-list">
+                {form.pdfs.map((p, i) => (
+                  <div key={i} className="pdf-chip">
+                    <span className="pdf-chip__icon">📄</span>
+                    <span className="pdf-chip__name">{p.name}</span>
+                    <button type="button" className="pdf-chip__remove" onClick={() => removePdf(i)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(form.pdfs || []).length < 3 && (
+              <label className="btn btn--secondary btn--sm" style={{ cursor: 'pointer', display: 'inline-flex', marginTop: 4 }}>
+                📎 Joindre un PDF (billet, bon…)
+                <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handlePdf} />
+              </label>
+            )}
           </div>
+
+          {/* Must-do */}
+          <div className="form-group">
+            <label className="activity-toggle-row">
+              <span className="activity-toggle-label">⭐ Incontournable</span>
+              <label className="settings-toggle">
+                <input type="checkbox" checked={!!form.mustDo} onChange={e => set('mustDo', e.target.checked)} />
+                <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
+              </label>
+            </label>
+          </div>
+
+          {/* Travelers assignment */}
+          {tripTravelers?.length > 0 && (
+            <div className="form-group">
+              <label className="form-label">Qui participe ?</label>
+              <div className="traveler-assign-row">
+                {tripTravelers.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`traveler-assign-chip${(form.travelerIds || []).includes(t.id) ? ' traveler-assign-chip--on' : ''}`}
+                    onClick={() => toggleTraveler(t.id)}
+                  >
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
+              </div>
+              {(form.travelerIds || []).length === 0 && (
+                <p className="travelers-hint">Tout le monde participe par défaut</p>
+              )}
+            </div>
+          )}
 
           {!isEdit && (
             <div className="form-group">
@@ -432,13 +563,24 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                   onClick={() => setDest('day')}>📅 Un jour</button>
               </div>
               {dest === 'day' && (
-                <select className="form-select" value={selectedDayId} onChange={e => setSelectedDayId(e.target.value)}>
-                  {(days || []).map((d, i) => (
-                    <option key={d.id} value={d.id}>
-                      {getDayLabel(i, days.length)} — {formatDate(d.date)}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select className="form-select" value={selectedDayId} onChange={e => setSelectedDayId(e.target.value)}>
+                    {(days || []).map((d, i) => (
+                      <option key={d.id} value={d.id}>
+                        {getDayLabel(i, days.length)} — {formatDate(d.date)}
+                      </option>
+                    ))}
+                  </select>
+                  {onAddToAllDays && (
+                    <label className="activity-toggle-row" style={{ marginTop: 8 }}>
+                      <span className="activity-toggle-label">🔁 Ajouter à tous les jours</span>
+                      <label className="settings-toggle">
+                        <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} />
+                        <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
+                      </label>
+                    </label>
+                  )}
+                </>
               )}
             </div>
           )}
