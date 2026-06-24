@@ -19,14 +19,15 @@ export default function ActivityCard({
   const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
   const lastTapRef = useRef(0);
   const copyRef = useRef(null);
-  const SWIPE_MAX = 110;
-  const SWIPE_THRESHOLD = 55;
+  const SWIPE_MAX = 90;
+  const SWIPE_THRESHOLD = 50;
+  const [swipeDir, setSwipeDir] = useState(null); // 'right' | 'left' | null
 
   const handleSwipeTouchStart = useCallback((e) => {
     if (compareMode || e.target.closest('.activity-card__drag-handle')) return;
-    if (swipeOffset < -SWIPE_THRESHOLD) { setSwipeOffset(0); return; }
     swipeRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, isDragging: false };
-  }, [compareMode, swipeOffset]);
+    setSwipeDir(null);
+  }, [compareMode]);
 
   const handleSwipeTouchMove = useCallback((e) => {
     const s = swipeRef.current;
@@ -38,13 +39,33 @@ export default function ActivityCard({
       else if (dy > 8) { s.startX = null; return; }
       else return;
     }
-    if (dx < 0) { e.stopPropagation(); setSwipeOffset(Math.max(-SWIPE_MAX, dx)); }
+    e.stopPropagation();
+    const clamped = Math.max(-SWIPE_MAX, Math.min(SWIPE_MAX, dx));
+    setSwipeOffset(clamped);
+    setSwipeDir(dx > 0 ? 'right' : 'left');
   }, []);
 
   const handleSwipeTouchEnd = useCallback(() => {
     swipeRef.current.startX = null;
-    setSwipeOffset(p => Math.abs(p) > SWIPE_THRESHOLD ? -SWIPE_MAX : 0);
-  }, []);
+    setSwipeOffset(prev => {
+      if (prev > SWIPE_THRESHOLD) {
+        // Right swipe → done
+        onStatusChange?.('done');
+        vibrate([15, 10, 30]);
+        setSwipeDir(null);
+        return 0;
+      }
+      if (prev < -SWIPE_THRESHOLD) {
+        // Left swipe → skip
+        onStatusChange?.('nogo');
+        vibrate([5, 5, 5]);
+        setSwipeDir(null);
+        return 0;
+      }
+      setSwipeDir(null);
+      return 0;
+    });
+  }, [onStatusChange]);
 
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
@@ -147,6 +168,23 @@ export default function ActivityCard({
               {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
               {activity.openingHours && <span className="activity-card__hours">🕐 {activity.openingHours}</span>}
             </div>
+            {activity.address && (
+              <div className="activity-card__nav">
+                <a
+                  href={activity.lat && activity.lon
+                    ? `https://maps.google.com/maps?daddr=${activity.lat},${activity.lon}&directionsmode=driving`
+                    : `https://maps.google.com/maps?daddr=${encodeURIComponent(activity.address)}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="nav-btn"
+                  onClick={e => e.stopPropagation()}
+                  title="Naviguer vers ce lieu"
+                >
+                  🧭 Y aller
+                </a>
+              </div>
+            )}
             {activity.link && (
               <div className="activity-card__link">
                 <a href={activity.link} target="_blank" rel="noopener noreferrer">
@@ -225,22 +263,13 @@ export default function ActivityCard({
         </div>
       </div>
 
-      {swipeOffset < -20 && (
-        <div className="activity-card__swipe-actions">
-          <button className="swipe-action swipe-action--done"
-            onTouchEnd={(e) => { e.preventDefault(); onStatusChange('done'); setSwipeOffset(0); }}>
-            <span>✅</span><span>Fait</span>
-          </button>
-          {context === 'day' && onMoveToReserve && (
-            <button className="swipe-action swipe-action--reserve"
-              onTouchEnd={(e) => { e.preventDefault(); onMoveToReserve(); setSwipeOffset(0); }}>
-              <span>📦</span><span>Réserve</span>
-            </button>
+      {Math.abs(swipeOffset) > 12 && (
+        <div className={`swipe-hint swipe-hint--${swipeDir}`}>
+          {swipeDir === 'right' ? (
+            <><span className="swipe-hint__icon">✅</span><span className="swipe-hint__label">Fait</span></>
+          ) : (
+            <><span className="swipe-hint__label">Skip</span><span className="swipe-hint__icon">❌</span></>
           )}
-          <button className="swipe-action swipe-action--delete"
-            onTouchEnd={(e) => { e.preventDefault(); setDeleteConfirm(true); setSwipeOffset(0); }}>
-            <span>🗑️</span><span>Suppr.</span>
-          </button>
         </div>
       )}
       </div>

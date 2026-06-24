@@ -14,11 +14,13 @@ import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
 import ExpensesTab from '../components/ExpensesTab';
+import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
 import { useTravelTimes } from '../hooks/useTravelTimes';
+import { useWikiSuggestions } from '../hooks/useWikiSuggestions';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm } from '../utils/helpers';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -114,12 +116,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     reorderDay, addToAllDays,
     addExpense, deleteExpense,
+    copyDay, sortDayByTime,
+    addDailyTemplate, removeDailyTemplate,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
   const { settings, setSetting } = useSettings();
+  const { suggestions: wikiSuggestions } = useWikiSuggestions(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
+  const [swUpdateReady, setSwUpdateReady] = useState(false);
   const [tab, setTab] = useState('planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
@@ -147,6 +153,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
   useEffect(() => { localStorage.setItem('provo_viewMode', viewMode); }, [viewMode]);
+
+  // Service worker update notification
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (e) => {
+      if (e.data?.type === 'SW_UPDATED') setSwUpdateReady(true);
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
 
   useEffect(() => {
     if (!tripMenuOpen) return;
@@ -322,6 +338,50 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
+  const handleWhatsAppShare = () => {
+    const lines = [];
+    lines.push(`${trip.emoji || '✈️'} *${trip.name}*`);
+    if (trip.destination) lines.push(`📍 ${trip.destination}`);
+    lines.push(`📅 ${formatDateShort(trip.startDate)} → ${formatDateShort(trip.endDate)}`);
+    lines.push('');
+    trip.days.forEach((day, i) => {
+      lines.push(`*── Jour ${i + 1} · ${formatDate(day.date)} ──*`);
+      if (day.activities.length === 0) {
+        lines.push('  (aucune activité planifiée)');
+      } else {
+        let cur = day.startTime || '09:00';
+        day.activities.forEach(a => {
+          if (a.status === 'nogo') return;
+          const icon = a.status === 'done' ? '✅' : '•';
+          lines.push(`  ${icon} ${cur} ${a.title}${a.address ? ` — 📍 ${a.address}` : ''}`);
+          const mins = (parseInt(a.durationHours) || 0) * 60 + (parseInt(a.durationMinutes) || 0);
+          const [h, m] = cur.split(':').map(Number);
+          const next = h * 60 + m + mins;
+          cur = `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+        });
+      }
+      lines.push('');
+    });
+    const text = lines.join('\n');
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    if (navigator.share) {
+      navigator.share({ title: trip.name, text }).catch(() => window.open(waUrl, '_blank'));
+    } else {
+      window.open(waUrl, '_blank');
+    }
+  };
+
+  const handleAutoBackup = () => {
+    const json = JSON.stringify(trip, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${trip.name.replace(/[^a-z0-9]/gi, '_')}_backup.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const copyItinerary = async () => {
     const lines = [];
     lines.push(`${trip.emoji || '✈️'} ${trip.name}`);
@@ -434,8 +494,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     onToggleCompare: toggleCompare,
   };
 
+  const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#FF6B35';
+  const expenses = trip.expenses || [];
+  const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const totalTripCost = totalActivitiesCost + totalExpenses;
+  const initBudgetNum = parseFloat(trip.initialBudget) || 0;
+  const budgetExceeded = initBudgetNum > 0 && totalTripCost > initBudgetNum;
+
   return (
-    <div className="trip-view" style={{ '--trip-accent': trip.color || '#FF6B35' }}>
+    <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
+      {swUpdateReady && (
+        <div className="sw-update-banner">
+          🆕 Nouvelle version disponible !
+          <button className="sw-update-btn" onClick={() => window.location.reload()}>Mettre à jour</button>
+        </div>
+      )}
       {/* Header */}
       <div className="header">
         <button className="header__back" onClick={onBack}>←</button>
@@ -459,6 +533,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { handleWhatsAppShare(); setTripMenuOpen(false); }}>
+                  💬 Partager WhatsApp
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { handleAutoBackup(); setTripMenuOpen(false); }}>
+                  💾 Sauvegarder (.json)
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
                   ⚙️ Paramètres du voyage
@@ -485,6 +565,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <span className="trip-meta__item">
           📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
         </span>
+        {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
+          <span className="trip-meta__item timezone-tag">
+            🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
+          </span>
+        )}
+        {totalTripCost > 0 && (
+          <span className={`budget-pill${budgetExceeded ? ' budget-pill--over' : ' budget-pill--total'}`} title="Estimation coût total (activités + dépenses)">
+            {budgetExceeded ? '🚨' : '💰'} {formatPrice(totalTripCost)} estimé
+          </span>
+        )}
         {showBudget && (
           <>
             {initBudget > 0
@@ -500,6 +590,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Tabs */}
       <div className="tabs">
+        {isActive && todayDay && (
+          <button className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => setTab('today')}>
+            🟢 Aujourd'hui
+            {todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
+              <span className="tab-badge tab-badge--today">{todayDay.activities.filter(a => a.status === 'todo').length}</span>
+            )}
+          </button>
+        )}
         <button className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => setTab('planning')}>
           📅 Planning
           {actTotal > 0 && <span className="tab-badge">{actTotal}</span>}
@@ -559,6 +657,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Tab content */}
       <div ref={tabContentRef} className="tab-content">
+
+        {/* ── AUJOURD'HUI TAB ── */}
+        {tab === 'today' && isActive && todayDay && (
+          <TodayMode
+            day={todayDay}
+            dayIndex={todayDayIndex}
+            totalDays={trip.days.length}
+            trip={trip}
+            onStatusChange={handleStatusChange}
+          />
+        )}
 
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
@@ -623,6 +732,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     setDayActivitiesOrder(tripId, dayId, nearestNeighborSort(d.activities));
                   }}
                   onSwipeDay={(dir) => handleSwipeDay(day.id, dir)}
+                  onCopyDay={(srcId, tgtId) => { pushUndo(trip, 'Jour copié'); copyDay(tripId, srcId, tgtId); }}
+                  onSortByTime={(dayId) => { pushUndo(trip, 'Trié par heure'); sortDayByTime(tripId, dayId); }}
                   {...sharedDayProps}
                 />
               ))
@@ -679,6 +790,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── RESERVE TAB ── */}
         {tab === 'reserve' && (
           <>
+            {wikiSuggestions.length > 0 && (
+              <div className="wiki-suggestions">
+                <div className="wiki-suggestions__title">🌍 Inspirations pour {trip.destination}</div>
+                <div className="wiki-suggestions__list">
+                  {wikiSuggestions.map((s, i) => (
+                    <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="wiki-card">
+                      {s.thumbnail && <img src={s.thumbnail} alt="" className="wiki-card__img" />}
+                      <div className="wiki-card__info">
+                        <div className="wiki-card__title">{s.title}</div>
+                        <div className="wiki-card__extract">{s.extract}</div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             {trip.reserve.length === 0 ? (
               <div
                 className={`reserve-section__empty day-section__body${reserveDragOver ? ' day-section__body--drop-target' : ''}`}
@@ -914,6 +1041,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onUpdateTrip={updateTrip}
         settings={settings}
         setSetting={setSetting}
+        onAddDailyTemplate={addDailyTemplate}
+        onRemoveDailyTemplate={removeDailyTemplate}
       />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>

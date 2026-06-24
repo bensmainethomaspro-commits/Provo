@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { formatPrice } from '../utils/helpers';
+import { formatPrice, CATEGORIES } from '../utils/helpers';
+import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 
 function calcDebts(expenses, travelers) {
   if (!travelers.length) return [];
@@ -9,8 +10,9 @@ function calcDebts(expenses, travelers) {
   expenses.forEach(exp => {
     const n = exp.participantIds.length;
     if (!n) return;
-    const share = exp.amount / n;
-    bal[exp.payerId] = (bal[exp.payerId] || 0) + exp.amount;
+    const eurAmount = exp.eurAmount ?? exp.amount;
+    const share = eurAmount / n;
+    bal[exp.payerId] = (bal[exp.payerId] || 0) + eurAmount;
     exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - share; });
   });
 
@@ -35,7 +37,16 @@ function calcDebts(expenses, travelers) {
   return transfers;
 }
 
-const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '' };
+const EXPENSE_CATEGORIES = [
+  { id: 'transport', emoji: '🚗', label: 'Transport' },
+  { id: 'hebergement', emoji: '🏨', label: 'Hébergement' },
+  { id: 'repas', emoji: '🍽️', label: 'Repas' },
+  { id: 'activite', emoji: '🎯', label: 'Activité' },
+  { id: 'shopping', emoji: '🛍️', label: 'Shopping' },
+  { id: 'autre', emoji: '💳', label: 'Autre' },
+];
+
+const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
 export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
   const travelers = trip.tripTravelers || [];
@@ -44,6 +55,8 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
   const [error, setError] = useState('');
+  const [activeSection, setActiveSection] = useState('list'); // 'list' | 'categories' | 'travelers'
+  const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -56,7 +69,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
   };
 
   const openForm = () => {
-    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id) });
+    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
     setError('');
     setShowForm(true);
   };
@@ -67,12 +80,40 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
     if (!amount || amount <= 0) { setError('Montant invalide.'); return; }
     if (!form.payerId) { setError('Qui a payé ?'); return; }
     if (!form.participantIds.length) { setError('Qui participe ?'); return; }
-    onAddExpense({ ...form, amount, description: form.description.trim() });
+    const eurAmount = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
+    onAddExpense({
+      ...form,
+      amount,
+      eurAmount: Math.round(eurAmount * 100) / 100,
+      description: form.description.trim(),
+    });
     setShowForm(false);
   };
 
-  const totalSpent = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalSpent = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  const tripBudget = parseFloat(trip.initialBudget) || 0;
+  const budgetOver = tripBudget > 0 && totalSpent > tripBudget;
   const debts = calcDebts(expenses, travelers);
+
+  // Category breakdown
+  const byCategory = EXPENSE_CATEGORIES.map(cat => {
+    const total = expenses
+      .filter(e => e.expenseCategory === cat.id)
+      .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    return { ...cat, total };
+  }).filter(c => c.total > 0);
+
+  // Per-traveler totals
+  const travelerTotals = travelers.map(t => {
+    const paid = expenses
+      .filter(e => e.payerId === t.id)
+      .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    const share = expenses.reduce((s, e) => {
+      if (!e.participantIds.includes(t.id)) return s;
+      return s + (e.eurAmount ?? e.amount) / (e.participantIds.length || 1);
+    }, 0);
+    return { ...t, paid, share, balance: paid - share };
+  });
 
   if (!travelers.length) {
     return (
@@ -85,6 +126,13 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
 
   return (
     <div className="expenses-tab">
+      {/* Budget alert */}
+      {budgetOver && (
+        <div className="budget-alert">
+          🚨 Budget dépassé ! ({formatPrice(totalSpent)} / {formatPrice(tripBudget)})
+        </div>
+      )}
+
       {/* Summary */}
       {expenses.length > 0 && (
         <div className="expenses-summary">
@@ -92,9 +140,37 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
             <span className="expenses-summary__label">Total dépensé</span>
             <span className="expenses-summary__amount">{formatPrice(totalSpent)}</span>
           </div>
+          {tripBudget > 0 && (
+            <div className="expenses-summary__budget">
+              <div className="expenses-budget-bar">
+                <div className="expenses-budget-fill" style={{
+                  width: `${Math.min(100, (totalSpent / tripBudget) * 100)}%`,
+                  background: budgetOver ? 'var(--red)' : 'var(--green)'
+                }} />
+              </div>
+              <span className="expenses-summary__per">{formatPrice(tripBudget - totalSpent > 0 ? tripBudget - totalSpent : totalSpent - tripBudget)} {budgetOver ? 'de dépassement' : 'restants'}</span>
+            </div>
+          )}
           <div className="expenses-summary__per">
             soit {formatPrice(totalSpent / travelers.length)} par personne
           </div>
+        </div>
+      )}
+
+      {/* Section tabs */}
+      {expenses.length > 0 && (
+        <div className="expenses-sections">
+          <button className={`expenses-section-btn${activeSection === 'list' ? ' active' : ''}`} onClick={() => setActiveSection('list')}>
+            📋 Liste
+          </button>
+          <button className={`expenses-section-btn${activeSection === 'categories' ? ' active' : ''}`} onClick={() => setActiveSection('categories')}>
+            📊 Catégories
+          </button>
+          {travelers.length > 0 && (
+            <button className={`expenses-section-btn${activeSection === 'travelers' ? ' active' : ''}`} onClick={() => setActiveSection('travelers')}>
+              👥 Par personne
+            </button>
+          )}
         </div>
       )}
 
@@ -119,40 +195,89 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
         <div className="debts-card debts-card--settled">✅ Tout est équilibré !</div>
       )}
 
-      {/* Expense list */}
-      <div className="expenses-list">
-        {expenses.length === 0 && !showForm && (
-          <div className="expenses-list__empty">Aucune dépense enregistrée.</div>
-        )}
-        {expenses.map(exp => {
-          const n = exp.participantIds.length;
-          const share = n > 0 ? exp.amount / n : exp.amount;
-          return (
-            <div key={exp.id} className="expense-item">
-              <div className="expense-item__main">
-                <span className="expense-item__emoji">{getEmoji(exp.payerId)}</span>
-                <div className="expense-item__info">
-                  <div className="expense-item__desc">{exp.description}</div>
-                  <div className="expense-item__meta">
-                    {getName(exp.payerId)} a payé <strong>{formatPrice(exp.amount)}</strong>
-                    {n > 0 && ` · ${formatPrice(share)}/pers.`}
-                    {exp.activityId && (() => {
-                      const act = allActivities.find(a => a.id === exp.activityId);
-                      return act ? <span className="expense-item__linked"> · 🔗 {act.title}</span> : null;
-                    })()}
-                  </div>
-                  {n > 0 && (
-                    <div className="expense-item__participants">
-                      {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
-                    </div>
-                  )}
+      {/* Category breakdown */}
+      {activeSection === 'categories' && (
+        <div className="expense-categories">
+          {byCategory.length === 0
+            ? <p className="expenses-list__empty">Aucune catégorie à afficher.</p>
+            : byCategory.map(cat => (
+              <div key={cat.id} className="expense-cat-row">
+                <span className="expense-cat-emoji">{cat.emoji}</span>
+                <span className="expense-cat-name">{cat.label}</span>
+                <div className="expense-cat-bar-wrap">
+                  <div className="expense-cat-bar" style={{ width: `${(cat.total / totalSpent) * 100}%` }} />
                 </div>
-                <button className="expense-item__delete" onClick={() => onDeleteExpense(exp.id)}>🗑️</button>
+                <span className="expense-cat-amount">{formatPrice(cat.total)}</span>
               </div>
+            ))
+          }
+        </div>
+      )}
+
+      {/* Per-traveler */}
+      {activeSection === 'travelers' && (
+        <div className="traveler-summary">
+          {travelerTotals.map(t => (
+            <div key={t.id} className="traveler-summary-row">
+              <span className="traveler-summary-emoji">{t.emoji}</span>
+              <div className="traveler-summary-info">
+                <div className="traveler-summary-name">{t.name}</div>
+                <div className="traveler-summary-detail">
+                  A payé: <strong>{formatPrice(t.paid)}</strong> · Part réelle: {formatPrice(t.share)}
+                </div>
+              </div>
+              <span className={`traveler-summary-balance ${t.balance >= 0 ? 'positive' : 'negative'}`}>
+                {t.balance >= 0 ? '+' : ''}{formatPrice(t.balance)}
+              </span>
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Expense list */}
+      {activeSection === 'list' && (
+        <div className="expenses-list">
+          {expenses.length === 0 && !showForm && (
+            <div className="expenses-list__empty">Aucune dépense enregistrée.</div>
+          )}
+          {expenses.map(exp => {
+            const n = exp.participantIds.length;
+            const eurAmt = exp.eurAmount ?? exp.amount;
+            const share = n > 0 ? eurAmt / n : eurAmt;
+            const catMeta = EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5];
+            return (
+              <div key={exp.id} className="expense-item">
+                <div className="expense-item__main">
+                  <span className="expense-item__emoji">{catMeta.emoji}</span>
+                  <div className="expense-item__info">
+                    <div className="expense-item__desc">{exp.description}</div>
+                    <div className="expense-item__meta">
+                      {getName(exp.payerId)} a payé{' '}
+                      <strong>
+                        {exp.currency && exp.currency !== 'EUR'
+                          ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
+                          : formatPrice(eurAmt)
+                        }
+                      </strong>
+                      {n > 0 && ` · ${formatPrice(share)}/pers.`}
+                      {exp.activityId && (() => {
+                        const act = allActivities.find(a => a.id === exp.activityId);
+                        return act ? <span className="expense-item__linked"> · 🔗 {act.title}</span> : null;
+                      })()}
+                    </div>
+                    {n > 0 && (
+                      <div className="expense-item__participants">
+                        {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
+                      </div>
+                    )}
+                  </div>
+                  <button className="expense-item__delete" onClick={() => onDeleteExpense(exp.id)}>🗑️</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Add form */}
       {showForm ? (
@@ -163,10 +288,37 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
               onChange={e => set('description', e.target.value)} autoFocus />
           </div>
           <div className="form-group">
-            <label className="form-label">Montant (€)</label>
-            <input className="form-input" type="number" min="0" step="0.5" placeholder="0.00"
-              value={form.amount} onChange={e => set('amount', e.target.value)} />
+            <label className="form-label">Catégorie</label>
+            <div className="traveler-assign-row" style={{ flexWrap: 'wrap' }}>
+              {EXPENSE_CATEGORIES.map(cat => (
+                <button key={cat.id} type="button"
+                  className={`traveler-assign-chip${form.expenseCategory === cat.id ? ' traveler-assign-chip--on' : ''}`}
+                  onClick={() => set('expenseCategory', cat.id)}>
+                  {cat.emoji} {cat.label}
+                </button>
+              ))}
+            </div>
           </div>
+          <div className="form-row">
+            <div className="form-group" style={{ flex: 2 }}>
+              <label className="form-label">Montant</label>
+              <input className="form-input" type="number" min="0" step="0.5" placeholder="0.00"
+                value={form.amount} onChange={e => set('amount', e.target.value)} />
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label className="form-label">Devise</label>
+              <select className="form-select" value={form.currency} onChange={e => set('currency', e.target.value)}>
+                {SUPPORTED_CURRENCIES.map(c => (
+                  <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {form.currency !== 'EUR' && form.amount && (
+            <div className="currency-hint">
+              ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Qui a payé ?</label>
             <div className="traveler-assign-row">

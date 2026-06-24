@@ -485,6 +485,51 @@ export function useTrips() {
     }));
   }, []);
 
+  const copyDay = useCallback((tripId, sourceDayId, targetDayId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const src = t.days.find(d => d.id === sourceDayId);
+      if (!src) return t;
+      const copies = src.activities.map(a => ({ ...a, id: genId(), status: 'todo' }));
+      return {
+        ...t, days: t.days.map(d => d.id !== targetDayId ? d : {
+          ...d, activities: [...d.activities, ...copies]
+        })
+      };
+    }));
+  }, []);
+
+  const sortDayByTime = useCallback((tripId, dayId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      return {
+        ...t, days: t.days.map(d => {
+          if (d.id !== dayId) return d;
+          const withTime = d.activities.filter(a => a.fixedStart);
+          const noTime = d.activities.filter(a => !a.fixedStart);
+          withTime.sort((a, b) => {
+            const [ah, am] = a.fixedStart.split(':').map(Number);
+            const [bh, bm] = b.fixedStart.split(':').map(Number);
+            return ah * 60 + am - (bh * 60 + bm);
+          });
+          return { ...d, activities: [...withTime, ...noTime] };
+        })
+      };
+    }));
+  }, []);
+
+  const addDailyTemplate = useCallback((tripId, activity) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, dailyTemplates: [...(t.dailyTemplates || []), { ...activity, id: genId() }]
+    }));
+  }, []);
+
+  const removeDailyTemplate = useCallback((tripId, templateId) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, dailyTemplates: (t.dailyTemplates || []).filter(a => a.id !== templateId)
+    }));
+  }, []);
+
   return {
     trips,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
@@ -502,5 +547,7 @@ export function useTrips() {
     enableSharing, loadSharedTrip,
     reorderDay, addToAllDays,
     addExpense, deleteExpense,
+    copyDay, sortDayByTime,
+    addDailyTemplate, removeDailyTemplate,
   };
 }
