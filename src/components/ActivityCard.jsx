@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
+import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 
 export default function ActivityCard({
@@ -16,6 +17,7 @@ export default function ActivityCard({
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
+  const lastTapRef = useRef(0);
   const copyRef = useRef(null);
   const SWIPE_MAX = 110;
   const SWIPE_THRESHOLD = 55;
@@ -64,6 +66,30 @@ export default function ActivityCard({
     onDragStart?.();
   };
 
+  const handleTap = useCallback(() => {
+    if (compareMode) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 320) {
+      // Double-tap: toggle done/todo
+      const newStatus = activity.status === 'done' ? 'todo' : 'done';
+      onStatusChange?.(newStatus);
+      vibrate([15, 10, 30]);
+    }
+    lastTapRef.current = now;
+  }, [compareMode, activity.status, onStatusChange]);
+
+  const handleShareActivity = useCallback(() => {
+    const parts = [`📌 ${activity.title}`];
+    if (activity.address) parts.push(`📍 ${activity.address}`);
+    if (activity.link) parts.push(`🔗 ${activity.link}`);
+    const text = parts.join('\n');
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(text).catch(() => {});
+    }
+  }, [activity]);
+
   return (
     <>
       <div
@@ -85,7 +111,9 @@ export default function ActivityCard({
         draggable={!compareMode}
         onDragStart={handleDragStart}
         onDragEnd={() => onDragEnd?.()}
+        onClick={handleTap}
       >
+        {activity.mustDo && <div className="activity-card__mustdo">⭐</div>}
         {activity.photoUrl && (
           <img src={activity.photoUrl} className="activity-card__photo" alt="" />
         )}
@@ -180,8 +208,20 @@ export default function ActivityCard({
                 )}
               </div>
             )}
+            <button className="move-btn" title="Partager" onClick={handleShareActivity}>↗️</button>
             <button className="move-btn move-btn--danger" title="Supprimer" onClick={() => setDeleteConfirm(true)}>🗑️</button>
           </div>
+          {/* PDF attachments */}
+          {(activity.pdfs || []).length > 0 && (
+            <div className="pdf-list" style={{ marginTop: 6 }}>
+              {activity.pdfs.map((p, i) => (
+                <a key={i} href={p.data} target="_blank" rel="noopener noreferrer" className="pdf-chip" onClick={e => e.stopPropagation()}>
+                  <span className="pdf-chip__icon">📄</span>
+                  <span className="pdf-chip__name">{p.name}</span>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

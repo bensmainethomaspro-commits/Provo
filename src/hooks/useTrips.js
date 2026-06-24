@@ -263,6 +263,27 @@ export function useTrips() {
     }));
   }, []);
 
+  const reorderDay = useCallback((tripId, dayId, dir) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId) return t;
+      const arr = [...t.days];
+      const i = arr.findIndex(d => d.id === dayId);
+      if (i < 0) return t;
+      const j = dir === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= arr.length) return t;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      return { ...t, days: arr };
+    }));
+  }, []);
+
+  const addToAllDays = useCallback((tripId, activity) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, days: t.days.map(d => ({
+        ...d, activities: [...d.activities, { ...activity, id: genId(), status: 'todo' }]
+      }))
+    }));
+  }, []);
+
   const reorderInReserve = useCallback((tripId, activityId, dir) => {
     setTrips(p => p.map(t => {
       if (t.id !== tripId) return t;
@@ -463,5 +484,6 @@ export function useTrips() {
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     enableSharing, loadSharedTrip,
+    reorderDay, addToAllDays,
   };
 }

@@ -2199,3 +2199,207 @@ body {
 .agenda-day__empty-hint {
   font-size: 12px; color: var(--text-light); font-style: italic; margin-top: 4px;
 }
+.agenda-day__header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.agenda-day__reorder {
+  display: flex; flex-direction: column; gap: 2px; margin-left: auto;
+}
+.agenda-reorder-btn {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text-muted); font-size: 9px; padding: 1px 4px; cursor: pointer;
+  line-height: 1.4;
+}
+.agenda-reorder-btn:disabled { opacity: 0.3; cursor: default; }
+.agenda-reorder-btn:not(:disabled):hover { background: var(--surface-raised); }
+
+/* ─── MAP ROAD TRIP ──────────────────────────────────────── */
+.map-pill__road { color: var(--orange); font-weight: 700; }
+
+/* ─── TRIP COLOR (--trip-accent) ─────────────────────────── */
+.trip-view { --trip-accent: #FF6B35; }
+.tab-btn--active { border-bottom-color: var(--trip-accent, var(--orange)); color: var(--trip-accent, var(--orange)); }
+.budget-pill--total { background: color-mix(in srgb, var(--trip-accent, var(--orange)) 15%, transparent); color: var(--trip-accent, var(--orange)); }
+
+/* ─── ONBOARDING ─────────────────────────────────────────── */
+.onboarding-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.onboarding-panel {
+  background: var(--surface-raised); border-radius: var(--radius-lg);
+  padding: 28px 24px 24px; max-width: 360px; width: 100%;
+  text-align: center; position: relative;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+}
+.onboarding-skip {
+  position: absolute; top: 14px; right: 14px;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 13px; cursor: pointer; padding: 4px 8px;
+}
+.onboarding-skip:hover { color: var(--text); }
+.onboarding-icon { font-size: 52px; margin-bottom: 14px; }
+.onboarding-title { font-size: 20px; font-weight: 800; color: var(--text); margin: 0 0 10px; }
+.onboarding-desc { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin: 0 0 20px; }
+.onboarding-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 20px; }
+.onboarding-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border-strong); transition: all 0.2s;
+}
+.onboarding-dot--active {
+  background: var(--orange); width: 20px; border-radius: 4px;
+}
+
+/* ─── MUST-DO STAR BADGE ─────────────────────────────────── */
+.activity-card__mustdo {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 14px; z-index: 2;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+}
+.activity-card { position: relative; }
+
+/* ─── PDF ATTACHMENTS ────────────────────────────────────── */
+.pdf-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pdf-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--surface-sunken); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 8px; text-decoration: none;
+  color: var(--text); font-size: 12px; font-weight: 600;
+  transition: background 0.15s;
+}
+.pdf-chip:hover { background: var(--border); }
+.pdf-chip__icon { font-size: 13px; }
+.pdf-chip__name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── ACTIVITY TOGGLE ROW (must-do, recurring) ───────────── */
+.activity-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-top: 1px solid var(--border);
+}
+.activity-toggle-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.activity-toggle-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer; }
+
+/* ─── TRAVELER ASSIGN CHIPS (in AddActivitySheet) ────────── */
+.traveler-assign-row {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.traveler-assign-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  background: var(--surface-sunken); border: 1.5px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.traveler-assign-chip--on {
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
+  border-color: var(--orange); color: var(--orange);
+}
+
+/* ─── SETTINGS TOGGLE ────────────────────────────────────── */
+.settings-toggle {
+  display: inline-flex; align-items: center; gap: 10px; cursor: pointer;
+  user-select: none; margin-top: 8px;
+}
+.settings-toggle input { display: none; }
+.settings-toggle__track {
+  width: 42px; height: 24px; border-radius: 12px;
+  background: var(--border-strong); transition: background 0.2s;
+  position: relative; flex-shrink: 0;
+}
+.settings-toggle input:checked ~ .settings-toggle__track { background: var(--orange); }
+.settings-toggle__thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: transform 0.2s;
+}
+.settings-toggle input:checked ~ .settings-toggle__track .settings-toggle__thumb { transform: translateX(18px); }
+.settings-toggle__label { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* ─── SETTINGS SECTIONS ──────────────────────────────────── */
+.settings-section {
+  padding: 16px 0; border-bottom: 1px solid var(--border);
+}
+.settings-section:last-child { border-bottom: none; }
+.settings-section__title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 4px; }
+.settings-section__desc { font-size: 12px; color: var(--text-light); margin-bottom: 8px; line-height: 1.5; }
+
+/* ─── COLOR SWATCHES ─────────────────────────────────────── */
+.color-swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
+.color-swatch {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid transparent; cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.color-swatch:hover { transform: scale(1.1); }
+.color-swatch--active {
+  border-color: var(--text); box-shadow: 0 0 0 3px var(--surface-raised), 0 0 0 5px currentColor;
+  transform: scale(1.1);
+}
+
+/* ─── TRAVELERS (settings sheet) ─────────────────────────── */
+.travelers-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.traveler-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface-sunken); border-radius: 10px;
+  padding: 7px 10px; border: 1px solid var(--border);
+}
+.traveler-chip__emoji { font-size: 18px; }
+.traveler-chip__name { flex: 1; font-size: 14px; font-weight: 600; color: var(--text); }
+.traveler-chip__remove {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; padding: 2px 5px; border-radius: 50%;
+  transition: color 0.15s;
+}
+.traveler-chip__remove:hover { color: var(--red); }
+.traveler-add-row { display: flex; flex-direction: column; gap: 8px; }
+.traveler-emoji-pick { display: flex; flex-wrap: wrap; gap: 4px; }
+.traveler-emoji-opt {
+  background: none; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 16px; padding: 3px 6px; cursor: pointer; transition: all 0.15s;
+}
+.traveler-emoji-opt--active {
+  border-color: var(--orange); background: color-mix(in srgb, var(--orange) 15%, transparent);
+}
+.traveler-input-row { display: flex; gap: 8px; }
+.traveler-input-row .form-input { flex: 1; }
+
+/* ─── SHEET SETTINGS SIZE ────────────────────────────────── */
+.sheet--settings { max-height: 85vh; }
+
+/* ─── DAY DISTANCE FROM PREV ─────────────────────────────── */
+.day-dist-prev {
+  font-size: 11px; color: var(--text-light); font-weight: 600;
+  margin-top: 2px; display: flex; align-items: center; gap: 3px;
+}
+
+/* ─── OSRM TRAVEL TIME IN BRIDGE ────────────────────────── */
+.activity-bridge__osrm {
+  white-space: nowrap; font-weight: 700;
+  color: var(--blue, #3b82f6); letter-spacing: 0.2px;
+}
+
+/* ─── DASHBOARD SEARCH ───────────────────────────────────── */
+.dashboard__search {
+  position: relative; padding: 0 16px 12px; max-width: 480px; margin: 0 auto;
+}
+.dashboard__search-input {
+  width: 100%; box-sizing: border-box;
+  background: var(--surface-raised); border: 1.5px solid var(--border);
+  border-radius: 24px; padding: 9px 36px 9px 14px;
+  font-size: 14px; color: var(--text); outline: none;
+  transition: border-color 0.15s;
+}
+.dashboard__search-input:focus { border-color: var(--orange); }
+.dashboard__search-input::placeholder { color: var(--text-light); }
+.dashboard__search-clear {
+  position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; padding: 4px;
+}
+.dashboard__search-empty {
+  text-align: center; color: var(--text-muted); font-size: 14px;
+  padding: 24px 0; font-style: italic;
+}

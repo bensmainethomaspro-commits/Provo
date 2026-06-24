@@ -18,6 +18,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   const [deletingId, setDeletingId] = useState(null);
   const [previewTrip, setPreviewTrip] = useState(null);
   const [importError, setImportError] = useState('');
+  const [search, setSearch] = useState('');
 
   const handleCreate = (data) => {
     const id = createTrip(data);
@@ -60,6 +61,23 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
 
   const isEmpty = currentTrips.length === 0 && pastTrips.length === 0;
 
+  const filterTrip = (trip) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      trip.name.toLowerCase().includes(q) ||
+      (trip.destination || '').toLowerCase().includes(q) ||
+      trip.days.some(d => d.activities.some(a =>
+        a.title.toLowerCase().includes(q) ||
+        (a.address || '').toLowerCase().includes(q) ||
+        (a.notes || '').toLowerCase().includes(q)
+      ))
+    );
+  };
+
+  const filteredCurrent = currentTrips.filter(filterTrip);
+  const filteredPast = pastTrips.filter(filterTrip);
+
   return (
     <div className="dashboard">
       <div className="dashboard__logo">
@@ -76,6 +94,18 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         </div>
       </div>
       <p className="dashboard__logo-sub">Ton gestionnaire de voyages hors-ligne</p>
+
+      {!isEmpty && (
+        <div className="dashboard__search">
+          <input
+            className="dashboard__search-input"
+            placeholder="🔍 Rechercher un voyage ou une activité…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && <button className="dashboard__search-clear" onClick={() => setSearch('')}>✕</button>}
+        </div>
+      )}
 
       <div className="dashboard__body">
 
@@ -114,7 +144,10 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         {/* ── EN COURS & À VENIR ── */}
         <div className="dashboard__section">
           <div className="dashboard__section-title">En cours & à venir</div>
-          {currentTrips.length === 0
+          {search && filteredCurrent.length === 0 && filteredPast.length === 0 && (
+            <div className="dashboard__search-empty">Aucun résultat pour « {search} »</div>
+          )}
+          {filteredCurrent.length === 0 && !search
             ? isEmpty ? (
               <div className="dashboard__empty-hero">
                 <div className="dashboard__empty-art">🌍 ✈️ 🗺️</div>
@@ -138,7 +171,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
                 </p>
               </div>
             )
-            : currentTrips.map(trip => (
+            : filteredCurrent.map(trip => (
               <TripCard key={trip.id} trip={trip}
                 onClick={() => onNavigate('trip', trip.id)}
                 onEdit={() => setEditingTrip(trip)}
@@ -150,11 +183,11 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           }
         </div>
 
-        {pastTrips.length > 0 && (
+        {filteredPast.length > 0 && (
           <div className="dashboard__section">
             <div className="dashboard__section-title">Historique</div>
             <div className="timeline">
-              {pastTrips.map(trip => (
+              {filteredPast.map(trip => (
                 <div className="timeline-item" key={trip.id}>
                   <div className="timeline-item__line">
                     <div className="timeline-item__dot" />

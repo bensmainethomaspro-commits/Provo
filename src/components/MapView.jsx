@@ -15,15 +15,15 @@ function markerIcon(category) {
   });
 }
 
-export default function MapView({ days, reserve }) {
+export default function MapView({ days, reserve, roadTripMode, tripColor }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
 
   const geoActs = [
     ...days.flatMap((d, i) => d.activities
       .filter(a => a.lat && a.lon)
-      .map(a => ({ ...a, dayLabel: `Jour ${i + 1}` }))),
-    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve' })),
+      .map(a => ({ ...a, dayLabel: `Jour ${i + 1}`, dayIdx: i }))),
+    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999 })),
   ];
 
   useEffect(() => {
@@ -40,18 +40,41 @@ export default function MapView({ days, reserve }) {
     }).addTo(map);
 
     const bounds = [];
-    geoActs.forEach(a => {
-      L.marker([a.lat, a.lon], { icon: markerIcon(a.category) })
+    geoActs.forEach((a, idx) => {
+      const marker = L.marker([a.lat, a.lon], { icon: markerIcon(a.category) })
         .addTo(map)
         .bindPopup(`<strong>${a.title}</strong><br><small style="color:#888">${a.dayLabel}${a.address ? ' · ' + a.address : ''}</small>`);
+
+      if (roadTripMode) {
+        L.divIcon({ className: '' });
+        L.marker([a.lat, a.lon], {
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="background:${tripColor || '#FF6B35'};color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);">${idx + 1}</div>`,
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          }),
+          zIndexOffset: 100,
+        }).addTo(map);
+      }
       bounds.push([a.lat, a.lon]);
     });
+
+    if (roadTripMode && geoActs.length >= 2) {
+      const points = geoActs.map(a => [a.lat, a.lon]);
+      L.polyline(points, {
+        color: tripColor || '#FF6B35',
+        weight: 3,
+        opacity: 0.75,
+        dashArray: '8 6',
+      }).addTo(map);
+    }
 
     if (bounds.length === 1) map.setView(bounds[0], 14);
     else map.fitBounds(bounds, { padding: [24, 24] });
 
     return () => { map.remove(); mapRef.current = null; };
-  }, [days, reserve]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [days, reserve, roadTripMode, tripColor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (geoActs.length === 0) {
     return (
@@ -65,7 +88,10 @@ export default function MapView({ days, reserve }) {
 
   return (
     <div className="map-wrap">
-      <div className="map-pill">{geoActs.length} lieu{geoActs.length > 1 ? 'x' : ''} sur la carte</div>
+      <div className="map-pill">
+        {geoActs.length} lieu{geoActs.length > 1 ? 'x' : ''} sur la carte
+        {roadTripMode && <span className="map-pill__road"> · 🛣️ Road trip</span>}
+      </div>
       <div ref={containerRef} className="map-canvas" />
     </div>
   );

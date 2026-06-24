@@ -14,7 +14,10 @@ import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
 import { useWeather } from '../hooks/useWeather';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort } from '../utils/helpers';
+import { useSettings } from '../hooks/useSettings';
+import { useTravelTimes } from '../hooks/useTravelTimes';
+import TripSettingsSheet from '../components/TripSettingsSheet';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -108,10 +111,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
+    reorderDay, addToAllDays,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
+  const { settings, setSetting } = useSettings();
+  const [showTripSettings, setShowTripSettings] = useState(false);
   const [tab, setTab] = useState('planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
@@ -124,7 +130,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
-  const [viewMode, setViewMode] = useState('timeline');
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('provo_viewMode') || 'timeline');
   const [reserveFilter, setReserveFilter] = useState('all');
   const [reserveSearch, setReserveSearch] = useState('');
   const [reserveSort, setReserveSort] = useState('default');
@@ -138,6 +144,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const tripRef = useRef(trip);
   const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
+  useEffect(() => { localStorage.setItem('provo_viewMode', viewMode); }, [viewMode]);
 
   useEffect(() => {
     if (!tripMenuOpen) return;
@@ -229,6 +236,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
   const stats = budgetStats(allActivities);
+
+  const allTripActivities = trip.days.flatMap(d => d.activities);
+  const { getTime: getTravelTime } = useTravelTimes(allTripActivities);
+
+  const dayDistances = trip.days.map((day, i) => {
+    if (i === 0) return null;
+    const prevDay = trip.days[i - 1];
+    const lastGeo = [...prevDay.activities].reverse().find(a => a.lat && a.lon && a.status !== 'nogo');
+    const firstGeo = day.activities.find(a => a.lat && a.lon && a.status !== 'nogo');
+    if (!lastGeo || !firstGeo) return null;
+    return haversineKm(lastGeo.lat, lastGeo.lon, firstGeo.lat, firstGeo.lon);
+  });
   const actTotal = trip.days.reduce((s, d) => s + d.activities.length, 0);
 
   const initBudget = parseFloat(trip.initialBudget) || 0;
@@ -414,7 +433,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   };
 
   return (
-    <div className="trip-view">
+    <div className="trip-view" style={{ '--trip-accent': trip.color || '#FF6B35' }}>
       {/* Header */}
       <div className="header">
         <button className="header__back" onClick={onBack}>←</button>
@@ -438,6 +457,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
+                  ⚙️ Paramètres du voyage
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item trip-header-menu__item--danger" onClick={() => { setShowDeleteTrip(true); setTripMenuOpen(false); }}>
@@ -547,6 +569,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
                 compareMode={compareMode}
+                onReorderDay={(dayId, dir) => reorderDay(tripId, dayId, dir)}
               />
             ) : viewMode === 'timeline' ? (
               <TimelineView
@@ -583,6 +606,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   weather={weather?.byDate[day.date]}
                   onTouchDragStart={handleTouchDragStart}
                   reserve={trip.reserve}
+                  distFromPrev={dayDistances[i]}
+                  getTravelTime={getTravelTime}
                   onAddFromReserve={(dayId, actId) => { pushUndo(trip, 'Activité ajoutée depuis la réserve'); moveFromReserveToDay(tripId, dayId, actId); }}
                   onAddTravel={(dayId, afterId, durationMin) => { pushUndo(trip); addTravelBlock(tripId, dayId, afterId, durationMin); }}
                   onOptimizeOrder={(dayId) => {
@@ -775,7 +800,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
-          <MapView days={trip.days} reserve={trip.reserve} />
+          <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} />
         )}
       </div>
 
@@ -798,6 +823,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onAddToDay={(dayId, a) => addToDay(tripId, dayId, a)}
         reserveActivities={trip.reserve}
         onMoveFromReserve={(actId) => { if (sheetDefaultDayId) moveFromReserveToDay(tripId, sheetDefaultDayId, actId); }}
+        tripTravelers={trip.tripTravelers || []}
+        onAddToAllDays={(a) => addToAllDays(tripId, a)}
       />
 
       {editingActivity && (
@@ -862,6 +889,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           }}
         />
       )}
+
+      <TripSettingsSheet
+        trip={trip}
+        isOpen={showTripSettings}
+        onClose={() => setShowTripSettings(false)}
+        onUpdateTrip={updateTrip}
+        settings={settings}
+        setSetting={setSetting}
+      />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
         <span>{undoMsg}</span>

@@ -23,11 +23,13 @@ function compressCoverPhoto(file) {
   });
 }
 
+const TRIP_COLORS = ['#FF6B35','#3b82f6','#8b5cf6','#22c55e','#ef4444','#06b6d4','#f59e0b','#ec4899'];
+
 export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
-    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1 }
-    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1 }
+    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#FF6B35' }
+    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#FF6B35' }
   );
   const [error, setError] = useState('');
 
@@ -112,6 +114,18 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
             {(form.travelers || 1) > 1 && (
               <p className="travelers-hint">Transport & hébergement seront divisés par {form.travelers} dans le budget.</p>
             )}
+            <div className="form-group">
+              <label className="form-label">Couleur du voyage</label>
+              <div className="color-swatches">
+                {TRIP_COLORS.map(c => (
+                  <button key={c} type="button"
+                    className={`color-swatch${form.color === c ? ' color-swatch--active' : ''}`}
+                    style={{ background: c }}
+                    onClick={() => set('color', c)}
+                  />
+                ))}
+              </div>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div className="form-group">
                 <label className="form-label">Départ</label>
