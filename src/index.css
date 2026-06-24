@@ -1902,6 +1902,20 @@ body {
   font-size: 12px; color: var(--text-muted); margin-top: -4px; margin-bottom: 6px;
 }
 
+/* ─── TIMELINE: DRAG HANDLE ──────────────────────────────── */
+.tl-activity__drag-handle {
+  color: rgba(255,255,255,0.5);
+  font-size: 11px;
+  cursor: grab;
+  padding: 0 2px;
+  touch-action: none;
+  line-height: 1;
+  align-self: flex-start;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.tl-activity__drag-handle:active { cursor: grabbing; }
+
 /* ─── TIMELINE: DAY NOTES + ACTIONS ──────────────────────── */
 .tl-day__actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
 .tl-day__action-btn {

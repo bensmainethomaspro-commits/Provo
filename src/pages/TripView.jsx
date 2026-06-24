@@ -413,14 +413,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
         </button>
+        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
+          🗺 Carte
+        </button>
         <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => setTab('valise')}>
           🎒 Valise
           {(trip.packingList?.length || 0) > 0 && (
             <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
-        </button>
-        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
-          🗺 Carte
         </button>
         <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
           📝 Notes
@@ -469,6 +469,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
                 onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
+                onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
+                onTouchDragStart={handleTouchDragStart}
               />
             ) : (
               trip.days.map((day, i) => (

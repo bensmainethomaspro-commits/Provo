@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
 
-function TlActivity({ activity, slot, compareMode, compareSelected, onToggleCompare }) {
+function TlActivity({ activity, slot, compareMode, compareSelected, onToggleCompare, onTouchDragStart }) {
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
 
@@ -18,12 +18,20 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
       }}
       onClick={(e) => { if (compareMode) { e.stopPropagation(); onToggleCompare?.(); } }}
     >
-      {compareMode && (
-        <div className={`tl-activity__compare-check${compareSelected ? ' tl-activity__compare-check--on' : ''}`}>
-          {compareSelected ? '☑' : '☐'}
-        </div>
-      )}
       <div className="tl-activity__top">
+        {compareMode ? (
+          <div className={`tl-activity__compare-check${compareSelected ? ' tl-activity__compare-check--on' : ''}`}>
+            {compareSelected ? '☑' : '☐'}
+          </div>
+        ) : onTouchDragStart ? (
+          <div
+            className="tl-activity__drag-handle"
+            onTouchStart={(e) => {
+              e.preventDefault();
+              onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.tl-activity'));
+            }}
+          >⠿</div>
+        ) : null}
         <span className="tl-activity__emoji">{meta.emoji}</span>
         <span className="tl-activity__title">{activity.title}</span>
       </div>
@@ -36,13 +44,14 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const totalMin = totalMinutes(active);
   const budget = totalBudget(day.activities);
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
+  const todoActivities = day.activities.filter(a => a.status === 'todo');
 
   const handleDragOver = (e) => {
     if (compareMode) return;
@@ -61,6 +70,9 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
   return (
     <div
       className={`tl-day${isDragOver ? ' tl-day--drop' : ''}`}
+      data-drop-zone="true"
+      data-zone-type="day"
+      data-day-id={day.id}
       onClick={() => !compareMode && !notesOpen && onOpenDetail(day)}
       onDragOver={handleDragOver}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
@@ -77,6 +89,13 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
           </div>
         </div>
         <div className="tl-day__actions">
+          {todoActivities.length > 0 && !compareMode && onSweep && (
+            <button
+              className="tl-day__action-btn"
+              onClick={(e) => { e.stopPropagation(); onSweep(day.id); }}
+              title="On verra demain — envoyer en réserve"
+            >🪄</button>
+          )}
           <button
             className={`tl-day__action-btn${day.notes ? ' tl-day__action-btn--active' : ''}`}
             onClick={(e) => { e.stopPropagation(); setNotesOpen(o => !o); }}
@@ -107,6 +126,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
               compareMode={compareMode}
               compareSelected={compareSelectedIds?.has(a.id)}
               onToggleCompare={() => onToggleCompare?.(a.id)}
+              onTouchDragStart={onTouchDragStart}
             />
           ))
         )}
@@ -126,7 +146,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -141,6 +161,8 @@ export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, 
           compareSelectedIds={compareSelectedIds}
           onToggleCompare={onToggleCompare}
           onNotesChange={onNotesChange}
+          onSweep={onSweep}
+          onTouchDragStart={onTouchDragStart}
         />
       ))}
     </div>
