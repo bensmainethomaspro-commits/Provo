@@ -14,11 +14,12 @@ import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
 import ExpensesTab from '../components/ExpensesTab';
+import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
 import { useTravelTimes } from '../hooks/useTravelTimes';
-import TripSettingsSheet from '../components/TripSettingsSheet';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm } from '../utils/helpers';
+import { useLocalNews } from '../hooks/useLocalNews';
+import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -49,6 +50,17 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       const touch = e.touches[0];
       s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
       s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
+
+      // Auto-scroll the tab content when dragging near viewport edges
+      const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
+      if (sc) {
+        const h = window.innerHeight;
+        const EDGE = 90, MAX = 14;
+        const y = touch.clientY;
+        if (y < EDGE) sc.scrollTop -= Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
+        else if (y > h - EDGE) sc.scrollTop += Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
+      }
+
       s.ghost.style.visibility = 'hidden';
       const el = document.elementFromPoint(touch.clientX, touch.clientY);
       s.ghost.style.visibility = '';
@@ -89,7 +101,7 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       zone?.classList.remove('day-section__body--drop-target');
       if (s.ghost) { s.ghost.remove(); s.ghost = null; }
       s.sourceEl?.classList.remove('activity-card--dragging');
-      s.id = null; s.sourceEl = null; s.dropZone = null;
+      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null;
     };
 
     document.addEventListener('touchmove', onMove, { passive: false });
@@ -114,12 +126,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     reorderDay, addToAllDays,
     addExpense, deleteExpense,
+    copyDay, sortDayByTime,
+    addDailyTemplate, removeDailyTemplate,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
   const { settings, setSetting } = useSettings();
+  const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
+  const [swUpdateReady, setSwUpdateReady] = useState(false);
   const [tab, setTab] = useState('planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
@@ -140,13 +156,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
   const undoTimerRef = useRef(null);
   const tabContentRef = useRef(null);
+  const tabsRef = useRef(null);
+  const tabSwipeRef = useRef({ startX: null, startY: null, startTime: null });
   const tripRef = useRef(trip);
   const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
   useEffect(() => { localStorage.setItem('provo_viewMode', viewMode); }, [viewMode]);
+
+  // Service worker update notification
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = (e) => {
+      if (e.data?.type === 'SW_UPDATED') setSwUpdateReady(true);
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
+  }, []);
 
   useEffect(() => {
     if (!tripMenuOpen) return;
@@ -155,6 +184,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     document.addEventListener('touchstart', handle, { passive: true });
     return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
   }, [tripMenuOpen]);
+
+  // Auto-scroll active tab into view
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const active = el.querySelector('.tab-btn--active');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [tab]);
 
   const pushUndo = (snapshot, msg = 'Action annulée') => {
     undoRef.current = snapshot;
@@ -209,7 +246,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   if (!trip) return (
     <div className="trip-view">
       <div className="header">
-        <button className="header__back" onClick={onBack}>←</button>
+        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title"><h1>Voyage introuvable</h1></div>
       </div>
       <div className="tab-content" style={{ textAlign: 'center', paddingTop: 40, color: 'var(--text-muted)' }}>
@@ -255,6 +292,49 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const initBudget = parseFloat(trip.initialBudget) || 0;
   const budgetRemaining = initBudget > 0 ? initBudget - stats.spent : stats.remaining;
   const showBudget = initBudget > 0 || stats.total > 0;
+
+  // ─── Tab order + swipe navigation ───────────────────────
+  const orderedTabs = [
+    ...(isActive && todayDay ? ['today'] : []),
+    'planning', 'reserve', 'depenses', 'map', 'notes', 'valise',
+  ];
+
+  const navigateTab = (newTab) => {
+    if (newTab === tab) return;
+    const fromIdx = orderedTabs.indexOf(tab);
+    const toIdx = orderedTabs.indexOf(newTab);
+    const dir = toIdx > fromIdx ? 1 : -1;
+    setSlideClass(dir > 0 ? 'tab-slide-right' : 'tab-slide-left');
+    setTab(newTab);
+    setTimeout(() => setSlideClass(''), 250);
+  };
+
+  const onTabTouchStart = (e) => {
+    if (
+      e.target.closest('.activity-card-swipe') ||
+      e.target.closest('.day-section__header') ||
+      e.target.closest('.leaflet-container') ||
+      e.target.closest('input') ||
+      e.target.closest('select') ||
+      e.target.closest('textarea')
+    ) return;
+    const t = e.touches[0];
+    tabSwipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() };
+  };
+
+  const onTabTouchEnd = (e) => {
+    const s = tabSwipeRef.current;
+    if (s.startX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.startX;
+    const dy = Math.abs(t.clientY - s.startY);
+    const dt = Date.now() - s.startTime;
+    tabSwipeRef.current = { startX: null, startY: null, startTime: null };
+    if (Math.abs(dx) < 55 || dy > Math.abs(dx) * 0.65 || dt > 500) return;
+    const idx = orderedTabs.indexOf(tab);
+    if (dx < 0 && idx < orderedTabs.length - 1) navigateTab(orderedTabs[idx + 1]);
+    else if (dx > 0 && idx > 0) navigateTab(orderedTabs[idx - 1]);
+  };
 
   // ─── Day swipe navigation ─────────────────────────────
   const handleSwipeDay = (dayId, direction) => {
@@ -321,6 +401,50 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
+
+  const handleWhatsAppShare = () => {
+    const lines = [];
+    lines.push(`${trip.emoji || '✈️'} *${trip.name}*`);
+    if (trip.destination) lines.push(`📍 ${trip.destination}`);
+    lines.push(`📅 ${formatDateShort(trip.startDate)} → ${formatDateShort(trip.endDate)}`);
+    lines.push('');
+    trip.days.forEach((day, i) => {
+      lines.push(`*── Jour ${i + 1} · ${formatDate(day.date)} ──*`);
+      if (day.activities.length === 0) {
+        lines.push('  (aucune activité planifiée)');
+      } else {
+        let cur = day.startTime || '09:00';
+        day.activities.forEach(a => {
+          if (a.status === 'nogo') return;
+          const icon = a.status === 'done' ? '✅' : '•';
+          lines.push(`  ${icon} ${cur} ${a.title}${a.address ? ` — 📍 ${a.address}` : ''}`);
+          const mins = (parseInt(a.durationHours) || 0) * 60 + (parseInt(a.durationMinutes) || 0);
+          const [h, m] = cur.split(':').map(Number);
+          const next = h * 60 + m + mins;
+          cur = `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
+        });
+      }
+      lines.push('');
+    });
+    const text = lines.join('\n');
+    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    if (navigator.share) {
+      navigator.share({ title: trip.name, text }).catch(() => window.open(waUrl, '_blank'));
+    } else {
+      window.open(waUrl, '_blank');
+    }
+  };
+
+  const handleAutoBackup = () => {
+    const json = JSON.stringify(trip, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${trip.name.replace(/[^a-z0-9]/gi, '_')}_backup.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const copyItinerary = async () => {
     const lines = [];
@@ -434,21 +558,35 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     onToggleCompare: toggleCompare,
   };
 
+  const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#FF6B35';
+  const expenses = trip.expenses || [];
+  const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const totalTripCost = totalActivitiesCost + totalExpenses;
+  const initBudgetNum = parseFloat(trip.initialBudget) || 0;
+  const budgetExceeded = initBudgetNum > 0 && totalTripCost > initBudgetNum;
+
   return (
-    <div className="trip-view" style={{ '--trip-accent': trip.color || '#FF6B35' }}>
+    <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
+      {swUpdateReady && (
+        <div className="sw-update-banner">
+          🆕 Nouvelle version disponible !
+          <button className="sw-update-btn" onClick={() => window.location.reload()}>Mettre à jour</button>
+        </div>
+      )}
       {/* Header */}
       <div className="header">
-        <button className="header__back" onClick={onBack}>←</button>
+        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
+          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           <div className="trip-header-menu-wrap" ref={tripMenuRef}>
-            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options">⋯</button>
+            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
                 <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
@@ -459,6 +597,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { handleWhatsAppShare(); setTripMenuOpen(false); }}>
+                  💬 Partager WhatsApp
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
                   ⚙️ Paramètres du voyage
@@ -485,6 +626,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <span className="trip-meta__item">
           📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
         </span>
+        {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
+          <span className="trip-meta__item timezone-tag">
+            🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
+          </span>
+        )}
+        {totalTripCost > 0 && (
+          <span className={`budget-pill${budgetExceeded ? ' budget-pill--over' : ' budget-pill--total'}`} title="Estimation coût total (activités + dépenses)">
+            {budgetExceeded ? '🚨' : '💰'} {formatPrice(totalTripCost)} estimé
+          </span>
+        )}
         {showBudget && (
           <>
             {initBudget > 0
@@ -499,31 +650,39 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tabs */}
-      <div className="tabs">
-        <button className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => setTab('planning')}>
+      <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
+        {isActive && todayDay && (
+          <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
+            🟢 Aujourd'hui
+            {todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
+              <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
+            )}
+          </button>
+        )}
+        <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
           📅 Planning
-          {actTotal > 0 && <span className="tab-badge">{actTotal}</span>}
+          {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
-        <button className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => setTab('reserve')}>
+        <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
           📦 Réserve
-          {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
+          {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
-        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
+        <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
+          💸 Dépenses
+          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
+        </button>
+        <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
           🗺 Carte
         </button>
-        <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => setTab('valise')}>
+        <button role="tab" aria-selected={tab === 'notes'} className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
+          📝 Notes
+          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" aria-label="Notes saisies" />}
+        </button>
+        <button role="tab" aria-selected={tab === 'valise'} className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
           🎒 Valise
           {(trip.packingList?.length || 0) > 0 && (
-            <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
+            <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
-        </button>
-        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => setTab('depenses')}>
-          💸 Dépenses
-          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
-        </button>
-        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
-          📝 Notes
-          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
         </button>
       </div>
 
@@ -558,7 +717,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tab content */}
-      <div ref={tabContentRef} className="tab-content">
+      <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
+
+        {/* ── AUJOURD'HUI TAB ── */}
+        {tab === 'today' && isActive && todayDay && (
+          <TodayMode
+            day={todayDay}
+            dayIndex={todayDayIndex}
+            totalDays={trip.days.length}
+            trip={trip}
+            onStatusChange={handleStatusChange}
+          />
+        )}
 
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
@@ -623,6 +793,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     setDayActivitiesOrder(tripId, dayId, nearestNeighborSort(d.activities));
                   }}
                   onSwipeDay={(dir) => handleSwipeDay(day.id, dir)}
+                  onCopyDay={(srcId, tgtId) => { pushUndo(trip, 'Jour copié'); copyDay(tripId, srcId, tgtId); }}
+                  onSortByTime={(dayId) => { pushUndo(trip, 'Trié par heure'); sortDayByTime(tripId, dayId); }}
                   {...sharedDayProps}
                 />
               ))
@@ -679,6 +851,23 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── RESERVE TAB ── */}
         {tab === 'reserve' && (
           <>
+            {localNews.length > 0 && (
+              <div className="local-news">
+                <div className="local-news__title">📰 Actualité · {trip.destination}</div>
+                {localNews.map((item, i) => (
+                  <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="news-card">
+                    <div className="news-card__body">
+                      <div className="news-card__headline">{item.title}</div>
+                      <div className="news-card__meta">
+                        {item.source && <span className="news-card__source">{item.source}</span>}
+                        {item.relDate && <span className="news-card__date">{item.relDate}</span>}
+                      </div>
+                    </div>
+                    <span className="news-card__arrow">›</span>
+                  </a>
+                ))}
+              </div>
+            )}
             {trip.reserve.length === 0 ? (
               <div
                 className={`reserve-section__empty day-section__body${reserveDragOver ? ' day-section__body--drop-target' : ''}`}
@@ -795,6 +984,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             trip={trip}
             onAddExpense={(exp) => addExpense(tripId, exp)}
             onDeleteExpense={(expId) => deleteExpense(tripId, expId)}
+            onDeleteTraveler={(id) => updateTrip(tripId, { tripTravelers: (trip.tripTravelers || []).filter(t => t.id !== id) })}
           />
         )}
 
@@ -914,6 +1104,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onUpdateTrip={updateTrip}
         settings={settings}
         setSetting={setSetting}
+        onAddDailyTemplate={addDailyTemplate}
+        onRemoveDailyTemplate={removeDailyTemplate}
       />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>

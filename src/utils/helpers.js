@@ -412,6 +412,16 @@ export async function importFromGoogleMaps(url) {
 }
 
 export async function fetchUrlMetadata(url) {
+  // Try site-specific parser first (fast, no API needed)
+  const siteTitle = parseBookingUrl(url);
+  if (siteTitle) {
+    const siteCategory = getSiteCategory(url);
+    const placeData = await fetchPlaceData(siteTitle).catch(() => null);
+    return placeData
+      ? { ...placeData, title: placeData.title || siteTitle, link: url }
+      : { title: siteTitle, link: url, ...(siteCategory ? { category: siteCategory } : {}) };
+  }
+  // Fallback: Microlink API
   try {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 7000);
@@ -424,11 +434,13 @@ export async function fetchUrlMetadata(url) {
     const data = await res.json();
     if (data.status !== 'success' || !data.data) return null;
     const d = data.data;
-    return {
-      title: d.title || '',
-      photoUrl: d.image?.url || '',
-      link: url,
-    };
+    const title = d.title || '';
+    const siteCategory = getSiteCategory(url);
+    if (title) {
+      const placeData = await fetchPlaceData(title).catch(() => null);
+      if (placeData?.lat) return { ...placeData, title: placeData.title || title, link: url };
+    }
+    return { title, photoUrl: d.image?.url || '', link: url, ...(siteCategory ? { category: siteCategory } : {}) };
   } catch {
     return null;
   }
@@ -560,6 +572,144 @@ export function getLogicAlerts(activities, slots) {
   }
 
   return alerts;
+}
+
+// ─── Country → theme color ────────────────────────────────
+const COUNTRY_THEMES = {
+  japan: '#e63946', japon: '#e63946',
+  china: '#c1121f', chine: '#c1121f',
+  india: '#f77f00', inde: '#f77f00',
+  italy: '#2a9d8f', italie: '#2a9d8f',
+  france: '#003049', paris: '#003049',
+  spain: '#e63946', espagne: '#e63946',
+  greece: '#0077b6', grèce: '#0077b6', grece: '#0077b6',
+  morocco: '#e76f51', maroc: '#e76f51',
+  egypt: '#f4a261', égypte: '#f4a261', egypte: '#f4a261',
+  brazil: '#2d6a4f', brésil: '#2d6a4f', bresil: '#2d6a4f',
+  mexico: '#40916c', mexique: '#40916c',
+  usa: '#1d3557', 'états-unis': '#1d3557', 'etats-unis': '#1d3557', 'new york': '#1d3557',
+  thailand: '#8338ec', thaïlande: '#8338ec', thailande: '#8338ec',
+  indonesia: '#c77dff', indonésie: '#c77dff', bali: '#c77dff',
+  vietnam: '#d62828', viêt: '#d62828',
+  portugal: '#3a0ca3',
+  netherlands: '#f48c06', 'pays-bas': '#f48c06', amsterdam: '#f48c06',
+  germany: '#606c38', allemagne: '#606c38',
+  switzerland: '#e63946', suisse: '#e63946',
+  austria: '#780000', autriche: '#780000',
+  iceland: '#48cae4', islande: '#48cae4',
+  norway: '#023e8a', norvège: '#023e8a',
+  sweden: '#0077b6', suède: '#0077b6',
+  turkey: '#c1121f', turquie: '#c1121f',
+  dubai: '#d4a017', émirats: '#d4a017',
+  singapore: '#e63946', singapour: '#e63946',
+  kenya: '#2d6a4f',
+  peru: '#f4a261', pérou: '#f4a261',
+  argentina: '#73d2de', argentine: '#73d2de',
+  canada: '#d62828',
+  australia: '#f77f00', australie: '#f77f00',
+};
+
+export function detectCountryTheme(destination) {
+  if (!destination) return null;
+  const q = destination.toLowerCase();
+  for (const [key, color] of Object.entries(COUNTRY_THEMES)) {
+    if (q.includes(key)) return color;
+  }
+  return null;
+}
+
+// ─── Opening hours check ──────────────────────────────────
+const DAY_MAP = { mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6, su: 0, ph: null };
+
+export function isClosedOnDate(openingHours, dateStr) {
+  if (!openingHours) return false;
+  try {
+    const date = new Date(dateStr + 'T00:00:00');
+    const dow = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
+    const raw = openingHours.toLowerCase();
+    // Check for "closed" keyword
+    if (/\bclosed\b|fermé/i.test(raw)) return true;
+    // Parse "Tu-Su 10:00-18:00" or "Mo,We,Fr 09:00-17:00"
+    const rules = raw.split(';').map(r => r.trim()).filter(Boolean);
+    for (const rule of rules) {
+      // Day range like "Mo-Fr" or single "Sa"
+      const parts = rule.split(/\s+/);
+      const dayPart = parts[0];
+      const timePart = parts.slice(1).join('');
+      if (!timePart || /off|closed/.test(timePart)) {
+        // Check if this day is marked off
+        const days = expandDayRange(dayPart);
+        if (days.includes(dow)) return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function expandDayRange(dayPart) {
+  const days = [];
+  const segments = dayPart.split(',');
+  for (const seg of segments) {
+    const rangeParts = seg.trim().split('-');
+    if (rangeParts.length === 2) {
+      const start = DAY_MAP[rangeParts[0].trim()];
+      const end = DAY_MAP[rangeParts[1].trim()];
+      if (start != null && end != null) {
+        // Walk through the range (Mo=1..Su=0 wrapping)
+        const order = [1,2,3,4,5,6,0];
+        const si = order.indexOf(start);
+        const ei = order.indexOf(end);
+        if (si <= ei) days.push(...order.slice(si, ei + 1));
+        else days.push(...order.slice(si), ...order.slice(0, ei + 1));
+      }
+    } else {
+      const d = DAY_MAP[seg.trim()];
+      if (d != null) days.push(d);
+    }
+  }
+  return days;
+}
+
+// ─── Site-specific URL parsers ────────────────────────────
+function parseBookingUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('booking.com')) {
+      // /hotel/country/hotelname.html
+      const m = u.pathname.match(/\/hotel\/[a-z]+\/([^./?]+)/);
+      if (m) return decodeURIComponent(m[1].replace(/-/g, ' ')).replace(/\b\w/g, c => c.toUpperCase());
+    }
+    if (u.hostname.includes('tripadvisor')) {
+      // /Hotel_Review-...-Hotel_Name-...html  OR  /Attraction_Review-...-Name.html
+      const m = u.pathname.match(/(?:Hotel_Review|Attraction_Review|Restaurant_Review)[^-]*(?:-[^-]*){2}-([^-]+(?:-[^-]+)*?)(?:\.|$)/);
+      if (m) return m[1].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    if (u.hostname.includes('thefork') || u.hostname.includes('lafourchette')) {
+      // /restaurant/name-id
+      const m = u.pathname.match(/\/restaurant\/([^/?#]+)/);
+      if (m) {
+        const clean = m[1].replace(/-\d+$/, '').replace(/-/g, ' ');
+        return clean.replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+    if (u.hostname.includes('airbnb')) {
+      return 'Airbnb';
+    }
+  } catch {}
+  return null;
+}
+
+export function getSiteCategory(url) {
+  if (!url) return null;
+  try {
+    const h = new URL(url).hostname;
+    if (h.includes('booking.com') || h.includes('airbnb') || h.includes('hotels.com')) return 'repos';
+    if (h.includes('tripadvisor') || h.includes('viator')) return 'visite';
+    if (h.includes('thefork') || h.includes('lafourchette') || h.includes('yelp')) return 'resto';
+  } catch {}
+  return null;
 }
 
 export function nearestNeighborSort(activities) {

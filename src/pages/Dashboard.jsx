@@ -13,12 +13,11 @@ function todayStr() {
 }
 
 export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip }) {
-  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, importTrip } = useTripsContext();
+  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip } = useTripsContext();
   const [showNew, setShowNew] = useState(autoNewTrip || false);
   const [editingTrip, setEditingTrip] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [previewTrip, setPreviewTrip] = useState(null);
-  const [importError, setImportError] = useState('');
   const [search, setSearch] = useState('');
   const { canInstall, install } = useInstallPrompt();
 
@@ -31,23 +30,6 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   const handleEdit = (data) => {
     updateTrip(editingTrip.id, data);
     setEditingTrip(null);
-  };
-
-  const handleImport = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setImportError('');
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (!data.name || !Array.isArray(data.days)) { setImportError('Fichier invalide — structure non reconnue.'); return; }
-        const id = importTrip({ ...data, reserve: data.reserve || [], packingList: data.packingList || [] });
-        onNavigate('trip', id);
-      } catch { setImportError('Fichier JSON invalide.'); }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
   };
 
   const deletingTrip = [...currentTrips, ...pastTrips].find(t => t.id === deletingId);
@@ -86,11 +68,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         <span className="dashboard__logo-icon">🧭</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
-          <label className="btn btn--ghost-white btn--sm" title="Importer un voyage (.json)" style={{ cursor: 'pointer' }}>
-            📥
-            <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-          </label>
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
+          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           {canInstall && (
@@ -110,7 +88,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          {search && <button className="dashboard__search-clear" onClick={() => setSearch('')}>✕</button>}
+          {search && <button className="dashboard__search-clear" onClick={() => setSearch('')} aria-label="Effacer la recherche">✕</button>}
         </div>
       )}
 
@@ -161,14 +139,6 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
                 <h2 className="dashboard__empty-title">Bienvenue sur Provo !</h2>
                 <p className="dashboard__empty-text">Planifie tes voyages, gère le programme jour par jour, retrouve tout hors-ligne.</p>
                 <p className="dashboard__empty-offline">📵 Fonctionne 100% sans connexion</p>
-                <div className="dashboard__empty-actions">
-                  <button className="btn btn--primary" onClick={() => setShowNew(true)}>✈️ Créer un voyage</button>
-                  <label className="btn btn--secondary" style={{ cursor: 'pointer' }}>
-                    📥 Importer
-                    <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-                  </label>
-                </div>
-                {importError && <p className="dashboard__import-error">{importError}</p>}
               </div>
             ) : (
               <div className="dashboard__empty">
@@ -216,9 +186,6 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         )}
       </div>
 
-      {importError && currentTrips.length > 0 && (
-        <p className="dashboard__import-error">{importError}</p>
-      )}
 
       <div className="fab">
         <button className="fab__btn" onClick={() => setShowNew(true)}>

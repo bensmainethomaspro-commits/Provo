@@ -13,10 +13,18 @@ const TRIP_COLORS = [
 
 const TRAVELER_EMOJIS = ['😀','😎','🤩','🧑','👩','👨','🧔','👦','👧','🐶','🐱','🦊','🐻','🐼'];
 
-export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting }) {
+const RECURRING_PRESETS = [
+  { emoji: '🏨', title: 'Hôtel / Nuit', category: 'repos', durationHours: 8, durationMinutes: 0 },
+  { emoji: '✈️', title: 'Avion', category: 'trajet', durationHours: 2, durationMinutes: 0 },
+  { emoji: '🍳', title: 'Petit-déjeuner', category: 'resto', durationHours: 0, durationMinutes: 45 },
+  { emoji: '🚗', title: 'Trajet du jour', category: 'trajet', durationHours: 1, durationMinutes: 0 },
+];
+
+export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate }) {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('😀');
   const travelers = trip.tripTravelers || [];
+  const dailyTemplates = trip.dailyTemplates || [];
 
   if (!isOpen) return null;
 
@@ -33,6 +41,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
 
   const handleColor = (color) => onUpdateTrip(trip.id, { color });
   const handleRoadTrip = (v) => onUpdateTrip(trip.id, { roadTripMode: v });
+  const handleTimezone = (v) => onUpdateTrip(trip.id, { timezoneOffset: v });
 
   return (
     <div className="sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -59,6 +68,26 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
             </div>
           </div>
 
+          {/* Timezone */}
+          <div className="settings-section">
+            <div className="settings-section__title">Fuseau horaire</div>
+            <div className="settings-section__desc">Décalage par rapport à l'heure locale (ex. +2 pour Paris en été, +9 pour Tokyo).</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <select
+                className="form-select"
+                value={trip.timezoneOffset ?? 0}
+                onChange={e => handleTimezone(parseInt(e.target.value))}
+              >
+                {Array.from({ length: 27 }, (_, i) => i - 12).map(h => (
+                  <option key={h} value={h}>{h >= 0 ? `UTC+${h}` : `UTC${h}`}</option>
+                ))}
+              </select>
+              {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
+                <span className="timezone-badge">UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}</span>
+              )}
+            </div>
+          </div>
+
           {/* Road trip mode */}
           <div className="settings-section">
             <div className="settings-section__title">Mode Road Trip</div>
@@ -80,6 +109,37 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
               <span className="settings-toggle__label">{settings.haptics !== false ? 'Activées' : 'Désactivées'}</span>
             </label>
           </div>
+
+          {/* Recurring templates */}
+          {onAddDailyTemplate && (
+            <div className="settings-section">
+              <div className="settings-section__title">Activités récurrentes</div>
+              <div className="settings-section__desc">Ces activités sont ajoutées automatiquement à tous les jours du voyage.</div>
+              {dailyTemplates.length > 0 && (
+                <div className="travelers-list">
+                  {dailyTemplates.map(t => (
+                    <div key={t.id} className="traveler-chip">
+                      <span className="traveler-chip__emoji">{t.emoji || '📌'}</span>
+                      <span className="traveler-chip__name">{t.title}</span>
+                      <button className="traveler-chip__remove" onClick={() => onRemoveDailyTemplate(trip.id, t.id)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="recurring-presets">
+                {RECURRING_PRESETS.map(p => (
+                  <button
+                    key={p.title}
+                    className="recurring-preset-btn"
+                    disabled={dailyTemplates.some(t => t.title === p.title)}
+                    onClick={() => onAddDailyTemplate(trip.id, p)}
+                  >
+                    {p.emoji} {p.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Travelers */}
           <div className="settings-section">

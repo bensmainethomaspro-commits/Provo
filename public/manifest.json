@@ -1,18 +1,30 @@
 {
   "name": "Provo — Planifiez vos voyages",
   "short_name": "Provo",
-  "description": "Planifiez et organisez vos voyages, même hors ligne.",
+  "description": "Planifiez et organisez vos voyages jour par jour, même hors ligne. Gestion des dépenses, météo, carte interactive.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "background_color": "#FF6B35",
   "theme_color": "#FF6B35",
   "orientation": "portrait-primary",
+  "lang": "fr",
   "icons": [
     {
       "src": "icons.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "icons.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "Dashboard Provo"
     }
   ],
   "shortcuts": [
@@ -24,5 +36,10 @@
       "icons": [{ "src": "icons.svg", "sizes": "any", "type": "image/svg+xml" }]
     }
   ],
-  "categories": ["travel", "productivity"]
+  "categories": ["travel", "productivity", "lifestyle"],
+  "prefer_related_applications": false,
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }

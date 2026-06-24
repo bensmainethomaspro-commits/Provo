@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, Fragment } from 'react';
-import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm, getCategoryMeta } from '../utils/helpers';
+import { totalMinutes, formatDuration, formatDate, getDayLabel, getTimeSlots, totalBudget, formatPrice, haversineKm, getCategoryMeta, isClosedOnDate } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
 import ConfirmDialog from './ConfirmDialog';
+import Confetti from './Confetti';
 
 function formatDist(km) {
   if (km < 1) return `${Math.round(km * 1000)} m`;
@@ -20,6 +21,7 @@ export default function DaySection({
   reserve, onAddFromReserve, onAddTravel, onOptimizeOrder,
   onSwipeDay,
   distFromPrev, getTravelTime,
+  onCopyDay, onSortByTime,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -27,6 +29,9 @@ export default function DaySection({
   const [sweepConfirm, setSweepConfirm] = useState(false);
   const [sweepIds, setSweepIds] = useState(new Set());
   const [dayMenuOpen, setDayMenuOpen] = useState(false);
+  const [copyDayOpen, setCopyDayOpen] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const prevAllDoneRef = useRef(false);
   const dayMenuRef = useRef(null);
   const touchStartRef = useRef(null);
 
@@ -51,6 +56,31 @@ export default function DaySection({
 
   const todoActivities = day.activities.filter(a => a.status === 'todo');
   const hasTodo = todoActivities.length > 0;
+
+  // Confetti: trigger when all activities become done/nogo
+  const allActsDone = day.activities.length > 0 && day.activities.every(a => a.status !== 'todo');
+  useEffect(() => {
+    if (allActsDone && !prevAllDoneRef.current && day.activities.length > 0) {
+      setShowConfetti(true);
+    }
+    prevAllDoneRef.current = allActsDone;
+  }, [allActsDone, day.activities.length]);
+
+  // Opening hours alerts
+  const closedAlerts = day.activities
+    .filter(a => a.status !== 'nogo' && a.openingHours && isClosedOnDate(a.openingHours, day.date))
+    .map(a => a.title);
+
+  // Rain → indoor reserve suggestions
+  const isRainy = weather && (
+    (weather.code >= 51 && weather.code <= 67) ||
+    (weather.code >= 80 && weather.code <= 82) ||
+    (weather.code >= 95 && weather.code <= 99)
+  );
+  const INDOOR_CATS = ['visite', 'resto', 'fun', 'repos'];
+  const indoorSuggestions = isRainy
+    ? (reserve || []).filter(a => INDOOR_CATS.includes(a.category)).slice(0, 3)
+    : [];
 
   const freeMin = Math.max(0, 8 * 60 - total);
   const suggestions = freeMin >= 60 ? (reserve || [])
@@ -100,6 +130,7 @@ export default function DaySection({
 
   return (
     <div id={`day-${day.id}`} className="day-section">
+      <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
       <div
         className="day-section__header"
         onTouchStart={handleHeaderTouchStart}
@@ -141,9 +172,19 @@ export default function DaySection({
                 <button className="day-menu__item" onClick={() => { setNotesOpen(o => !o); setDayMenuOpen(false); }}>
                   📝 Notes{day.notes ? ' •' : ''}
                 </button>
+                {onSortByTime && day.activities.some(a => a.fixedStart) && (
+                  <button className="day-menu__item" onClick={() => { onSortByTime(day.id); setDayMenuOpen(false); }}>
+                    🕐 Trier par heure
+                  </button>
+                )}
                 {geoCount >= 2 && onOptimizeOrder && (
                   <button className="day-menu__item" onClick={() => { onOptimizeOrder(day.id); setDayMenuOpen(false); }}>
                     🗺 Optimiser l'ordre
+                  </button>
+                )}
+                {onCopyDay && days && days.length > 1 && (
+                  <button className="day-menu__item" onClick={() => { setCopyDayOpen(true); setDayMenuOpen(false); }}>
+                    📋 Copier ce jour vers…
                   </button>
                 )}
                 <button className="day-menu__item" onClick={() => { onOpenDetail(day); setDayMenuOpen(false); }}>
@@ -175,6 +216,33 @@ export default function DaySection({
       </div>
 
       <LogicAlerts activities={day.activities} slots={slots} />
+
+      {closedAlerts.length > 0 && (
+        <div className="logic-alerts">
+          {closedAlerts.map((title, i) => (
+            <div key={i} className="logic-alert logic-alert--closed">
+              <span>🔒</span>
+              <span>« {title} » pourrait être fermé ce jour-là — vérifiez les horaires.</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isRainy && indoorSuggestions.length > 0 && onAddFromReserve && (
+        <div className="rain-suggestions">
+          <div className="rain-suggestions__header">🌧 Temps pluvieux — idées d'activités en intérieur :</div>
+          <div className="rain-suggestions__list">
+            {indoorSuggestions.map(a => {
+              const meta = getCategoryMeta(a.category);
+              return (
+                <button key={a.id} className="day-suggestion-pill day-suggestion-pill--rain" onClick={() => onAddFromReserve(day.id, a.id)}>
+                  {meta.emoji} {a.title} +
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div
         className={`day-section__body${isDragOver ? ' day-section__body--drop-target' : ''}`}
@@ -285,6 +353,24 @@ export default function DaySection({
             value={day.notes || ''}
             onChange={e => onNotesChange?.(day.id, e.target.value)}
           />
+        </div>
+      )}
+
+      {copyDayOpen && (
+        <div className="sheet-overlay" onClick={() => setCopyDayOpen(false)}>
+          <div className="copy-day-picker" onClick={e => e.stopPropagation()}>
+            <div className="copy-day-picker__title">📋 Copier {getDayLabel(dayIndex, totalDays)} vers :</div>
+            {(days || []).filter(d => d.id !== day.id).map((d, _, arr) => {
+              const idx = days.findIndex(x => x.id === d.id);
+              return (
+                <button key={d.id} className="copy-day-picker__item"
+                  onClick={() => { onCopyDay(day.id, d.id); setCopyDayOpen(false); }}>
+                  {getDayLabel(idx, totalDays)} · {formatDate(d.date).split(' ').slice(0, 3).join(' ')}
+                </button>
+              );
+            })}
+            <button className="btn btn--secondary btn--full" style={{ marginTop: 8 }} onClick={() => setCopyDayOpen(false)}>Annuler</button>
+          </div>
         </div>
       )}
 

@@ -1,11 +1,11 @@
 export default function ConfirmDialog({ icon = '❓', title, message, onConfirm, onCancel,
   confirmLabel = 'Confirmer', cancelLabel = 'Annuler', danger = false, extra = null }) {
   return (
-    <div className="confirm-overlay" onClick={(e) => e.target === e.currentTarget && onCancel()}>
+    <div className="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="confirm-box">
         <div className="confirm-box__icon">{icon}</div>
-        <div className="confirm-box__title">{title}</div>
-        <div className="confirm-box__text">{message}</div>
+        <div className="confirm-box__title" id="confirm-title">{title}</div>
+        <div className="confirm-box__text" id="confirm-msg">{message}</div>
         {extra}
         <div className="confirm-box__actions">
           <button className="btn btn--secondary btn--full" onClick={onCancel}>{cancelLabel}</button>
