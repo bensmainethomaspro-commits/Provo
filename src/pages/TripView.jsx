@@ -18,9 +18,8 @@ import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
 import { useTravelTimes } from '../hooks/useTravelTimes';
-import { useWikiSuggestions } from '../hooks/useWikiSuggestions';
-import TripSettingsSheet from '../components/TripSettingsSheet';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
+import { useLocalNews } from '../hooks/useLocalNews';
+import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -51,6 +50,17 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       const touch = e.touches[0];
       s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
       s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
+
+      // Auto-scroll the tab content when dragging near viewport edges
+      const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
+      if (sc) {
+        const h = window.innerHeight;
+        const EDGE = 90, MAX = 14;
+        const y = touch.clientY;
+        if (y < EDGE) sc.scrollTop -= Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
+        else if (y > h - EDGE) sc.scrollTop += Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
+      }
+
       s.ghost.style.visibility = 'hidden';
       const el = document.elementFromPoint(touch.clientX, touch.clientY);
       s.ghost.style.visibility = '';
@@ -91,7 +101,7 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       zone?.classList.remove('day-section__body--drop-target');
       if (s.ghost) { s.ghost.remove(); s.ghost = null; }
       s.sourceEl?.classList.remove('activity-card--dragging');
-      s.id = null; s.sourceEl = null; s.dropZone = null;
+      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null;
     };
 
     document.addEventListener('touchmove', onMove, { passive: false });
@@ -123,7 +133,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
   const { settings, setSetting } = useSettings();
-  const { suggestions: wikiSuggestions } = useWikiSuggestions(trip?.destination, !!trip?.destination);
+  const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
   const [swUpdateReady, setSwUpdateReady] = useState(false);
   const [tab, setTab] = useState('planning');
@@ -286,7 +296,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // ─── Tab order + swipe navigation ───────────────────────
   const orderedTabs = [
     ...(isActive && todayDay ? ['today'] : []),
-    'planning', 'reserve', 'map', 'valise', 'depenses', 'notes',
+    'planning', 'reserve', 'depenses', 'map', 'notes', 'valise',
   ];
 
   const navigateTab = (newTab) => {
@@ -591,9 +601,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 <button className="trip-header-menu__item" onClick={() => { handleWhatsAppShare(); setTripMenuOpen(false); }}>
                   💬 Partager WhatsApp
                 </button>
-                <button className="trip-header-menu__item" onClick={() => { handleAutoBackup(); setTripMenuOpen(false); }}>
-                  💾 Sauvegarder (.json)
-                </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
                   ⚙️ Paramètres du voyage
                 </button>
@@ -660,22 +667,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
         </button>
+        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
+          💸 Dépenses
+          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
+        </button>
         <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
           🗺 Carte
+        </button>
+        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
+          📝 Notes
+          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
         </button>
         <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
           🎒 Valise
           {(trip.packingList?.length || 0) > 0 && (
             <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
-        </button>
-        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
-          💸 Dépenses
-          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
-        </button>
-        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
-          📝 Notes
-          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
         </button>
       </div>
 
@@ -844,20 +851,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── RESERVE TAB ── */}
         {tab === 'reserve' && (
           <>
-            {wikiSuggestions.length > 0 && (
-              <div className="wiki-suggestions">
-                <div className="wiki-suggestions__title">🌍 Inspirations pour {trip.destination}</div>
-                <div className="wiki-suggestions__list">
-                  {wikiSuggestions.map((s, i) => (
-                    <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="wiki-card">
-                      {s.thumbnail && <img src={s.thumbnail} alt="" className="wiki-card__img" />}
-                      <div className="wiki-card__info">
-                        <div className="wiki-card__title">{s.title}</div>
-                        <div className="wiki-card__extract">{s.extract}</div>
+            {localNews.length > 0 && (
+              <div className="local-news">
+                <div className="local-news__title">📰 Actualité · {trip.destination}</div>
+                {localNews.map((item, i) => (
+                  <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="news-card">
+                    <div className="news-card__body">
+                      <div className="news-card__headline">{item.title}</div>
+                      <div className="news-card__meta">
+                        {item.source && <span className="news-card__source">{item.source}</span>}
+                        {item.relDate && <span className="news-card__date">{item.relDate}</span>}
                       </div>
-                    </a>
-                  ))}
-                </div>
+                    </div>
+                    <span className="news-card__arrow">›</span>
+                  </a>
+                ))}
               </div>
             )}
             {trip.reserve.length === 0 ? (

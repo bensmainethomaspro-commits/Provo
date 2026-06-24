@@ -48,6 +48,64 @@ const EXPENSE_CATEGORIES = [
 
 const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
+const CAT_COLORS = ['#FF6B35', '#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#06b6d4'];
+
+function DonutChart({ byCategory, total }) {
+  if (!byCategory.length || total === 0) return null;
+  const R = 44, CX = 64, CY = 64, SW = 22;
+  const CIRC = 2 * Math.PI * R;
+  const GAP = 3;
+
+  let arcPos = 0;
+  const segs = byCategory.map((c, i) => {
+    const frac = c.total / total;
+    const len = Math.max(1, frac * CIRC - GAP);
+    const start = arcPos;
+    arcPos += frac * CIRC;
+    return { ...c, len, start, color: CAT_COLORS[i % CAT_COLORS.length] };
+  });
+
+  const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : Math.round(n);
+
+  return (
+    <div className="donut-wrap">
+      <svg width="128" height="128" viewBox="0 0 128 128">
+        <g transform={`rotate(-90 ${CX} ${CY})`}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--border)" strokeWidth={SW} />
+          {segs.map((s, i) => (
+            <circle
+              key={i}
+              cx={CX} cy={CY} r={R}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={SW}
+              strokeDasharray={`${s.len} ${CIRC}`}
+              strokeDashoffset={-s.start}
+            />
+          ))}
+        </g>
+        <text x={CX} y={CY - 5} textAnchor="middle" fontSize="14" fontWeight="800"
+          fill="var(--text)" style={{ fontFamily: '-apple-system,sans-serif' }}>
+          {fmt(total)}€
+        </text>
+        <text x={CX} y={CY + 12} textAnchor="middle" fontSize="10"
+          fill="var(--text-muted)" style={{ fontFamily: '-apple-system,sans-serif' }}>
+          total
+        </text>
+      </svg>
+      <div className="donut-legend">
+        {segs.map((s, i) => (
+          <div key={i} className="donut-legend-item">
+            <span className="donut-legend-dot" style={{ background: s.color }} />
+            <span className="donut-legend-label">{s.emoji} {s.label}</span>
+            <span className="donut-legend-pct">{Math.round((s.total / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
   const travelers = trip.tripTravelers || [];
   const expenses = trip.expenses || [];
@@ -198,19 +256,26 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense }) {
       {/* Category breakdown */}
       {activeSection === 'categories' && (
         <div className="expense-categories">
-          {byCategory.length === 0
-            ? <p className="expenses-list__empty">Aucune catégorie à afficher.</p>
-            : byCategory.map(cat => (
-              <div key={cat.id} className="expense-cat-row">
-                <span className="expense-cat-emoji">{cat.emoji}</span>
-                <span className="expense-cat-name">{cat.label}</span>
-                <div className="expense-cat-bar-wrap">
-                  <div className="expense-cat-bar" style={{ width: `${(cat.total / totalSpent) * 100}%` }} />
-                </div>
-                <span className="expense-cat-amount">{formatPrice(cat.total)}</span>
+          {byCategory.length === 0 ? (
+            <p className="expenses-list__empty">Aucune catégorie à afficher.</p>
+          ) : (
+            <>
+              <DonutChart byCategory={byCategory} total={totalSpent} />
+              <div className="expense-cat-list">
+                {byCategory.map((cat, i) => (
+                  <div key={cat.id} className="expense-cat-row">
+                    <span className="expense-cat-dot" style={{ background: CAT_COLORS[i % CAT_COLORS.length] }} />
+                    <span className="expense-cat-emoji">{cat.emoji}</span>
+                    <span className="expense-cat-name">{cat.label}</span>
+                    <div className="expense-cat-bar-wrap">
+                      <div className="expense-cat-bar" style={{ width: `${(cat.total / totalSpent) * 100}%`, background: CAT_COLORS[i % CAT_COLORS.length] }} />
+                    </div>
+                    <span className="expense-cat-amount">{formatPrice(cat.total)}</span>
+                  </div>
+                ))}
               </div>
-            ))
-          }
+            </>
+          )}
         </div>
       )}
 
