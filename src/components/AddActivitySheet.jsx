@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, fetchUrlMetadata, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
@@ -34,9 +35,10 @@ function isDefaultDuration(f) {
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve,
-  tripTravelers, onAddToAllDays }) {
+  tripTravelers, onAddToAllDays, tripLat, tripLon }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
+  const { suggestions } = usePlaceSuggestions(tripLat, tripLon, isOpen && !isEdit);
   const [closing, setClosing] = useState(false);
   const [dest, setDest] = useState('reserve');
   const [selectedDayId, setSelectedDayId] = useState('');
@@ -72,7 +74,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           travelerIds: editActivity.travelerIds || [],
         });
       } else {
-        setForm({ ...blank });
+        const allTravelerIds = (tripTravelers || []).map(t => t.id);
+        setForm({ ...blank, travelerIds: allTravelerIds });
         setDest(defaultDayId ? 'day' : 'reserve');
         setSelectedDayId(defaultDayId || days?.[0]?.id || '');
         setRecurring(false);
@@ -116,24 +119,40 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app');
 
       if (isUrl) {
-        // Try URL-based import first
-        const result = await importFromGoogleMaps(raw);
-        if (result) { applyResult(result, raw); return; }
-        // URL import failed — try treating the URL's place name as text search
-        const name = parseGoogleMapsUrl(raw);
-        if (name) {
-          const placeData = await fetchPlaceData(name);
-          if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
-          // At least save the title and link
-          const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          applyResult({ title: clean, link: raw }, raw);
-          setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés. Complète les détails manuellement.');
+        // Google Maps: dedicated parser
+        const isGoogleMaps = /google\.com\/maps|goo\.gl|maps\.app/.test(raw);
+        if (isGoogleMaps) {
+          const result = await importFromGoogleMaps(raw);
+          if (result) { applyResult(result, raw); return; }
+          const name = parseGoogleMapsUrl(raw);
+          if (name) {
+            const placeData = await fetchPlaceData(name);
+            if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
+            const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            applyResult({ title: clean, link: raw }, raw);
+            setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés.');
+            return;
+          }
+          const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
+          setError(isShortLink
+            ? 'Lien iOS non résolu. Entre directement le nom du lieu, ou copie l\'URL depuis Safari.'
+            : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
           return;
         }
-        const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
-        setError(isShortLink
-          ? 'Lien iOS non résolu. Entre directement le nom du lieu (ex : "Tour Eiffel Paris"), ou ouvre le lien dans Safari et copie l\'URL depuis la barre d\'adresse.'
-          : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
+        // Any website URL — try Microlink for metadata
+        const meta = await fetchUrlMetadata(raw);
+        if (meta?.title) {
+          const placeData = await fetchPlaceData(meta.title).catch(() => null);
+          applyResult({
+            title: meta.title,
+            photoUrl: meta.photoUrl,
+            link: raw,
+            ...(placeData ? { address: placeData.address, lat: placeData.lat, lon: placeData.lon, category: placeData.category } : {}),
+          }, raw);
+          if (!placeData) setError('Titre importé. Ajoute l\'adresse manuellement si besoin.');
+          return;
+        }
+        setError('Impossible d\'extraire les infos de ce site. Essaie un nom de lieu ou un lien Google Maps.');
       } else {
         // Plain text: search Nominatim directly
         const placeData = await fetchPlaceData(raw);
@@ -300,6 +319,37 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
           </div>
+
+          {/* Nearby place suggestions */}
+          {suggestions.length > 0 && !isEdit && (
+            <div className="form-group suggestions-row-wrap">
+              <label className="form-label">📍 À proximité</label>
+              <div className="suggestions-row">
+                {suggestions.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="suggestion-chip"
+                    onClick={() => {
+                      const dur = DEFAULT_DURATIONS[s.category];
+                      setForm(f => ({
+                        ...f,
+                        title: s.title,
+                        address: s.address || f.address,
+                        lat: s.lat,
+                        lon: s.lon,
+                        category: s.category,
+                        ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
+                      }));
+                    }}
+                  >
+                    <span>{getCategoryMeta(s.category).emoji}</span>
+                    <span>{s.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Photo preview from import */}
           {form.photoUrl && (

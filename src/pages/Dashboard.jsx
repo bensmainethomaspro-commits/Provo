@@ -5,6 +5,7 @@ import TripPreviewSheet from '../components/TripPreviewSheet';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { getCategoryMeta, formatDate } from '../utils/helpers';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 function todayStr() {
   const d = new Date();
@@ -19,6 +20,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   const [previewTrip, setPreviewTrip] = useState(null);
   const [importError, setImportError] = useState('');
   const [search, setSearch] = useState('');
+  const { canInstall, install } = useInstallPrompt();
 
   const handleCreate = (data) => {
     const id = createTrip(data);
@@ -91,6 +93,11 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
+          {canInstall && (
+            <button className="btn btn--ghost-white btn--sm install-btn" onClick={install} title="Installer l'application">
+              📲 Installer
+            </button>
+          )}
         </div>
       </div>
       <p className="dashboard__logo-sub">Ton gestionnaire de voyages hors-ligne</p>

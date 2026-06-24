@@ -2403,3 +2403,70 @@ body {
   text-align: center; color: var(--text-muted); font-size: 14px;
   padding: 24px 0; font-style: italic;
 }
+.install-btn { font-weight: 700; }
+
+/* ─── PLACE SUGGESTIONS ──────────────────────────────────── */
+.suggestions-row-wrap { margin-bottom: 4px; }
+.suggestions-row {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.suggestions-row::-webkit-scrollbar { display: none; }
+.suggestion-chip {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  background: var(--surface-sunken); border: 1.5px solid var(--border);
+  border-radius: 20px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+  color: var(--text); cursor: pointer; flex-shrink: 0;
+  transition: all 0.15s;
+}
+.suggestion-chip:hover { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 10%, transparent); }
+
+/* ─── EXPENSES TAB ───────────────────────────────────────── */
+.expenses-empty { text-align: center; padding: 40px 20px; }
+.expenses-empty__icon { font-size: 40px; margin-bottom: 12px; }
+.expenses-empty__text { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+.expenses-tab { padding: 12px 0; }
+.expenses-summary {
+  background: var(--surface-raised); border-radius: var(--radius-md);
+  padding: 14px 16px; margin-bottom: 12px;
+}
+.expenses-summary__total { display: flex; justify-content: space-between; align-items: center; }
+.expenses-summary__label { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+.expenses-summary__amount { font-size: 22px; font-weight: 800; color: var(--text); }
+.expenses-summary__per { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.debts-card {
+  background: color-mix(in srgb, var(--orange) 10%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--orange) 25%, transparent);
+  border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 12px;
+}
+.debts-card--settled {
+  background: color-mix(in srgb, var(--green) 12%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--green) 30%, transparent);
+  text-align: center; font-size: 14px; font-weight: 700; color: var(--green);
+}
+.debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; }
+.debt-row { display: flex; align-items: center; gap: 5px; font-size: 13px; margin: 5px 0; flex-wrap: wrap; }
+.debt-emoji { font-size: 16px; }
+.debt-from, .debt-to { font-weight: 700; color: var(--text); }
+.debt-arrow { color: var(--text-light); font-size: 11px; }
+.debt-amount { font-weight: 800; color: var(--orange); }
+.expenses-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.expenses-list__empty { text-align: center; color: var(--text-light); font-size: 13px; padding: 20px 0; font-style: italic; }
+.expense-item {
+  background: var(--surface-raised); border-radius: var(--radius-md);
+  border: 1px solid var(--border); padding: 10px 12px;
+}
+.expense-item__main { display: flex; gap: 10px; align-items: flex-start; }
+.expense-item__emoji { font-size: 22px; flex-shrink: 0; }
+.expense-item__info { flex: 1; min-width: 0; }
+.expense-item__desc { font-size: 14px; font-weight: 700; color: var(--text); }
+.expense-item__meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.expense-item__linked { color: var(--blue, #3b82f6); }
+.expense-item__participants { display: flex; gap: 2px; margin-top: 4px; font-size: 14px; }
+.expense-participant { font-size: 14px; }
+.expense-item__delete { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
+.expense-item__delete:hover { color: var(--red); }
+.expense-form {
+  background: var(--surface-raised); border-radius: var(--radius-md);
+  border: 1px solid var(--border); padding: 14px; margin-top: 8px;
+}

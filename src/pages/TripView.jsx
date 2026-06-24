@@ -13,6 +13,7 @@ import LiveDayCard from '../components/LiveDayCard';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
+import ExpensesTab from '../components/ExpensesTab';
 import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
 import { useTravelTimes } from '../hooks/useTravelTimes';
@@ -112,6 +113,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     reorderDay, addToAllDays,
+    addExpense, deleteExpense,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -515,6 +517,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
         </button>
+        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => setTab('depenses')}>
+          💸 Dépenses
+          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
+        </button>
         <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
           📝 Notes
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
@@ -783,6 +789,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           />
         )}
 
+        {/* ── DÉPENSES TAB ── */}
+        {tab === 'depenses' && (
+          <ExpensesTab
+            trip={trip}
+            onAddExpense={(exp) => addExpense(tripId, exp)}
+            onDeleteExpense={(expId) => deleteExpense(tripId, expId)}
+          />
+        )}
+
         {/* ── NOTES TAB ── */}
         {tab === 'notes' && (
           <div className="notes-tab">
@@ -804,8 +819,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         )}
       </div>
 
-      {/* FAB — hidden on notes, map, and valise tabs */}
-      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && (
+      {/* FAB — hidden on notes, map, valise and depenses tabs */}
+      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && (
         <div className="fab">
           <button className="fab__btn" onClick={() => openAddSheet(null)}>
             + Ajouter une activité
@@ -825,6 +840,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onMoveFromReserve={(actId) => { if (sheetDefaultDayId) moveFromReserveToDay(tripId, sheetDefaultDayId, actId); }}
         tripTravelers={trip.tripTravelers || []}
         onAddToAllDays={(a) => addToAllDays(tripId, a)}
+        tripLat={weather?.lat}
+        tripLon={weather?.lon}
       />
 
       {editingActivity && (

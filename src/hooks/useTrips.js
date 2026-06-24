@@ -469,6 +469,22 @@ export function useTrips() {
     return remoteTrip.id;
   }, []);
 
+  const addExpense = useCallback((tripId, expense) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, expenses: [...(t.expenses || []), {
+        ...expense,
+        id: genId(),
+        date: new Date().toISOString().split('T')[0],
+      }]
+    }));
+  }, []);
+
+  const deleteExpense = useCallback((tripId, expenseId) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, expenses: (t.expenses || []).filter(e => e.id !== expenseId)
+    }));
+  }, []);
+
   return {
     trips,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
@@ -485,5 +501,6 @@ export function useTrips() {
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     enableSharing, loadSharedTrip,
     reorderDay, addToAllDays,
+    addExpense, deleteExpense,
   };
 }
