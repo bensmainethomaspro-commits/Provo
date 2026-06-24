@@ -257,6 +257,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   };
   const compareActivities = allActivities.filter(a => compareSelectedIds.has(a.id));
 
+  // Auto-open compare panel when 2+ activities are selected
+  useEffect(() => {
+    if (compareSelectedIds.size >= 2) setShowCompare(true);
+  }, [compareSelectedIds.size]);
+
+  const VIEW_MODES = [
+    { id: 'timeline', icon: '🗓', label: 'Timeline' },
+    { id: 'list',     icon: '☰',  label: 'Liste' },
+    { id: 'agenda',   icon: '📆', label: 'Agenda' },
+  ];
+  const cycleView = () => {
+    const idx = VIEW_MODES.findIndex(v => v.id === viewMode);
+    setViewMode(VIEW_MODES[(idx + 1) % VIEW_MODES.length].id);
+  };
+  const currentViewMeta = VIEW_MODES.find(v => v.id === viewMode);
+
   // ─── Handlers ────────────────────────────────────────
   const handleStatusChange = (dayId, activityId, status) =>
     setActivityStatus(tripId, { type: 'day', dayId }, activityId, status);
@@ -487,24 +503,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       <div className="planning-tools">
         {compareMode ? (
           <>
-            {compareSelectedIds.size > 0 && (
-              <span className="planning-tools__hint">{compareSelectedIds.size} sélectionné{compareSelectedIds.size > 1 ? 's' : ''}</span>
-            )}
-            {compareSelectedIds.size >= 2 && (
-              <button className="btn btn--primary btn--xs" onClick={() => setShowCompare(true)}>⚖️ Voir ({compareSelectedIds.size})</button>
-            )}
+            <div className="compare-toolbar__state">
+              <span className="compare-toolbar__count">
+                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
+              </span>
+              {compareSelectedIds.size >= 2 && (
+                <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
+              )}
+            </div>
             <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-              ✕ Annuler
+              ✕ Quitter
             </button>
           </>
         ) : (
           <>
             {tab === 'planning' && (
-              <>
-                <button className={`tool-btn${viewMode === 'list' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('list')} title="Vue liste">☰</button>
-                <button className={`tool-btn${viewMode === 'timeline' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('timeline')} title="Vue timeline">🗓</button>
-                <button className={`tool-btn${viewMode === 'agenda' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('agenda')} title="Vue agenda compacte">📆</button>
-              </>
+              <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
+                <span className="tool-btn__icon">{currentViewMeta.icon}</span>
+                <span className="tool-btn__label">{currentViewMeta.label}</span>
+                <span className="tool-btn__chevron">›</span>
+              </button>
             )}
             <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
           </>
@@ -828,7 +846,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       )}
 
       {showCompare && compareActivities.length >= 2 && (
-        <CompareModal activities={compareActivities} onClose={() => setShowCompare(false)} />
+        <CompareModal
+          activities={compareActivities}
+          onClose={() => setShowCompare(false)}
+          onChoose={(chosen) => {
+            // Mark chosen as todo, others as nogo — find each in their day or reserve
+            compareActivities.forEach(a => {
+              const status = a.id === chosen.id ? 'todo' : 'nogo';
+              const day = trip.days.find(d => d.activities.some(x => x.id === a.id));
+              if (day) setActivityStatus(tripId, { type: 'day', dayId: day.id }, a.id, status);
+              else setActivityStatus(tripId, { type: 'reserve' }, a.id, status);
+            });
+            setCompareMode(false);
+            setCompareSelectedIds(new Set());
+          }}
+        />
       )}
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
