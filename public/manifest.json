@@ -1,0 +1,28 @@
+{
+  "name": "Provo — Planifiez vos voyages",
+  "short_name": "Provo",
+  "description": "Planifiez et organisez vos voyages, même hors ligne.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FF6B35",
+  "theme_color": "#FF6B35",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouveau voyage",
+      "short_name": "Nouveau",
+      "description": "Créer un nouveau voyage",
+      "url": "/?action=new",
+      "icons": [{ "src": "icons.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ],
+  "categories": ["travel", "productivity"]
+}
