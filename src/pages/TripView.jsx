@@ -8,6 +8,8 @@ import ShareModal from '../components/ShareModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
+import AgendaView from '../components/AgendaView';
+import LiveDayCard from '../components/LiveDayCard';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
@@ -124,6 +126,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [showCompare, setShowCompare] = useState(false);
   const [viewMode, setViewMode] = useState('timeline');
   const [reserveFilter, setReserveFilter] = useState('all');
+  const [reserveSearch, setReserveSearch] = useState('');
+  const [reserveSort, setReserveSort] = useState('default');
   const [copyDone, setCopyDone] = useState(false);
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
@@ -210,6 +214,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const [y, m, d] = trip.endDate.split('-').map(Number);
     return new Date(y, m - 1, d) < today;
+  })();
+
+  const { isActive, todayDay, todayDayIndex } = (() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const start = new Date(trip.startDate + 'T00:00:00');
+    const end = new Date(trip.endDate + 'T00:00:00');
+    const active = !isPast && start <= now && now <= end;
+    if (!active) return { isActive: false, todayDay: null, todayDayIndex: -1 };
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const idx = trip.days.findIndex(d => d.date === todayStr);
+    return { isActive: true, todayDay: idx >= 0 ? trip.days[idx] : null, todayDayIndex: idx };
   })();
 
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
@@ -318,6 +333,43 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     } catch {}
   };
 
+  const handleExportPDF = () => {
+    const w = window.open('', '_blank');
+    if (!w) { alert("Autoriser les pop-ups pour exporter."); return; }
+    const fmtDur = (h, m) => { const t = h * 60 + m; if (!t) return ''; const hh = Math.floor(t/60), mm = t%60; return mm ? `${hh}h${String(mm).padStart(2,'0')}` : `${hh}h`; };
+    const fmtDate = (s) => new Date(s + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    const daysHtml = trip.days.map((day, i) => {
+      const acts = day.activities.map(a => {
+        const icon = a.status === 'done' ? '✅' : a.status === 'nogo' ? '❌' : '·';
+        const dur = fmtDur(a.durationHours||0, a.durationMinutes||0);
+        const price = parseFloat(a.price) > 0 ? ` — ${parseFloat(a.price).toFixed(2)} €` : '';
+        return `<div class="act ${a.status}"><span class="s">${icon}</span><span class="t">${a.title}</span>${dur ? `<span class="d">${dur}</span>` : ''}${price ? `<span class="p">${price}</span>` : ''}${a.address ? `<div class="addr">📍 ${a.address}</div>` : ''}</div>`;
+      }).join('');
+      const notes = day.notes ? `<div class="notes">📝 ${day.notes}</div>` : '';
+      return `<div class="day"><div class="dh">Jour ${i+1} — ${fmtDate(day.date)}</div>${acts || '<div class="empty">Aucune activité planifiée</div>'}${notes}</div>`;
+    }).join('');
+    w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${trip.name}</title><style>
+      body{font-family:-apple-system,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#1a1a2e;font-size:13px}
+      h1{font-size:22px;margin:0 0 2px}
+      .meta{color:#5a5a7a;margin-bottom:20px}
+      .day{margin-bottom:18px;page-break-inside:avoid}
+      .dh{background:#FF6B35;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:14px}
+      .act{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 12px;border-left:3px solid #FF6B35;margin:4px 0}
+      .act.done{opacity:.7}.act.nogo{opacity:.4;text-decoration:line-through}
+      .s{flex-shrink:0}.t{font-weight:600;flex:1}.d,.p{color:#5a5a7a;font-size:12px}
+      .addr{width:100%;font-size:11px;color:#9090b0;padding-left:18px}
+      .notes{padding:5px 12px;font-size:12px;color:#5a5a7a;border-left:3px solid #FFCF56;margin:4px 0}
+      .empty{padding:5px 12px;color:#9090b0;font-style:italic}
+    </style></head><body>
+    <h1>${trip.emoji || '✈️'} ${trip.name}</h1>
+    ${trip.destination ? `<div class="meta">📍 ${trip.destination}</div>` : ''}
+    <div class="meta">${trip.days.length} jours · ${trip.days.reduce((s,d)=>s+d.activities.length,0)} activités${trip.reserve.length ? ` · ${trip.reserve.length} en réserve` : ''}</div>
+    ${daysHtml}
+    </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
+
   // ─── Drag & Drop ─────────────────────────────────────
   const handleDropOnDay = (targetDayId, activityId) => {
     if (!activityId) return;
@@ -367,6 +419,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
+                  📄 Exporter en PDF
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item trip-header-menu__item--danger" onClick={() => { setShowDeleteTrip(true); setTripMenuOpen(false); }}>
@@ -445,9 +500,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         ) : (
           <>
             {tab === 'planning' && (
-              <button className="tool-btn" onClick={() => setViewMode(v => v === 'list' ? 'timeline' : 'list')} title={viewMode === 'list' ? 'Vue timeline' : 'Vue liste'}>
-                {viewMode === 'list' ? '🗓' : '☰'}
-              </button>
+              <>
+                <button className={`tool-btn${viewMode === 'list' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('list')} title="Vue liste">☰</button>
+                <button className={`tool-btn${viewMode === 'timeline' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('timeline')} title="Vue timeline">🗓</button>
+                <button className={`tool-btn${viewMode === 'agenda' ? ' tool-btn--active' : ''}`} onClick={() => setViewMode('agenda')} title="Vue agenda compacte">📆</button>
+              </>
             )}
             <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
           </>
@@ -460,7 +517,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
-            {viewMode === 'timeline' ? (
+            {isActive && todayDay && (
+              <LiveDayCard
+                day={todayDay}
+                dayIndex={todayDayIndex}
+                onStatusChange={handleStatusChange}
+              />
+            )}
+            {viewMode === 'agenda' ? (
+              <AgendaView
+                days={trip.days}
+                onOpenDetail={(day) => setDetailDay(day)}
+                compareMode={compareMode}
+              />
+            ) : viewMode === 'timeline' ? (
               <TimelineView
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
@@ -574,6 +644,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               </div>
             ) : (
               <>
+                <div className="reserve-search-bar">
+                  <input
+                    className="reserve-search-input"
+                    placeholder="🔍 Rechercher…"
+                    value={reserveSearch}
+                    onChange={e => setReserveSearch(e.target.value)}
+                  />
+                  <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
+                    <option value="default">Ordre d'ajout</option>
+                    <option value="alpha">A–Z</option>
+                    <option value="duration">Durée</option>
+                    <option value="price">Prix</option>
+                  </select>
+                </div>
                 <div className="reserve-filter">
                   <button
                     className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
@@ -595,9 +679,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   onDragLeave={() => setReserveDragOver(false)}
                   onDrop={handleDropOnReserve}
                 />
-                {trip.reserve
-                  .filter(a => reserveFilter === 'all' || a.category === reserveFilter)
-                  .map((activity, i, arr) => (
+                {(() => {
+                  const q = reserveSearch.toLowerCase();
+                  return trip.reserve
+                    .filter(a => {
+                      if (reserveFilter !== 'all' && a.category !== reserveFilter) return false;
+                      if (q) return a.title.toLowerCase().includes(q) || (a.address || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q);
+                      return true;
+                    })
+                    .sort((a, b) => {
+                      if (reserveSort === 'alpha') return a.title.localeCompare(b.title, 'fr');
+                      if (reserveSort === 'duration') return ((a.durationHours||0)*60+(a.durationMinutes||0)) - ((b.durationHours||0)*60+(b.durationMinutes||0));
+                      if (reserveSort === 'price') return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
+                      return 0;
+                    })
+                    .map((activity, i, arr) => (
                   <div key={activity.id} className="reserve-card">
                     <ActivityCard
                       activity={activity}
@@ -626,7 +722,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       ))}
                     </div>
                   </div>
-                ))}
+                  ))
+                })()}
               </>
             )}
           </>

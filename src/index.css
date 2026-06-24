@@ -2018,3 +2018,154 @@ body {
   font-family: inherit;
 }
 .card-action-sheet__cancel:active { opacity: 0.65; }
+
+/* ─── tool-btn ACTIVE STATE ────────────────────────────────── */
+.tool-btn--active {
+  background: rgba(255,255,255,0.35);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* ─── RESERVE SEARCH + SORT ─────────────────────────────────── */
+.reserve-search-bar {
+  display: flex; gap: 8px; padding: 4px 0 8px;
+}
+.reserve-search-input {
+  flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 12px; font-size: 14px; font-family: inherit;
+  background: var(--surface); color: var(--text); outline: none;
+}
+.reserve-search-input:focus { border-color: var(--orange); }
+.reserve-sort-select {
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 13px; font-family: inherit;
+  background: var(--surface); color: var(--text); outline: none;
+  cursor: pointer; flex-shrink: 0;
+}
+
+/* ─── ACTIVITY TEMPLATES ────────────────────────────────────── */
+.templates-row {
+  display: flex; gap: 6px; overflow-x: auto; padding: 0 0 10px;
+  scrollbar-width: none;
+}
+.templates-row::-webkit-scrollbar { display: none; }
+.template-pill {
+  flex-shrink: 0; background: var(--surface-sunken);
+  border: 1.5px solid var(--border-strong); border-radius: 20px;
+  padding: 6px 12px; font-size: 13px; font-weight: 600;
+  color: var(--text); cursor: pointer; white-space: nowrap;
+  font-family: inherit; transition: background 0.1s, border-color 0.1s;
+}
+.template-pill:active { background: var(--orange); color: white; border-color: var(--orange); }
+
+/* ─── LIVE DAY CARD (Feature K) ─────────────────────────────── */
+.live-day-card {
+  margin: 0 0 12px;
+  background: linear-gradient(135deg, var(--orange) 0%, var(--yellow) 100%);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: white;
+  box-shadow: var(--shadow-md);
+}
+.live-day-card__header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.live-day-card__tag {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.8px; opacity: 0.9;
+}
+.live-day-card__time {
+  font-size: 13px; font-weight: 700; opacity: 0.85;
+  background: rgba(0,0,0,0.12); border-radius: 8px; padding: 2px 8px;
+}
+.live-day-card__progress-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.live-day-card__track {
+  flex: 1; height: 5px; background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden;
+}
+.live-day-card__fill {
+  height: 100%; background: white; border-radius: 3px; transition: width 0.4s ease; min-width: 3px;
+}
+.live-day-card__pct {
+  font-size: 12px; font-weight: 700; opacity: 0.9; flex-shrink: 0;
+}
+.live-day-card__now, .live-day-card__next {
+  padding: 7px 10px; border-radius: 8px; margin-bottom: 6px;
+}
+.live-day-card__now { background: rgba(255,255,255,0.2); }
+.live-day-card__next { background: rgba(255,255,255,0.1); }
+.live-day-card__row-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  opacity: 0.75; margin-bottom: 3px;
+}
+.live-day-card__row-content {
+  display: flex; align-items: center; gap: 6px;
+}
+.live-day-card__emoji { font-size: 16px; flex-shrink: 0; }
+.live-day-card__title { font-size: 14px; font-weight: 700; flex: 1; }
+.live-day-card__dur { font-size: 12px; opacity: 0.8; }
+.live-day-card__done-btn {
+  flex-shrink: 0; background: white; color: var(--orange);
+  border: none; border-radius: 14px; padding: 4px 12px;
+  font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.live-day-card__done-btn:active { opacity: 0.8; }
+.live-day-card__done-all {
+  font-size: 13px; opacity: 0.85; text-align: center; padding: 4px 0;
+}
+
+/* ─── AGENDA VIEW (Feature P) ───────────────────────────────── */
+.agenda-view {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 12px 16px 16px;
+}
+.agenda-day {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s;
+  min-height: 90px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.agenda-day:active { box-shadow: none; opacity: 0.85; }
+.agenda-day--empty { opacity: 0.65; }
+.agenda-day__header {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;
+}
+.agenda-day__label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--orange);
+}
+.agenda-day__date {
+  font-size: 11px; font-weight: 600; color: var(--text-muted); text-align: right;
+}
+.agenda-day__emojis {
+  font-size: 15px; letter-spacing: 2px; flex: 1;
+}
+.agenda-day__stats {
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+.agenda-day__stats span {
+  font-size: 11px; color: var(--text-muted); font-weight: 600;
+}
+.agenda-day__progress {
+  display: flex; align-items: center; gap: 6px; margin-top: 2px;
+}
+.agenda-day__track {
+  flex: 1; height: 4px; background: var(--border-strong); border-radius: 2px; overflow: hidden;
+}
+.agenda-day__fill {
+  height: 100%; background: var(--orange); border-radius: 2px; transition: width 0.3s;
+}
+.agenda-day__count {
+  font-size: 10px; color: var(--text-light); font-weight: 700;
+}
+.agenda-day__empty-hint {
+  font-size: 12px; color: var(--text-light); font-style: italic; margin-top: 4px;
+}

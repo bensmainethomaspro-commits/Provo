@@ -3,6 +3,17 @@ import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps,
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '' };
 
+const TEMPLATES = [
+  { emoji: '✈️', label: 'Vol', category: 'trajet', durationHours: 2, durationMinutes: 30 },
+  { emoji: '🚂', label: 'Train', category: 'trajet', durationHours: 3, durationMinutes: 0 },
+  { emoji: '🚗', label: 'Route', category: 'trajet', durationHours: 2, durationMinutes: 0 },
+  { emoji: '🏨', label: 'Hôtel', category: 'repos', durationHours: 1, durationMinutes: 0 },
+  { emoji: '🍽', label: 'Restaurant', category: 'resto', durationHours: 1, durationMinutes: 30 },
+  { emoji: '☕', label: 'Café', category: 'resto', durationHours: 0, durationMinutes: 45 },
+  { emoji: '🏛', label: 'Visite', category: 'visite', durationHours: 2, durationMinutes: 0 },
+  { emoji: '🏖', label: 'Plage', category: 'plage', durationHours: 3, durationMinutes: 0 },
+];
+
 const timeToMin = (t) => { const [h, m] = (t || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
 
 const DEFAULT_DURATIONS = {
@@ -214,6 +225,27 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 );
               })}
               <div className="reserve-picker__divider">— ou créer une nouvelle activité —</div>
+            </div>
+          )}
+
+          {/* Activity templates */}
+          {!isEdit && (
+            <div className="templates-row">
+              {TEMPLATES.map(t => (
+                <button
+                  key={t.label}
+                  type="button"
+                  className="template-pill"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    category: t.category,
+                    durationHours: t.durationHours,
+                    durationMinutes: t.durationMinutes,
+                  }))}
+                >
+                  {t.emoji} {t.label}
+                </button>
+              ))}
             </div>
           )}
 
