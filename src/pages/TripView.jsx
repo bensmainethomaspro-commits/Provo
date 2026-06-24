@@ -146,9 +146,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
   const undoTimerRef = useRef(null);
   const tabContentRef = useRef(null);
+  const tabsRef = useRef(null);
+  const tabSwipeRef = useRef({ startX: null, startY: null, startTime: null });
   const tripRef = useRef(trip);
   const tripMenuRef = useRef(null);
   useEffect(() => { tripRef.current = trip; }, [trip]);
@@ -171,6 +174,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     document.addEventListener('touchstart', handle, { passive: true });
     return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
   }, [tripMenuOpen]);
+
+  // Auto-scroll active tab into view
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const active = el.querySelector('.tab-btn--active');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [tab]);
 
   const pushUndo = (snapshot, msg = 'Action annulée') => {
     undoRef.current = snapshot;
@@ -271,6 +282,49 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const initBudget = parseFloat(trip.initialBudget) || 0;
   const budgetRemaining = initBudget > 0 ? initBudget - stats.spent : stats.remaining;
   const showBudget = initBudget > 0 || stats.total > 0;
+
+  // ─── Tab order + swipe navigation ───────────────────────
+  const orderedTabs = [
+    ...(isActive && todayDay ? ['today'] : []),
+    'planning', 'reserve', 'map', 'valise', 'depenses', 'notes',
+  ];
+
+  const navigateTab = (newTab) => {
+    if (newTab === tab) return;
+    const fromIdx = orderedTabs.indexOf(tab);
+    const toIdx = orderedTabs.indexOf(newTab);
+    const dir = toIdx > fromIdx ? 1 : -1;
+    setSlideClass(dir > 0 ? 'tab-slide-right' : 'tab-slide-left');
+    setTab(newTab);
+    setTimeout(() => setSlideClass(''), 250);
+  };
+
+  const onTabTouchStart = (e) => {
+    if (
+      e.target.closest('.activity-card-swipe') ||
+      e.target.closest('.day-section__header') ||
+      e.target.closest('.leaflet-container') ||
+      e.target.closest('input') ||
+      e.target.closest('select') ||
+      e.target.closest('textarea')
+    ) return;
+    const t = e.touches[0];
+    tabSwipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() };
+  };
+
+  const onTabTouchEnd = (e) => {
+    const s = tabSwipeRef.current;
+    if (s.startX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.startX;
+    const dy = Math.abs(t.clientY - s.startY);
+    const dt = Date.now() - s.startTime;
+    tabSwipeRef.current = { startX: null, startY: null, startTime: null };
+    if (Math.abs(dx) < 55 || dy > Math.abs(dx) * 0.65 || dt > 500) return;
+    const idx = orderedTabs.indexOf(tab);
+    if (dx < 0 && idx < orderedTabs.length - 1) navigateTab(orderedTabs[idx + 1]);
+    else if (dx > 0 && idx > 0) navigateTab(orderedTabs[idx - 1]);
+  };
 
   // ─── Day swipe navigation ─────────────────────────────
   const handleSwipeDay = (dayId, direction) => {
@@ -589,37 +643,37 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tabs */}
-      <div className="tabs">
+      <div className="tabs" ref={tabsRef}>
         {isActive && todayDay && (
-          <button className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => setTab('today')}>
+          <button className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
             🟢 Aujourd'hui
             {todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
               <span className="tab-badge tab-badge--today">{todayDay.activities.filter(a => a.status === 'todo').length}</span>
             )}
           </button>
         )}
-        <button className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => setTab('planning')}>
+        <button className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
           📅 Planning
           {actTotal > 0 && <span className="tab-badge">{actTotal}</span>}
         </button>
-        <button className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => setTab('reserve')}>
+        <button className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
           📦 Réserve
           {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
         </button>
-        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => setTab('map')}>
+        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
           🗺 Carte
         </button>
-        <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => setTab('valise')}>
+        <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
           🎒 Valise
           {(trip.packingList?.length || 0) > 0 && (
             <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
         </button>
-        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => setTab('depenses')}>
+        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
           💸 Dépenses
           {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
         </button>
-        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => setTab('notes')}>
+        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
           📝 Notes
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
         </button>
@@ -656,7 +710,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tab content */}
-      <div ref={tabContentRef} className="tab-content">
+      <div ref={tabContentRef} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
 
         {/* ── AUJOURD'HUI TAB ── */}
         {tab === 'today' && isActive && todayDay && (

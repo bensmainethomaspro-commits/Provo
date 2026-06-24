@@ -286,16 +286,27 @@ body {
   padding: 3px;
   gap: 2px;
   flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tab-btn {
-  flex: 1; padding: 8px 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 8px 12px;
   border: none; background: transparent; border-radius: 8px;
   font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.75);
-  cursor: pointer; transition: all 0.15s;
+  cursor: pointer; transition: background 0.18s, color 0.18s, box-shadow 0.18s;
   display: flex; align-items: center; justify-content: center; gap: 5px;
   text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  -webkit-tap-highlight-color: transparent;
 }
-.tab-btn--active { background: white; color: var(--orange); box-shadow: var(--shadow-sm); text-shadow: none; }
+.tab-btn:active { transform: scale(0.95); }
+.tab-btn--active {
+  background: white; color: var(--trip-accent, var(--orange));
+  box-shadow: var(--shadow-sm); text-shadow: none;
+}
 [data-theme="dark"] .tab-btn--active { background: var(--surface-raised); }
 .tab-badge {
   background: var(--orange); color: white; border-radius: 20px;
@@ -2711,5 +2722,117 @@ body {
 /* ─── COST ESTIMATE IN META ───────────────────────────────── */
 .trip-meta { flex-wrap: wrap; }
 
-/* ─── SORT BY TIME & COPY DAY menu items already use existing day-menu__item ─── */
+/* ─── TAB SLIDE ANIMATIONS ───────────────────────────────── */
+@keyframes tabSlideInRight {
+  from { opacity: 0; transform: translateX(22px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes tabSlideInLeft {
+  from { opacity: 0; transform: translateX(-22px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.tab-slide-right { animation: tabSlideInRight 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+.tab-slide-left  { animation: tabSlideInLeft  0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both; }
+
+/* ─── ACTIVITY CARD STATUS INDICATORS ────────────────────── */
+.activity-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.activity-card--done::before {
+  background: var(--green);
+  opacity: 1;
+}
+.activity-card--nogo::before {
+  background: var(--red);
+  opacity: 0.7;
+}
+
+/* ─── BETTER TRIP CARD DESIGN ────────────────────────────── */
+.trip-card {
+  transition: box-shadow 0.18s, transform 0.15s;
+}
+.trip-card--clickable:active {
+  transform: scale(0.983);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ─── BETTER BUTTON PRESS STATES ─────────────────────────── */
+.btn--primary:active { transform: scale(0.96); filter: brightness(0.92); }
+.btn--secondary:active { transform: scale(0.96); }
+.btn--ghost:active { transform: scale(0.95); }
+
+/* ─── HEADER POLISH ──────────────────────────────────────── */
+.header__title h1 {
+  letter-spacing: -0.3px;
+}
+
+/* ─── ACTIVITY CARD CONTENT SHIFT FIX ───────────────────── */
+.activity-card { padding-left: 16px; }
+
+/* ─── PLANNING TOOLS STRIP ───────────────────────────────── */
+.planning-tools {
+  transition: opacity 0.15s;
+}
+
+/* ─── TAB BADGE DOT ──────────────────────────────────────── */
+.tab-badge--dot {
+  width: 6px; height: 6px; padding: 0; min-width: 0;
+  border-radius: 50%; background: var(--orange);
+}
+
+/* ─── SAFE AREA FAB ──────────────────────────────────────── */
+.fab {
+  bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 10px));
+}
+
+/* ─── DAY SECTION HEADER USING TRIP ACCENT ───────────────── */
+.day-section__header {
+  background: linear-gradient(135deg, var(--trip-accent, var(--orange)) 0%, color-mix(in srgb, var(--trip-accent, var(--orange)) 70%, #FFCF56) 100%);
+}
+
+/* ─── SMOOTHER SHEET OPEN ────────────────────────────────── */
+.sheet {
+  animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ─── ACTIVITY CARD HOVER/ACTIVE FEEDBACK ────────────────── */
+.activity-card-swipe {
+  transition: transform 0.1s;
+}
+
+/* ─── RESERVE CARD POLISH ────────────────────────────────── */
+.reserve-card { transition: box-shadow 0.15s; }
+.reserve-card:hover { box-shadow: var(--shadow-md); }
+
+/* ─── BETTER INLINE CHIP ACTIVE STATES ───────────────────── */
+.day-pill:active,
+.reserve-filter__pill:active,
+.category-btn:active,
+.traveler-assign-chip:active {
+  transform: scale(0.93);
+}
+
+/* ─── TODAY ACT CARD ENTRANCE ────────────────────────────── */
+.today-act-card {
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.today-act-card:active { transform: scale(0.99); }
+
+/* ─── IMPROVED TRIP META PILLS ───────────────────────────── */
+.budget-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: transform 0.1s;
+}
+
+/* ─── TOOL BUTTON POLISH ─────────────────────────────────── */
+.tool-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+.tool-btn:active { transform: scale(0.92); }
 
