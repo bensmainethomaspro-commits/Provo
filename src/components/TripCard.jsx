@@ -3,7 +3,10 @@ import { formatDateShort } from '../utils/helpers';
 
 export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate, onPreview }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const menuRef = useRef(null);
+  const longPressTimer = useRef(null);
+  const longPressFired = useRef(false);
 
   const today = new Date(); today.setHours(0,0,0,0);
   const startDate = new Date(trip.startDate + 'T00:00:00');
@@ -24,6 +27,20 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
   else if (daysUntil === 1) { badgeText = 'Demain !'; badgeVariant = 'urgent'; }
   else { badgeText = `Dans ${daysUntil}j`; badgeVariant = 'upcoming'; }
 
+  const handleTouchStart = () => {
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      navigator.vibrate?.(40);
+      setActionSheetOpen(true);
+    }, 500);
+  };
+
+  const cancelLongPress = () => {
+    clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  };
+
   useEffect(() => {
     if (!menuOpen) return;
     const handleClick = (e) => {
@@ -38,9 +55,13 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
   }, [menuOpen]);
 
   return (
+    <>
     <div
       className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}${trip.coverPhoto ? ' trip-card--has-cover' : ''}`}
       style={trip.coverPhoto ? { backgroundImage: `url(${trip.coverPhoto})` } : undefined}
+      onTouchStart={handleTouchStart}
+      onTouchMove={cancelLongPress}
+      onTouchEnd={cancelLongPress}
     >
       <div
         className="trip-card__emoji"
@@ -93,5 +114,31 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
         )}
       </div>
     </div>
+    {actionSheetOpen && (
+      <div className="card-action-sheet">
+        <div className="card-action-sheet__backdrop" onClick={() => setActionSheetOpen(false)} />
+        <div className="card-action-sheet__panel">
+          <div className="card-action-sheet__handle" />
+          <button className="card-action-sheet__item" onClick={() => { setActionSheetOpen(false); onClick(); }}>
+            ✈️ Ouvrir
+          </button>
+          <button className="card-action-sheet__item" onClick={() => { setActionSheetOpen(false); onEdit(); }}>
+            ✏️ Modifier
+          </button>
+          {onDuplicate && (
+            <button className="card-action-sheet__item" onClick={() => { setActionSheetOpen(false); onDuplicate(); }}>
+              📋 Dupliquer
+            </button>
+          )}
+          <button className="card-action-sheet__item card-action-sheet__item--danger" onClick={() => { setActionSheetOpen(false); onDelete(); }}>
+            🗑️ Supprimer
+          </button>
+          <button className="card-action-sheet__cancel" onClick={() => setActionSheetOpen(false)}>
+            Annuler
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

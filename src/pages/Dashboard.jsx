@@ -11,9 +11,9 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-export default function Dashboard({ onNavigate, darkMode, onToggleDark }) {
+export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip }) {
   const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, importTrip } = useTripsContext();
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(autoNewTrip || false);
   const [editingTrip, setEditingTrip] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [previewTrip, setPreviewTrip] = useState(null);

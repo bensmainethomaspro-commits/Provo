@@ -220,6 +220,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const budgetRemaining = initBudget > 0 ? initBudget - stats.spent : stats.remaining;
   const showBudget = initBudget > 0 || stats.total > 0;
 
+  // ─── Day swipe navigation ─────────────────────────────
+  const handleSwipeDay = (dayId, direction) => {
+    const currentIdx = trip.days.findIndex(d => d.id === dayId);
+    const targetIdx = currentIdx + direction;
+    if (targetIdx < 0 || targetIdx >= trip.days.length) return;
+    const el = document.getElementById(`day-${trip.days[targetIdx].id}`);
+    if (el && tabContentRef.current) {
+      const offset = el.offsetTop - tabContentRef.current.offsetTop;
+      tabContentRef.current.scrollTo({ top: offset, behavior: 'smooth' });
+    }
+  };
+
   // ─── Compare helpers ──────────────────────────────────
   const toggleCompare = (id) => {
     setCompareSelectedIds(prev => {
@@ -489,6 +501,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     pushUndo(trip, 'Ordre optimisé');
                     setDayActivitiesOrder(tripId, dayId, nearestNeighborSort(d.activities));
                   }}
+                  onSwipeDay={(dir) => handleSwipeDay(day.id, dir)}
                   {...sharedDayProps}
                 />
               ))

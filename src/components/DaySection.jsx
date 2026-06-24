@@ -18,6 +18,7 @@ export default function DaySection({
   compareMode, compareSelectedIds, onToggleCompare,
   weather, onTouchDragStart,
   reserve, onAddFromReserve, onAddTravel, onOptimizeOrder,
+  onSwipeDay,
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [localDragId, setLocalDragId] = useState(null);
@@ -26,6 +27,7 @@ export default function DaySection({
   const [sweepIds, setSweepIds] = useState(new Set());
   const [dayMenuOpen, setDayMenuOpen] = useState(false);
   const dayMenuRef = useRef(null);
+  const touchStartRef = useRef(null);
 
   useEffect(() => {
     if (!dayMenuOpen) return;
@@ -79,9 +81,29 @@ export default function DaySection({
     }, 380);
   };
 
+  const handleHeaderTouchStart = (e) => {
+    const t = e.touches[0];
+    touchStartRef.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleHeaderTouchEnd = (e) => {
+    if (!touchStartRef.current || !onSwipeDay) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartRef.current.x;
+    const dy = Math.abs(t.clientY - touchStartRef.current.y);
+    touchStartRef.current = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * dy) {
+      onSwipeDay(dx < 0 ? 1 : -1);
+    }
+  };
+
   return (
-    <div className="day-section">
-      <div className="day-section__header">
+    <div id={`day-${day.id}`} className="day-section">
+      <div
+        className="day-section__header"
+        onTouchStart={handleHeaderTouchStart}
+        onTouchEnd={handleHeaderTouchEnd}
+      >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="day-section__title">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="day-section__date">{formatDate(day.date)}</div>

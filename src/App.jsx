@@ -8,6 +8,15 @@ function AppInner() {
   const { importTrip } = useTripsContext();
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [autoNewTrip] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('action') === 'new') {
+      window.history.replaceState(null, '', window.location.pathname);
+      return true;
+    }
+    return false;
+  });
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('provo_theme');
     if (stored) return stored === 'dark';
@@ -35,6 +44,17 @@ function AppInner() {
   }, [darkMode]);
 
   useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     const hash = window.location.hash;
     if (hash.startsWith('#share=')) {
       try {
@@ -55,6 +75,9 @@ function AppInner() {
 
   return (
     <div className="app">
+      {!isOnline && (
+        <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
+      )}
       {pendingImport && (
         <div className="import-banner">
           <span>🌍 Voyage partagé : <strong>{pendingImport.name}</strong></span>
@@ -65,7 +88,7 @@ function AppInner() {
         </div>
       )}
       {route.page === 'dashboard'
-        ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
+        ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} />
         : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
       }
     </div>
