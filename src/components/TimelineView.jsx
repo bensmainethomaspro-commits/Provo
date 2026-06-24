@@ -1,22 +1,32 @@
 import { useState } from 'react';
 import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
 
-function TlActivity({ activity, slot, onDragStart, onDragEnd }) {
+function TlActivity({ activity, slot, compareMode, compareSelected, onToggleCompare }) {
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
+
+  const handleClick = (e) => {
+    if (compareMode) { e.stopPropagation(); onToggleCompare?.(); }
+  };
+
   return (
     <div
-      className={`tl-activity tl-activity--${activity.status}`}
+      className={`tl-activity tl-activity--${activity.status}${compareMode && compareSelected ? ' tl-activity--compare-selected' : ''}`}
       data-category={activity.category}
-      draggable
+      draggable={!compareMode}
       onDragStart={(e) => {
+        if (compareMode) { e.preventDefault(); return; }
         e.stopPropagation();
         e.dataTransfer.setData('text/plain', activity.id);
         e.dataTransfer.effectAllowed = 'move';
-        onDragStart?.();
       }}
-      onDragEnd={() => onDragEnd?.()}
+      onClick={handleClick}
     >
+      {compareMode && (
+        <div className={`tl-activity__compare-check${compareSelected ? ' tl-activity__compare-check--on' : ''}`}>
+          {compareSelected ? '☑' : '☐'}
+        </div>
+      )}
       <div className="tl-activity__top">
         <span className="tl-activity__emoji">{meta.emoji}</span>
         <span className="tl-activity__title">{activity.title}</span>
@@ -30,7 +40,7 @@ function TlActivity({ activity, slot, onDragStart, onDragEnd }) {
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const totalMin = totalMinutes(active);
@@ -38,6 +48,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
 
   const handleDragOver = (e) => {
+    if (compareMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setIsDragOver(true);
@@ -53,7 +64,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
   return (
     <div
       className={`tl-day${isDragOver ? ' tl-day--drop' : ''}`}
-      onClick={() => onOpenDetail(day)}
+      onClick={() => !compareMode && onOpenDetail(day)}
       onDragOver={handleDragOver}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
       onDrop={handleDrop}
@@ -72,7 +83,14 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
           <div className="tl-day__no-act">Aucune activité</div>
         ) : (
           day.activities.map(a => (
-            <TlActivity key={a.id} activity={a} slot={slots[a.id]} onDragStart={() => {}} onDragEnd={() => {}} />
+            <TlActivity
+              key={a.id}
+              activity={a}
+              slot={slots[a.id]}
+              compareMode={compareMode}
+              compareSelected={compareSelectedIds?.has(a.id)}
+              onToggleCompare={() => onToggleCompare?.(a.id)}
+            />
           ))
         )}
       </div>
@@ -80,7 +98,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop }) {
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -91,6 +109,9 @@ export default function TimelineView({ days, onOpenDetail, onDrop }) {
           totalDays={days.length}
           onOpenDetail={onOpenDetail}
           onDrop={onDrop}
+          compareMode={compareMode}
+          compareSelectedIds={compareSelectedIds}
+          onToggleCompare={onToggleCompare}
         />
       ))}
     </div>

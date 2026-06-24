@@ -84,6 +84,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         openingHours: result.openingHours || f.openingHours,
         lat: result.lat ?? f.lat,
         lon: result.lon ?? f.lon,
+        ...(result.price && !f.price ? { price: String(result.price) } : {}),
         ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
       };
     });

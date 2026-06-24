@@ -122,7 +122,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
-  const [viewMode, setViewMode] = useState('list');
+  const [viewMode, setViewMode] = useState('timeline');
   const [reserveFilter, setReserveFilter] = useState('all');
   const [copyDone, setCopyDone] = useState(false);
   const [undoVisible, setUndoVisible] = useState(false);
@@ -446,6 +446,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
                 onDrop={handleDropOnDay}
+                compareMode={compareMode}
+                compareSelectedIds={compareSelectedIds}
+                onToggleCompare={toggleCompare}
               />
             ) : (
               trip.days.map((day, i) => (

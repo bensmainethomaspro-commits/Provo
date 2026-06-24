@@ -232,9 +232,10 @@ async function reverseGeocode(lat, lon) {
   if (!p?.display_name) return null;
   const a = p.address || {};
   const ex = p.extratags || {};
-  const road = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ');
-  const address = [road, a.city || a.town || a.village || a.municipality, a.country]
-    .filter(Boolean).join(', ') || p.display_name.split(',').slice(0, 3).join(',').trim();
+  const road = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
+  const city = a.city || a.town || a.village || a.municipality;
+  const address = [road || a.suburb || a.neighbourhood, city, a.country]
+    .filter(Boolean).join(', ') || p.display_name.split(',').slice(0, 4).join(',').trim();
   const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop]
     .filter(Boolean).join(' ').toLowerCase();
   const catRules = [
@@ -248,6 +249,8 @@ async function reverseGeocode(lat, lon) {
   ];
   let category = 'visite';
   for (const [re, cat] of catRules) { if (re.test(typeText)) { category = cat; break; } }
+  const chargeMatch = (ex.charge || ex.fee_amount || '').match(/[\d.,]+/);
+  const price = chargeMatch ? parseFloat(chargeMatch[0].replace(',', '.')) || null : null;
   let photoUrl = null;
   const wikiRaw = ex.wikipedia || '';
   const wikiLangMatch = wikiRaw.match(/^([a-z]{2}):/);
@@ -263,6 +266,7 @@ async function reverseGeocode(lat, lon) {
   return {
     title: (p.name || p.display_name.split(',')[0]).trim(),
     address, category, lat, lon,
+    ...(price ? { price } : {}),
     openingHours: ex.opening_hours || '',
     ...(photoUrl ? { photoUrl } : {}),
   };
@@ -424,11 +428,12 @@ export async function fetchPlaceData(query) {
   const a = p.address || {};
   const ex = p.extratags || {};
 
-  // Richer address: road + number, city, country — fallback to display_name excerpt
-  const road = [a.road || a.pedestrian || a.footway, a.house_number].filter(Boolean).join(' ');
-  const address = [road, a.city || a.town || a.village || a.municipality, a.country]
+  // Richer address: number + road, city, country — fallback to display_name excerpt
+  const road = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
+  const city = a.city || a.town || a.village || a.municipality;
+  const address = [road || a.suburb || a.neighbourhood, city, a.country]
     .filter(Boolean).join(', ')
-    || p.display_name.split(',').slice(0, 3).join(',').trim();
+    || p.display_name.split(',').slice(0, 4).join(',').trim();
 
   // Category from ALL available tags (class + type + extratags)
   const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop, ex.sport]
@@ -446,6 +451,9 @@ export async function fetchPlaceData(query) {
   for (const [re, cat] of catRules) {
     if (re.test(typeText)) { category = cat; break; }
   }
+
+  const chargeMatch = (ex.charge || ex.fee_amount || '').match(/[\d.,]+/);
+  const price = chargeMatch ? parseFloat(chargeMatch[0].replace(',', '.')) || null : null;
 
   // Wikipedia thumbnail (preserve the language code)
   let photoUrl = null;
@@ -470,6 +478,7 @@ export async function fetchPlaceData(query) {
     address,
     category,
     photoUrl,
+    ...(price ? { price } : {}),
     openingHours: ex.opening_hours || '',
     lat: parseFloat(p.lat),
     lon: parseFloat(p.lon),
