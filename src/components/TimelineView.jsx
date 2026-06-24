@@ -5,10 +5,6 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
 
-  const handleClick = (e) => {
-    if (compareMode) { e.stopPropagation(); onToggleCompare?.(); }
-  };
-
   return (
     <div
       className={`tl-activity tl-activity--${activity.status}${compareMode && compareSelected ? ' tl-activity--compare-selected' : ''}`}
@@ -20,7 +16,7 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
         e.dataTransfer.setData('text/plain', activity.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onClick={handleClick}
+      onClick={(e) => { if (compareMode) { e.stopPropagation(); onToggleCompare?.(); } }}
     >
       {compareMode && (
         <div className={`tl-activity__compare-check${compareSelected ? ' tl-activity__compare-check--on' : ''}`}>
@@ -40,8 +36,9 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange }) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const totalMin = totalMinutes(active);
   const budget = totalBudget(day.activities);
@@ -64,18 +61,38 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
   return (
     <div
       className={`tl-day${isDragOver ? ' tl-day--drop' : ''}`}
-      onClick={() => !compareMode && onOpenDetail(day)}
+      onClick={() => !compareMode && !notesOpen && onOpenDetail(day)}
       onDragOver={handleDragOver}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
       onDrop={handleDrop}
     >
       <div className="tl-day__header">
-        <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
-        <div className="tl-day__date">{formatDateShort(day.date)}</div>
-        <div className="tl-day__stats">
-          {totalMin > 0 && <span>{formatDuration(totalMin)}</span>}
-          {budget > 0 && <span>{formatPrice(budget)}</span>}
-          {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
+        <div>
+          <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
+          <div className="tl-day__date">{formatDateShort(day.date)}</div>
+          <div className="tl-day__stats">
+            {totalMin > 0 && <span>{formatDuration(totalMin)}</span>}
+            {budget > 0 && <span>{formatPrice(budget)}</span>}
+            {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
+          </div>
+        </div>
+        <div className="tl-day__actions">
+          <button
+            className={`tl-day__action-btn${day.notes ? ' tl-day__action-btn--active' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setNotesOpen(o => !o); }}
+            title="Notes du jour"
+          >
+            📝{day.notes && !notesOpen ? ' •' : ''}
+          </button>
+          {!compareMode && (
+            <button
+              className="tl-day__action-btn"
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(day); }}
+              title="Détail du jour"
+            >
+              ↗
+            </button>
+          )}
         </div>
       </div>
       <div className="tl-day__body">
@@ -94,11 +111,22 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
           ))
         )}
       </div>
+      {notesOpen && (
+        <div className="tl-day__notes-area" onClick={(e) => e.stopPropagation()}>
+          <textarea
+            className="tl-day__notes-input"
+            placeholder="Notes du jour : hébergement, infos pratiques…"
+            value={day.notes || ''}
+            onChange={e => onNotesChange?.(day.id, e.target.value)}
+            autoFocus
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -112,6 +140,7 @@ export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, 
           compareMode={compareMode}
           compareSelectedIds={compareSelectedIds}
           onToggleCompare={onToggleCompare}
+          onNotesChange={onNotesChange}
         />
       ))}
     </div>

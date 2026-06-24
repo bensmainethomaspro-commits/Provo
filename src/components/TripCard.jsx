@@ -38,7 +38,10 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
   }, [menuOpen]);
 
   return (
-    <div className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}`}>
+    <div
+      className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}${trip.coverPhoto ? ' trip-card--has-cover' : ''}`}
+      style={trip.coverPhoto ? { backgroundImage: `url(${trip.coverPhoto})` } : undefined}
+    >
       <div
         className="trip-card__emoji"
         onClick={onPreview ? (e) => { e.stopPropagation(); onPreview(); } : undefined}
@@ -55,6 +58,7 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
           {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)}
           {' · '}{trip.days.length}j
           {actCount > 0 && ` · ${actCount} activité${actCount > 1 ? 's' : ''}`}
+          {(trip.travelers || 1) > 1 && <span className="trip-card__travelers"> · 👥 {trip.travelers}</span>}
         </div>
         {dayActs > 0 && (
           <div className="trip-card__progress-row">

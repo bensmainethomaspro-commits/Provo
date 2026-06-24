@@ -366,6 +366,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </div>
       </div>
 
+      {/* Cover photo */}
+      {trip.coverPhoto && (
+        <div className="trip-cover-photo">
+          <img src={trip.coverPhoto} alt="" className="trip-cover-photo__img" />
+        </div>
+      )}
+
       {/* Trip meta + budget */}
       <div className="trip-meta">
         <span className="trip-meta__item">
@@ -449,6 +456,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
+                onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
               />
             ) : (
               trip.days.map((day, i) => (

@@ -109,6 +109,36 @@ export default function TripSummary({ trip }) {
         </div>
       )}
 
+      {/* Per-person shared costs */}
+      {(trip.travelers || 1) > 1 && (() => {
+        const n = trip.travelers;
+        const transport = allDayActs.filter(a => a.category === 'trajet').reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+        const accommo = allDayActs.filter(a => a.category === 'repos').reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+        const sharedTotal = transport + accommo;
+        if (sharedTotal === 0) return null;
+        return (
+          <div className="trip-summary__card">
+            <div className="trip-summary__card-label">👥 Coûts partagés · {n} voyageurs</div>
+            {transport > 0 && (
+              <div className="trip-summary__per-row">
+                <span>✈️ Transport</span>
+                <span className="trip-summary__per-amount">{formatPrice(transport / n)} / pers.</span>
+              </div>
+            )}
+            {accommo > 0 && (
+              <div className="trip-summary__per-row">
+                <span>🏨 Hébergement</span>
+                <span className="trip-summary__per-amount">{formatPrice(accommo / n)} / pers.</span>
+              </div>
+            )}
+            <div className="trip-summary__per-row trip-summary__per-row--total">
+              <span>Total partagé</span>
+              <span className="trip-summary__per-amount">{formatPrice(sharedTotal / n)} / pers.</span>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Reserve */}
       {trip.reserve.length > 0 && (
         <div className="trip-summary__card trip-summary__card--reserve">

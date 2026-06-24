@@ -45,6 +45,8 @@ export function useTrips() {
     const trip = {
       id, name: data.name, destination: data.destination || '',
       emoji: data.emoji || '✈️',
+      coverPhoto: data.coverPhoto || null,
+      travelers: parseInt(data.travelers) || 1,
       initialBudget: parseFloat(data.initialBudget) || 0,
       startDate: data.startDate, endDate: data.endDate,
       days: buildDays(data.startDate, data.endDate),

@@ -206,6 +206,17 @@ body {
 .trip-card--clickable { cursor: pointer; }
 .trip-card--clickable:active { transform: scale(0.985); box-shadow: none; }
 .trip-card--past { opacity: 0.75; }
+.trip-card--has-cover { background-size: cover !important; background-position: center !important; overflow: hidden; }
+.trip-card--has-cover::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: 0;
+  background: linear-gradient(to right, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.58) 100%);
+}
+.trip-card--has-cover > * { position: relative; z-index: 1; }
+.trip-card--has-cover .trip-card__name { color: #fff; }
+.trip-card--has-cover .trip-card__dest,
+.trip-card--has-cover .trip-card__dates { color: rgba(255,255,255,0.82); }
+.trip-card--has-cover .trip-card__emoji { background: rgba(255,255,255,0.18); }
+.trip-card__travelers { opacity: 0.8; }
 .trip-card__emoji {
   width: 46px; height: 46px;
   background: linear-gradient(135deg, var(--orange), var(--yellow));
@@ -1061,6 +1072,7 @@ body {
   background: linear-gradient(135deg, var(--orange), var(--yellow));
   padding: 12px 14px 10px;
   color: white;
+  display: flex; align-items: flex-start; justify-content: space-between;
 }
 .tl-day__label {
   font-size: 12px; font-weight: 800; text-transform: uppercase;
@@ -1843,3 +1855,75 @@ body {
   color: var(--text);
 }
 .preview-open-btn { margin-top: 4px; }
+
+/* ─── COVER PHOTO STRIP (TripView) ──────────────────────── */
+.trip-cover-photo {
+  width: 100%; height: 150px; overflow: hidden; flex-shrink: 0;
+  position: relative;
+}
+.trip-cover-photo__img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center;
+  display: block;
+}
+.trip-cover-photo::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 50%;
+  background: linear-gradient(to top, rgba(0,0,0,0.3), transparent);
+  pointer-events: none;
+}
+
+/* ─── NEW TRIP MODAL: COVER PHOTO + TRAVELERS ────────────── */
+.cover-photo-preview {
+  position: relative; display: inline-block; border-radius: var(--radius-sm); overflow: hidden;
+}
+.cover-photo-preview__img {
+  display: block; width: 100%; max-height: 110px; object-fit: cover; border-radius: var(--radius-sm);
+}
+.cover-photo-preview__remove {
+  position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.55); color: #fff;
+  border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 11px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.travelers-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.travelers-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--border-strong);
+  background: var(--surface-sunken); color: var(--text); font-size: 18px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.travelers-btn:active { opacity: 0.7; }
+.travelers-count {
+  font-size: 18px; font-weight: 800; color: var(--text); min-width: 24px; text-align: center;
+}
+.travelers-hint {
+  font-size: 12px; color: var(--text-muted); margin-top: -4px; margin-bottom: 6px;
+}
+
+/* ─── TIMELINE: DAY NOTES + ACTIONS ──────────────────────── */
+.tl-day__actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
+.tl-day__action-btn {
+  background: rgba(255,255,255,0.15); border: none; font-size: 13px; cursor: pointer; color: rgba(255,255,255,0.9);
+  padding: 3px 7px; border-radius: 8px; line-height: 1.4;
+  transition: background 0.1s;
+}
+.tl-day__action-btn:hover, .tl-day__action-btn:active { background: rgba(255,255,255,0.3); color: #fff; }
+.tl-day__action-btn--active { background: rgba(255,255,255,0.3); }
+.tl-day__notes-area { padding: 6px 8px 4px; border-top: 1px solid var(--border); }
+.tl-day__notes-input {
+  width: 100%; min-height: 64px; resize: none;
+  border: 1.5px solid var(--border); border-radius: 8px; padding: 8px;
+  font-size: 12px; font-family: inherit; color: var(--text); background: var(--surface);
+  outline: none;
+}
+.tl-day__notes-input:focus { border-color: var(--orange); }
+
+/* ─── TRIP SUMMARY: PER-PERSON COSTS ─────────────────────── */
+.trip-summary__per-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: var(--text-muted); padding: 3px 0;
+}
+.trip-summary__per-row--total {
+  border-top: 1px solid var(--border); margin-top: 4px; padding-top: 6px;
+  font-weight: 700; color: var(--text);
+}
+.trip-summary__per-amount { font-weight: 700; color: var(--orange); }
