@@ -246,7 +246,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   if (!trip) return (
     <div className="trip-view">
       <div className="header">
-        <button className="header__back" onClick={onBack}>←</button>
+        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title"><h1>Voyage introuvable</h1></div>
       </div>
       <div className="tab-content" style={{ textAlign: 'center', paddingTop: 40, color: 'var(--text-muted)' }}>
@@ -576,17 +576,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       )}
       {/* Header */}
       <div className="header">
-        <button className="header__back" onClick={onBack}>←</button>
+        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
+          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           <div className="trip-header-menu-wrap" ref={tripMenuRef}>
-            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options">⋯</button>
+            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
                 <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
@@ -650,38 +650,38 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tabs */}
-      <div className="tabs" ref={tabsRef}>
+      <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
         {isActive && todayDay && (
-          <button className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
+          <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
             🟢 Aujourd'hui
             {todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
-              <span className="tab-badge tab-badge--today">{todayDay.activities.filter(a => a.status === 'todo').length}</span>
+              <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
             )}
           </button>
         )}
-        <button className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
+        <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
           📅 Planning
-          {actTotal > 0 && <span className="tab-badge">{actTotal}</span>}
+          {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
-        <button className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
+        <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
           📦 Réserve
-          {trip.reserve.length > 0 && <span className="tab-badge">{trip.reserve.length}</span>}
+          {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
-        <button className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
+        <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
           💸 Dépenses
-          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge">{trip.expenses.length}</span>}
+          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
         </button>
-        <button className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
+        <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
           🗺 Carte
         </button>
-        <button className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
+        <button role="tab" aria-selected={tab === 'notes'} className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
           📝 Notes
-          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" />}
+          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" aria-label="Notes saisies" />}
         </button>
-        <button className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
+        <button role="tab" aria-selected={tab === 'valise'} className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
           🎒 Valise
           {(trip.packingList?.length || 0) > 0 && (
-            <span className="tab-badge">{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
+            <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
         </button>
       </div>
@@ -717,7 +717,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       </div>
 
       {/* Tab content */}
-      <div ref={tabContentRef} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
+      <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
 
         {/* ── AUJOURD'HUI TAB ── */}
         {tab === 'today' && isActive && todayDay && (

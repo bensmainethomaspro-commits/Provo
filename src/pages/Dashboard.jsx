@@ -68,7 +68,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         <span className="dashboard__logo-icon">🧭</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'}>
+          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           {canInstall && (
@@ -88,7 +88,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          {search && <button className="dashboard__search-clear" onClick={() => setSearch('')}>✕</button>}
+          {search && <button className="dashboard__search-clear" onClick={() => setSearch('')} aria-label="Effacer la recherche">✕</button>}
         </div>
       )}
 

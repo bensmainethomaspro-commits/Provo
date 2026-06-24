@@ -83,10 +83,10 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
         </div>
         {dayActs > 0 && (
           <div className="trip-card__progress-row">
-            <div className="trip-card__progress-track">
+            <div className="trip-card__progress-track" role="progressbar" aria-valuenow={doneActs} aria-valuemin={0} aria-valuemax={dayActs} aria-label={`${doneActs} activités faites sur ${dayActs}`}>
               <div className="trip-card__progress-bar" style={{ width: `${Math.round(doneActs / dayActs * 100)}%` }} />
             </div>
-            <span className="trip-card__progress-label">{doneActs}/{dayActs}</span>
+            <span className="trip-card__progress-label" aria-hidden="true">{doneActs}/{dayActs}</span>
           </div>
         )}
       </div>
@@ -94,7 +94,7 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
         {badgeText}
       </span>
       <div className="trip-card__menu" ref={menuRef}>
-        <button className="trip-card__menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }} title="Options">
+        <button className="trip-card__menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }} title="Options" aria-label={`Options pour ${trip.name}`} aria-expanded={menuOpen} aria-haspopup="menu">
           ⋮
         </button>
         {menuOpen && (
