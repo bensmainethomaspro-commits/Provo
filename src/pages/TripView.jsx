@@ -735,6 +735,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             totalDays={trip.days.length}
             trip={trip}
             onStatusChange={handleStatusChange}
+            reserve={trip.reserve}
+            days={trip.days}
+            onAddFromReserve={(actId) => moveFromReserveToDay(tripId, todayDay.id, actId)}
+            onMoveFromDay={(srcDayId, actId) => moveDayToDay(tripId, srcDayId, todayDay.id, actId)}
           />
         )}
 

@@ -123,6 +123,7 @@ export default function ActivityCard({
             showPolaroid ? 'activity-card--polaroid' : '',
             compareSelected ? 'activity-card--compare-selected' : '',
             isExpandedOrPast ? 'activity-card--expanded' : '',
+            activity.mustDo ? 'activity-card--mustdo' : '',
           ].filter(Boolean).join(' ')}
           style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeRef.current.isDragging ? 'none' : 'transform 0.2s ease' }}
           data-category={activity.category}
@@ -131,7 +132,6 @@ export default function ActivityCard({
           onDragEnd={() => onDragEnd?.()}
           onClick={handleTap}
         >
-          {activity.mustDo && <div className="activity-card__mustdo">⭐</div>}
           {activity.photoUrl && (
             <img
               src={activity.photoUrl}

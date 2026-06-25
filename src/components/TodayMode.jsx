@@ -1,15 +1,25 @@
 import { useState } from 'react';
-import { getCategoryMeta, formatDate, getTimeSlots } from '../utils/helpers';
+import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import Confetti from './Confetti';
 
-export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChange }) {
+export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChange, reserve, days, onAddFromReserve, onMoveFromDay }) {
   const [showConfetti, setShowConfetti] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerTab, setPickerTab] = useState('reserve');
+
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
   const remaining = day.activities.filter(a => a.status === 'todo');
   const done = day.activities.filter(a => a.status === 'done');
   const skipped = day.activities.filter(a => a.status === 'nogo');
   const allDone = day.activities.length > 0 && day.activities.every(a => a.status !== 'todo');
+
+  const otherDays = days?.filter(d => d.id !== day.id) || [];
+  const reserveList = reserve || [];
+
+  const pickerActivities = pickerTab === 'reserve'
+    ? reserveList
+    : (otherDays.find(d => d.id === pickerTab)?.activities || []);
 
   const handleDone = (actId) => {
     onStatusChange(day.id, actId, 'done');
@@ -23,6 +33,15 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
   const handleSkip = (actId) => {
     onStatusChange(day.id, actId, 'nogo');
     vibrate([5, 5, 5]);
+  };
+
+  const handlePick = (activity) => {
+    if (pickerTab === 'reserve') {
+      onAddFromReserve?.(activity.id);
+    } else {
+      onMoveFromDay?.(pickerTab, activity.id);
+    }
+    vibrate([10]);
   };
 
   return (
@@ -124,6 +143,66 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
           <div style={{ fontSize: 48 }}>☀️</div>
           <p>Aucune activité planifiée aujourd'hui.</p>
           <p style={{ fontSize: 13, color: 'var(--text-light)' }}>Profites-en !</p>
+        </div>
+      )}
+
+      {/* Add from reserve / other days */}
+      {(reserveList.length > 0 || otherDays.some(d => d.activities.length > 0)) && (
+        <button className="today-mode__add-btn" onClick={() => setShowPicker(true)}>
+          + Ajouter depuis la réserve ou un autre jour
+        </button>
+      )}
+
+      {/* Picker sheet */}
+      {showPicker && (
+        <div className="act-sheet-overlay" onClick={() => setShowPicker(false)}>
+          <div className="act-sheet today-picker-sheet" onClick={e => e.stopPropagation()}>
+            <div className="act-sheet__title">Ajouter à aujourd'hui</div>
+
+            {/* Source tabs */}
+            <div className="today-picker__tabs">
+              {reserveList.length > 0 && (
+                <button
+                  className={`today-picker__tab${pickerTab === 'reserve' ? ' active' : ''}`}
+                  onClick={() => setPickerTab('reserve')}
+                >
+                  💡 Réserve
+                </button>
+              )}
+              {otherDays.filter(d => d.activities.length > 0).map((d, i) => {
+                const idx = days.findIndex(x => x.id === d.id);
+                return (
+                  <button
+                    key={d.id}
+                    className={`today-picker__tab${pickerTab === d.id ? ' active' : ''}`}
+                    onClick={() => setPickerTab(d.id)}
+                  >
+                    {getDayLabel(idx, days.length)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Activity list */}
+            <div className="today-picker__list">
+              {pickerActivities.length === 0 ? (
+                <div className="today-picker__empty">Aucune activité ici.</div>
+              ) : (
+                pickerActivities.map(act => {
+                  const meta = getCategoryMeta(act.category);
+                  return (
+                    <button key={act.id} className="today-picker__item" onClick={() => { handlePick(act); setShowPicker(false); }}>
+                      <span className="today-picker__emoji">{meta.emoji}</span>
+                      <span className="today-picker__title">{act.title}</span>
+                      <span className="today-picker__add">+</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <button className="act-sheet__cancel" onClick={() => setShowPicker(false)}>Annuler</button>
+          </div>
         </div>
       )}
     </div>
