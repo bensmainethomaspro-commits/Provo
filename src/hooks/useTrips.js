@@ -43,50 +43,173 @@ function generateUUID() {
 
 export function useTrips() {
   const [trips, setTrips] = useState(load);
+  const [userId, setUserId] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const syncedHashRef = useRef({});
+  const syncTimeouts = useRef({});
+  const remoteIdsRef = useRef(new Set());
+  const tripsRef = useRef(trips);
+  useEffect(() => { tripsRef.current = trips; }, [trips]);
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUserId(session?.user?.id ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Charger depuis Supabase à la connexion ────────────────────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('trips')
+        .select('id, data')
+        .order('updated_at', { ascending: false });
+      if (error || !data) return;
+
+      const cloudTrips = data.map(r => r.data).filter(Boolean);
+      cloudTrips.forEach(t => {
+        remoteIdsRef.current.add(t.id);
+        syncedHashRef.current[t.id] = JSON.stringify(t);
+      });
+
+      setTrips(prev => {
+        const cloudIds = new Set(cloudTrips.map(t => t.id));
+        const localOnly = prev.filter(t => !cloudIds.has(t.id));
+        // Upload local-only trips
+        localOnly.forEach(trip => {
+          supabase.from('trips').insert({
+            id: trip.id, owner_id: userId,
+            data: trip, updated_at: new Date().toISOString(),
+          }).then(({ error }) => { if (!error) remoteIdsRef.current.add(trip.id); });
+        });
+        return [...cloudTrips, ...localOnly];
+      });
+    };
+    load();
+  }, [userId]);
+
+  // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); } catch {}
   }, [trips]);
 
-  // Push shared trips to Supabase on change (debounced)
+  // ── Sync vers Supabase (debounced, 700ms) ────────────────────────────────
   useEffect(() => {
-    const sharedTrips = trips.filter(t => t.shareId);
-    if (sharedTrips.length === 0) return;
-    const timer = setTimeout(async () => {
-      for (const trip of sharedTrips) {
-        const hash = JSON.stringify(trip);
-        if (syncedHashRef.current[trip.shareId] === hash) continue;
-        syncedHashRef.current[trip.shareId] = hash;
-        supabase.from('shared_trips').upsert({ share_id: trip.shareId, data: trip }, { onConflict: 'share_id' }).then();
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [trips]);
-
-  // Realtime subscriptions for shared trips
-  const sharedIds = trips.filter(t => t.shareId).map(t => t.shareId).join(',');
-  useEffect(() => {
-    if (!sharedIds) return;
-    const channels = sharedIds.split(',').map(shareId => {
-      return supabase
-        .channel(`trip_${shareId}`)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shared_trips', filter: `share_id=eq.${shareId}` }, (payload) => {
-          const remoteTrip = payload.new?.data;
-          if (!remoteTrip) return;
-          const remoteHash = JSON.stringify(remoteTrip);
-          setTrips(p => {
-            const current = p.find(t => t.shareId === shareId);
-            if (!current) return p;
-            if (JSON.stringify(current) === remoteHash) return p; // our own echo
-            syncedHashRef.current[shareId] = remoteHash; // prevent re-push
-            return p.map(t => t.shareId === shareId ? remoteTrip : t);
+    if (!userId) return;
+    trips.forEach(trip => {
+      const hash = JSON.stringify(trip);
+      if (syncedHashRef.current[trip.id] === hash) return;
+      clearTimeout(syncTimeouts.current[trip.id]);
+      syncTimeouts.current[trip.id] = setTimeout(async () => {
+        syncedHashRef.current[trip.id] = hash;
+        if (remoteIdsRef.current.has(trip.id)) {
+          await supabase.from('trips')
+            .update({ data: trip, updated_at: new Date().toISOString() })
+            .eq('id', trip.id);
+        } else {
+          const { error } = await supabase.from('trips').insert({
+            id: trip.id, owner_id: userId,
+            data: trip, updated_at: new Date().toISOString(),
           });
-        })
-        .subscribe();
+          if (!error) remoteIdsRef.current.add(trip.id);
+        }
+      }, 700);
     });
-    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
-  }, [sharedIds]);
+  }, [trips, userId]);
+
+  // ── Realtime : recevoir les changements des collaborateurs ────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const channel = supabase
+      .channel(`user_trips_${userId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'trips' }, (payload) => {
+        const remoteTrip = payload.new?.data;
+        const tripId = payload.new?.id;
+        if (!remoteTrip || !tripId) return;
+        const remoteHash = JSON.stringify(remoteTrip);
+        setTrips(prev => {
+          const existing = prev.find(t => t.id === tripId);
+          if (!existing) return [...prev, remoteTrip];
+          if (JSON.stringify(existing) === remoteHash) return prev;
+          syncedHashRef.current[tripId] = remoteHash;
+          return prev.map(t => t.id === tripId ? remoteTrip : t);
+        });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trips' }, (payload) => {
+        const newTrip = payload.new?.data;
+        const tripId = payload.new?.id;
+        if (!newTrip || !tripId) return;
+        remoteIdsRef.current.add(tripId);
+        syncedHashRef.current[tripId] = JSON.stringify(newTrip);
+        setTrips(prev => prev.find(t => t.id === tripId) ? prev : [newTrip, ...prev]);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trips' }, (payload) => {
+        const tripId = payload.old?.id;
+        if (tripId) setTrips(prev => prev.filter(t => t.id !== tripId));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [userId]);
+
+  // ── Auth helpers ──────────────────────────────────────────────────────────
+  const signIn = useCallback(async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return error ? { error: error.message } : { success: true };
+  }, []);
+
+  const signUp = useCallback(async (email, password, displayName) => {
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: { data: { display_name: displayName } },
+    });
+    return error ? { error: error.message } : { success: true };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+  }, []);
+
+  // ── Collaboration ─────────────────────────────────────────────────────────
+  const enableCollaboration = useCallback(async (tripId) => {
+    if (!userId) return null;
+    // Essayer d'insérer, sinon récupérer le code existant
+    const { data: existing } = await supabase
+      .from('trip_members')
+      .select('invite_code')
+      .eq('trip_id', tripId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (existing) return existing.invite_code;
+    const { data, error } = await supabase
+      .from('trip_members')
+      .insert({ trip_id: tripId, user_id: userId, role: 'owner' })
+      .select('invite_code')
+      .single();
+    return error ? null : data?.invite_code;
+  }, [userId]);
+
+  const joinTripByInvite = useCallback(async (inviteCode) => {
+    if (!userId) return { error: 'Non connecté' };
+    const { data, error } = await supabase.rpc('join_trip_by_invite', { p_invite_code: inviteCode });
+    if (error) return { error: error.message };
+    if (data?.error) return { error: data.error };
+    const tripData = data?.data;
+    if (tripData) {
+      remoteIdsRef.current.add(data.trip_id);
+      syncedHashRef.current[data.trip_id] = JSON.stringify(tripData);
+      setTrips(prev => prev.find(t => t.id === data.trip_id) ? prev : [tripData, ...prev]);
+    }
+    return { tripId: data?.trip_id };
+  }, [userId]);
+
+  // ── Toutes les mutations existantes ──────────────────────────────────────
 
   const createTrip = useCallback((data) => {
     const id = genId();
@@ -128,7 +251,8 @@ export function useTrips() {
 
   const deleteTrip = useCallback((tripId) => {
     setTrips(p => p.filter(t => t.id !== tripId));
-  }, []);
+    if (userId) supabase.from('trips').delete().eq('id', tripId).then();
+  }, [userId]);
 
   const getTripById = useCallback((id) => trips.find(t => t.id === id), [trips]);
 
@@ -156,7 +280,6 @@ export function useTrips() {
         ...t, days: t.days.map(d => {
           if (d.id !== location.dayId) return d;
           let acts = d.activities.map(a => a.id === activityId ? { ...a, status } : a);
-          // Move done activities to bottom
           if (status === 'done') {
             const target = acts.find(a => a.id === activityId);
             acts = [...acts.filter(a => a.id !== activityId && a.status !== 'done'), ...acts.filter(a => a.id !== activityId && a.status === 'done'), target];
@@ -347,8 +470,7 @@ export function useTrips() {
         name: `${orig.name} (copie)`,
         createdAt: new Date().toISOString(),
         days: orig.days.map(d => ({
-          ...d,
-          id: genId(),
+          ...d, id: genId(),
           activities: d.activities.map(a => ({ ...a, id: genId(), status: 'todo' })),
         })),
         reserve: orig.reserve.map(a => ({ ...a, id: genId(), status: 'todo' })),
@@ -438,14 +560,11 @@ export function useTrips() {
     return id;
   }, []);
 
-  const tripsRef = useRef(trips);
-  useEffect(() => { tripsRef.current = trips; }, [trips]);
-
+  // Partage legacy (shared_trips) — conservé pour compatibilité
   const enableSharing = useCallback(async (tripId) => {
     const trip = tripsRef.current.find(t => t.id === tripId);
     if (!trip) throw new Error('Trip not found');
     if (trip.shareId) return trip.shareId;
-
     const shareId = generateUUID();
     const tripWithShare = { ...trip, shareId };
     const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: tripWithShare });
@@ -472,8 +591,7 @@ export function useTrips() {
   const addExpense = useCallback((tripId, expense) => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, expenses: [...(t.expenses || []), {
-        ...expense,
-        id: genId(),
+        ...expense, id: genId(),
         date: new Date().toISOString().split('T')[0],
       }]
     }));
@@ -532,8 +650,12 @@ export function useTrips() {
 
   return {
     trips,
+    userId,
+    authLoading,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
+    signIn, signUp, signOut,
+    enableCollaboration, joinTripByInvite,
     createTrip, updateTrip, deleteTrip, getTripById,
     addToReserve, addToDay,
     setActivityStatus, updateActivity,
