@@ -51,7 +51,7 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
       s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
 
-      // Auto-scroll the tab content when dragging near viewport edges
+      // Vertical auto-scroll when near top/bottom edges
       const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
       if (sc) {
         const h = window.innerHeight;
@@ -59,6 +59,15 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
         const y = touch.clientY;
         if (y < EDGE) sc.scrollTop -= Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
         else if (y > h - EDGE) sc.scrollTop += Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
+      }
+      // Horizontal auto-scroll for days tab bar when dragging near left/right edges
+      const tabs = s.tabsContainer || (s.tabsContainer = document.querySelector('.tabs'));
+      if (tabs) {
+        const w = window.innerWidth;
+        const HEDGE = 70, HMAX = 10;
+        const x = touch.clientX;
+        if (x < HEDGE) tabs.scrollLeft -= Math.round(HMAX * Math.pow(1 - x / HEDGE, 1.5));
+        else if (x > w - HEDGE) tabs.scrollLeft += Math.round(HMAX * Math.pow(1 - (w - x) / HEDGE, 1.5));
       }
 
       s.ghost.style.visibility = 'hidden';
@@ -319,6 +328,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       e.target.closest('textarea')
     ) return;
     const t = e.touches[0];
+    // Edge-only detection (iOS-style): only trigger from within 60px of screen edges
+    if (t.clientX > 60 && t.clientX < window.innerWidth - 60) return;
     tabSwipeRef.current = { startX: t.clientX, startY: t.clientY, startTime: Date.now() };
   };
 
@@ -589,9 +600,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
-                <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
-                  {copyDone ? '✅ Copié !' : '📋 Copier l\'itinéraire'}
-                </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>

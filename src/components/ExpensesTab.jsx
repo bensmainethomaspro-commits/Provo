@@ -1,7 +1,51 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { formatPrice, CATEGORIES } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
+import SpinWheel from './SpinWheel';
+
+function SwipeableExpenseItem({ exp, onDelete, children }) {
+  const [offset, setOffset] = useState(0);
+  const swRef = useRef({ startX: null, startY: null, dragging: false });
+  const THRESHOLD = 72;
+  const MAX = 88;
+
+  const onTouchStart = (e) => {
+    swRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, dragging: false };
+  };
+  const onTouchMove = (e) => {
+    const s = swRef.current;
+    if (s.startX === null) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const dy = Math.abs(e.touches[0].clientY - s.startY);
+    if (!s.dragging) {
+      if (dx < -8 && Math.abs(dx) > dy) s.dragging = true;
+      else if (dy > 8 || dx > 0) { s.startX = null; return; }
+      else return;
+    }
+    e.stopPropagation();
+    setOffset(Math.max(-MAX, Math.min(0, dx)));
+  };
+  const onTouchEnd = () => {
+    swRef.current.startX = null;
+    if (offset < -THRESHOLD) { onDelete(); setOffset(0); }
+    else setOffset(0);
+  };
+
+  return (
+    <div className="expense-item-swipe" style={{ position: 'relative', overflow: 'hidden' }}>
+      <div className="expense-item-swipe__delete" onClick={onDelete}>🗑️ Supprimer</div>
+      <div
+        style={{ transform: `translateX(${offset}px)`, transition: swRef.current.dragging ? 'none' : 'transform 0.2s ease', position: 'relative' }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function calcDebts(expenses, travelers) {
   if (!travelers.length) return [];
@@ -116,6 +160,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const [error, setError] = useState('');
   const [activeSection, setActiveSection] = useState('list'); // 'list' | 'categories' | 'travelers'
   const [selectedTraveler, setSelectedTraveler] = useState(null);
+  const [showSpinWheel, setShowSpinWheel] = useState(false);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -194,6 +239,12 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           debts={debts}
           onClose={() => setSelectedTraveler(null)}
           onDelete={(id) => { onDeleteTraveler?.(id); setSelectedTraveler(null); }}
+        />
+      )}
+      {showSpinWheel && (
+        <SpinWheel
+          travelers={travelers}
+          onClose={() => setShowSpinWheel(false)}
         />
       )}
       {/* Budget alert */}
@@ -294,6 +345,9 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
       {/* Per-traveler */}
       {activeSection === 'travelers' && (
         <div className="traveler-summary">
+          <button className="spinwheel-trigger-btn" onClick={() => setShowSpinWheel(true)}>
+            🎰 Roue de la fortune — qui paie ?
+          </button>
           {travelerTotals.map(t => {
             const myOwes = debts.filter(d => d.from === t.id);
             const myOwed = debts.filter(d => d.to === t.id);
@@ -333,34 +387,35 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
             const share = n > 0 ? eurAmt / n : eurAmt;
             const catMeta = EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5];
             return (
-              <div key={exp.id} className="expense-item">
-                <div className="expense-item__main">
-                  <span className="expense-item__emoji">{catMeta.emoji}</span>
-                  <div className="expense-item__info">
-                    <div className="expense-item__desc">{exp.description}</div>
-                    <div className="expense-item__meta">
-                      {getName(exp.payerId)} a payé{' '}
-                      <strong>
-                        {exp.currency && exp.currency !== 'EUR'
-                          ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
-                          : formatPrice(eurAmt)
-                        }
-                      </strong>
-                      {n > 0 && ` · ${formatPrice(share)}/pers.`}
-                      {exp.activityId && (() => {
-                        const act = allActivities.find(a => a.id === exp.activityId);
-                        return act ? <span className="expense-item__linked"> · 🔗 {act.title}</span> : null;
-                      })()}
-                    </div>
-                    {n > 0 && (
-                      <div className="expense-item__participants">
-                        {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
+              <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
+                <div className="expense-item">
+                  <div className="expense-item__main">
+                    <span className="expense-item__emoji">{catMeta.emoji}</span>
+                    <div className="expense-item__info">
+                      <div className="expense-item__desc">{exp.description}</div>
+                      <div className="expense-item__meta">
+                        {getName(exp.payerId)} a payé{' '}
+                        <strong>
+                          {exp.currency && exp.currency !== 'EUR'
+                            ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
+                            : formatPrice(eurAmt)
+                          }
+                        </strong>
+                        {n > 0 && ` · ${formatPrice(share)}/pers.`}
+                        {exp.activityId && (() => {
+                          const act = allActivities.find(a => a.id === exp.activityId);
+                          return act ? <span className="expense-item__linked"> · 🔗 {act.title}</span> : null;
+                        })()}
                       </div>
-                    )}
+                      {n > 0 && (
+                        <div className="expense-item__participants">
+                          {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <button className="expense-item__delete" onClick={() => onDeleteExpense(exp.id)}>🗑️</button>
                 </div>
-              </div>
+              </SwipeableExpenseItem>
             );
           })}
         </div>

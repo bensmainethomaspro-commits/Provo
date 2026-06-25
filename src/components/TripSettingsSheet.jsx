@@ -141,6 +141,18 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
             </div>
           )}
 
+          {/* Accommodation address */}
+          <div className="settings-section">
+            <div className="settings-section__title">Adresse d'hébergement</div>
+            <div className="settings-section__desc">Utilisée pour calculer les temps de trajet depuis/vers le logement.</div>
+            <input
+              className="form-input"
+              placeholder="Ex: 5 rue de Rivoli, Paris"
+              value={trip.accommodationAddress || ''}
+              onChange={e => onUpdateTrip(trip.id, { accommodationAddress: e.target.value })}
+            />
+          </div>
+
           {/* Travelers */}
           <div className="settings-section">
             <div className="settings-section__title">Voyageurs</div>

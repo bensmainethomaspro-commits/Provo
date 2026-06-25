@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 const PACKING_CATS = [
-  { id: 'docs',        emoji: '🪪', label: 'Documents' },
-  { id: 'vetements',   emoji: '👕', label: 'Vêtements' },
-  { id: 'electronique',emoji: '🔌', label: 'Électronique' },
-  { id: 'toilette',    emoji: '🧴', label: 'Toilette' },
-  { id: 'sante',       emoji: '💊', label: 'Santé' },
-  { id: 'autre',       emoji: '🎒', label: 'Autre' },
+  { id: 'docs',         emoji: '🪪', label: 'Documents',   color: '#3b82f6' },
+  { id: 'vetements',    emoji: '👕', label: 'Vêtements',   color: '#8b5cf6' },
+  { id: 'electronique', emoji: '🔌', label: 'Électronique', color: '#f59e0b' },
+  { id: 'toilette',     emoji: '🧴', label: 'Toilette',    color: '#06b6d4' },
+  { id: 'sante',        emoji: '💊', label: 'Santé',       color: '#ef4444' },
+  { id: 'autre',        emoji: '🎒', label: 'Autre',       color: '#22c55e' },
 ];
 
 const PRESETS = {
@@ -33,20 +33,38 @@ function ItemRow({ item, onToggle, onDelete, onDragStart, onDragOver, onDrop, on
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
+      style={{ '--cat-color': catMeta?.color || '#999' }}
     >
-      <div className="packing-item__drag-handle" title="Glisser pour réordonner">⠿</div>
-      <button className="packing-item__check" onClick={() => onToggle(item.id)}>
-        {item.checked ? '✅' : '⬜'}
+      <button
+        className="packing-item__check"
+        onClick={() => onToggle(item.id)}
+        aria-label={item.checked ? 'Décocher' : 'Cocher'}
+      >
+        <span className={`packing-item__check-icon${item.checked ? ' packing-item__check-icon--done' : ''}`}>
+          {item.checked ? '✓' : ''}
+        </span>
       </button>
+      <span className={`packing-item__cat-dot`} style={{ background: catMeta?.color }} title={catMeta?.label} />
       <span className="packing-item__text">{item.text}</span>
-      <span className="packing-item__cat-emoji" title={catMeta?.label}>{catMeta?.emoji || '🎒'}</span>
-      <button className="packing-item__delete" onClick={() => onDelete(item.id)}>✕</button>
+      <span className="packing-item__cat-emoji">{catMeta?.emoji || '🎒'}</span>
+      <button className="packing-item__delete" onClick={() => onDelete(item.id)} aria-label="Supprimer">✕</button>
+    </div>
+  );
+}
+
+function HamburgerIcon() {
+  return (
+    <div className="hamburger-icon">
+      <span className="hamburger-icon__line hamburger-icon__line--1" />
+      <span className="hamburger-icon__line hamburger-icon__line--2" />
+      <span className="hamburger-icon__line hamburger-icon__line--3" />
     </div>
   );
 }
 
 export default function PackingList({ items = [], onAdd, onToggle, onDelete, onReorder }) {
   const [activeCat, setActiveCat] = useState('tous');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [grouped, setGrouped] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState(new Set());
   const [newText, setNewText] = useState('');
@@ -54,6 +72,7 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
   const [showPresets, setShowPresets] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const filterRef = useRef(null);
 
   const checkedCount = items.filter(i => i.checked).length;
   const total = items.length;
@@ -64,6 +83,19 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
   const availablePresets = (PRESETS[presetCat] || []).filter(
     p => !items.some(i => i.text.toLowerCase() === p.toLowerCase())
   );
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
+  }, [filterOpen]);
 
   const handleAdd = () => {
     const text = newText.trim();
@@ -80,7 +112,6 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
     });
   };
 
-  // DnD handlers
   const handleDragStart = (e, itemId) => {
     e.dataTransfer.effectAllowed = 'move';
     setDragId(itemId);
@@ -106,9 +137,7 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   const itemProps = (item) => ({
-    item,
-    onToggle,
-    onDelete,
+    item, onToggle, onDelete,
     isDragging: dragId === item.id,
     isDragOver: dragOverId === item.id && dragId !== item.id,
     onDragStart: (e) => handleDragStart(e, item.id),
@@ -129,12 +158,16 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
         {visibleCats.map(cat => {
           const catItems = filtered.filter(i => i.category === cat.id);
           const collapsed = collapsedCats.has(cat.id);
+          const catDone = catItems.filter(i => i.checked).length;
           return (
             <div key={cat.id} className="packing-group">
-              <button className="packing-group__header" onClick={() => toggleCatCollapse(cat.id)}>
-                <span>{cat.emoji} {cat.label}</span>
-                <span className="packing-group__count">{catItems.filter(i => i.checked).length}/{catItems.length}</span>
-                <span className="packing-group__chevron">{collapsed ? '▶' : '▼'}</span>
+              <button className="packing-group__header" onClick={() => toggleCatCollapse(cat.id)}
+                style={{ '--cat-color': cat.color }}>
+                <span className="packing-group__dot" style={{ background: cat.color }} />
+                <span className="packing-group__emoji">{cat.emoji}</span>
+                <span className="packing-group__label">{cat.label}</span>
+                <span className="packing-group__count">{catDone}/{catItems.length}</span>
+                <span className="packing-group__chevron">{collapsed ? '›' : '⌄'}</span>
               </button>
               {!collapsed && renderItems(catItems)}
             </div>
@@ -145,37 +178,89 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
     );
   };
 
+  const activeCatMeta = PACKING_CATS.find(c => c.id === activeCat);
+
   return (
     <div className="packing-list">
-      <div className="packing-list__progress-wrap">
-        <div className="packing-list__progress-track">
-          <div className="packing-list__progress-fill" style={{ width: `${pct}%` }} />
+      {/* Progress ring + stats */}
+      <div className="packing-list__hero">
+        <div className="packing-ring-wrap">
+          <svg className="packing-ring" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="32" className="packing-ring__track" />
+            <circle cx="40" cy="40" r="32" className="packing-ring__fill"
+              style={{
+                strokeDasharray: `${2 * Math.PI * 32}`,
+                strokeDashoffset: `${2 * Math.PI * 32 * (1 - pct / 100)}`,
+              }}
+            />
+          </svg>
+          <div className="packing-ring__pct">{pct}%</div>
         </div>
-        <span className="packing-list__progress-label">
-          {total === 0 ? 'Aucun article' : `${checkedCount} / ${total} préparé${checkedCount > 1 ? 's' : ''} · ${pct}%`}
-        </span>
+        <div className="packing-list__hero-stats">
+          <div className="packing-list__hero-title">
+            {total === 0 ? 'Valise vide' : pct === 100 ? '🎉 Tout prêt !' : pct > 50 ? 'Bonne progression !' : 'En cours...'}
+          </div>
+          <div className="packing-list__hero-sub">
+            {total === 0 ? 'Commençons à préparer' : `${checkedCount} / ${total} article${total > 1 ? 's' : ''} préparé${checkedCount > 1 ? 's' : ''}`}
+          </div>
+          {total > 0 && (
+            <div className="packing-list__cat-pills">
+              {PACKING_CATS.filter(c => items.some(i => i.category === c.id)).map(c => {
+                const done = items.filter(i => i.category === c.id && i.checked).length;
+                const tot = items.filter(i => i.category === c.id).length;
+                return (
+                  <span key={c.id} className="packing-cat-pill" style={{ background: c.color + '22', color: c.color }}>
+                    {c.emoji} {done}/{tot}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Toolbar */}
       <div className="packing-list__toolbar">
-        <div className="packing-list__cats">
+        <div className="packing-filter-wrap" ref={filterRef}>
           <button
-            className={`packing-cat-btn${activeCat === 'tous' ? ' packing-cat-btn--active' : ''}`}
-            onClick={() => setActiveCat('tous')}
+            className={`packing-filter-btn${filterOpen ? ' packing-filter-btn--open' : ''}`}
+            onClick={() => setFilterOpen(o => !o)}
+            aria-label="Filtrer par catégorie"
+            title="Filtrer par catégorie"
           >
-            Tout{total > 0 ? ` (${total})` : ''}
+            <HamburgerIcon />
+            {activeCat !== 'tous' && (
+              <span className="packing-filter-btn__label">
+                {activeCatMeta?.emoji} {activeCatMeta?.label}
+              </span>
+            )}
           </button>
-          {PACKING_CATS.map(cat => {
-            const count = items.filter(i => i.category === cat.id).length;
-            return (
+          {filterOpen && (
+            <div className="packing-filter-menu">
               <button
-                key={cat.id}
-                className={`packing-cat-btn${activeCat === cat.id ? ' packing-cat-btn--active' : ''}`}
-                onClick={() => setActiveCat(cat.id)}
+                className={`packing-filter-menu__item${activeCat === 'tous' ? ' packing-filter-menu__item--active' : ''}`}
+                onClick={() => { setActiveCat('tous'); setFilterOpen(false); }}
               >
-                {cat.emoji}{count > 0 ? ` ${count}` : ''}
+                🎒 Tout {total > 0 && <span className="packing-filter-menu__count">{total}</span>}
               </button>
-            );
-          })}
+              {PACKING_CATS.map(cat => {
+                const count = items.filter(i => i.category === cat.id).length;
+                const done = items.filter(i => i.category === cat.id && i.checked).length;
+                return (
+                  <button
+                    key={cat.id}
+                    className={`packing-filter-menu__item${activeCat === cat.id ? ' packing-filter-menu__item--active' : ''}`}
+                    style={{ '--cat-color': cat.color }}
+                    onClick={() => { setActiveCat(cat.id); setFilterOpen(false); }}
+                  >
+                    <span className="packing-filter-menu__dot" style={{ background: cat.color }} />
+                    {cat.emoji} {cat.label}
+                    {count > 0 && <span className="packing-filter-menu__count">{done}/{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <button
           className={`btn btn--sm ${grouped ? 'btn--primary' : 'btn--secondary'}`}
@@ -204,6 +289,7 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
           className="form-select packing-list__add-cat"
           value={newCat}
           onChange={e => setNewCat(e.target.value)}
+          style={{ borderLeft: `3px solid ${PACKING_CATS.find(c => c.id === newCat)?.color || '#999'}` }}
         >
           {PACKING_CATS.map(c => (
             <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>

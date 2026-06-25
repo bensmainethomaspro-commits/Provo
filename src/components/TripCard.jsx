@@ -58,11 +58,15 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
     <>
     <div
       className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}${trip.coverPhoto ? ' trip-card--has-cover' : ''}`}
-      style={trip.coverPhoto ? { backgroundImage: `url(${trip.coverPhoto})` } : undefined}
       onTouchStart={handleTouchStart}
       onTouchMove={cancelLongPress}
       onTouchEnd={cancelLongPress}
     >
+      {trip.coverPhoto && (
+        <div className="trip-card__cover-wrap">
+          <img src={trip.coverPhoto} className="trip-card__cover-blur" alt="" />
+        </div>
+      )}
       <div
         className="trip-card__emoji"
         onClick={onPreview ? (e) => { e.stopPropagation(); onPreview(); } : undefined}
