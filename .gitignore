@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Android build artifacts (garder le projet android/, exclure les builds)
+android/app/build/
+android/.gradle/
+android/build/
+*.keystore
+*.jks
