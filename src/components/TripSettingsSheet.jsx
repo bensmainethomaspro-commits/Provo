@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 const TRIP_COLORS = [
   { value: '#FF6B35', label: 'Orange' },
@@ -20,11 +20,44 @@ const RECURRING_PRESETS = [
   { emoji: '🚗', title: 'Trajet du jour', category: 'trajet', durationHours: 1, durationMinutes: 0 },
 ];
 
-export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate }) {
+export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate, enableCollaboration, userId }) {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('😀');
+  const [inviteCode, setInviteCode] = useState(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const travelers = trip.tripTravelers || [];
   const dailyTemplates = trip.dailyTemplates || [];
+
+  const handleEnableCollaboration = useCallback(async () => {
+    if (!enableCollaboration) return;
+    setInviteLoading(true);
+    const code = await enableCollaboration(trip.id);
+    setInviteLoading(false);
+    if (code) setInviteCode(code);
+  }, [enableCollaboration, trip.id]);
+
+  const inviteLink = inviteCode ? `${window.location.origin}?invite=${inviteCode}` : null;
+
+  const handleCopy = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* fallback: share sheet */
+    }
+  };
+
+  const handleShare = () => {
+    if (!inviteLink) return;
+    if (navigator.share) {
+      navigator.share({ title: `Rejoins mon voyage "${trip.name}"`, url: inviteLink });
+    } else {
+      handleCopy();
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -188,6 +221,37 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
               </div>
             </div>
           </div>
+
+          {/* Collaboration */}
+          {userId && (
+            <div className="settings-section">
+              <div className="settings-section__title">Collaboration</div>
+              <div className="settings-section__desc">Invite des amis à voir et modifier ce voyage en temps réel.</div>
+              {!inviteCode ? (
+                <button
+                  className="btn btn--primary btn--sm"
+                  onClick={handleEnableCollaboration}
+                  disabled={inviteLoading}
+                  style={{ marginTop: 8 }}
+                >
+                  {inviteLoading ? '…' : '🔗 Générer un lien d\'invitation'}
+                </button>
+              ) : (
+                <div className="collab-invite">
+                  <div className="collab-invite__link">{inviteLink}</div>
+                  <div className="collab-invite__actions">
+                    <button className="btn btn--primary btn--sm" onClick={handleShare}>
+                      📤 Partager
+                    </button>
+                    <button className="btn btn--secondary btn--sm" onClick={handleCopy}>
+                      {copied ? '✅ Copié !' : '📋 Copier'}
+                    </button>
+                  </div>
+                  <p className="collab-invite__note">Ce lien permet à n'importe qui de rejoindre ce voyage. Partage-le uniquement avec des personnes de confiance.</p>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>

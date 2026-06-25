@@ -137,6 +137,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     addExpense, deleteExpense,
     copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
+    enableCollaboration, userId,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -1118,6 +1119,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         setSetting={setSetting}
         onAddDailyTemplate={addDailyTemplate}
         onRemoveDailyTemplate={removeDailyTemplate}
+        enableCollaboration={enableCollaboration}
+        userId={userId}
       />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
