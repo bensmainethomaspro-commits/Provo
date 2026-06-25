@@ -116,9 +116,30 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImporting(true);
     setError('');
     try {
-      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app');
+      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app') || raw.includes('tiktok.com') || raw.includes('vm.tiktok.com') || raw.includes('vt.tiktok.com');
 
       if (isUrl) {
+        // TikTok: fetch oEmbed to pre-fill title and thumbnail
+        const isTikTok = /tiktok\.com/.test(raw);
+        if (isTikTok) {
+          try {
+            const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(raw)}`;
+            const res = await fetch(oembedUrl);
+            if (res.ok) {
+              const data = await res.json();
+              applyResult({
+                title: data.title || data.author_name || '',
+                photoUrl: data.thumbnail_url || '',
+                link: raw,
+                category: 'fun',
+              }, raw);
+              return;
+            }
+          } catch {}
+          applyResult({ title: 'Activité TikTok', link: raw, category: 'fun' }, raw);
+          setError('TikTok importé — ajoute le titre manuellement si besoin.');
+          return;
+        }
         // Google Maps: dedicated parser
         const isGoogleMaps = /google\.com\/maps|goo\.gl|maps\.app/.test(raw);
         if (isGoogleMaps) {
