@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
+import AuthScreen from './components/AuthScreen';
 import { decodeTrip, getSkyGradient } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 
 function AppInner() {
-  const { importTrip, loadSharedTrip } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, signOut, userId, authLoading, joinTripByInvite } = useTripsContext();
   const { settings, setSetting } = useSettings();
+  const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -26,6 +28,13 @@ function AppInner() {
     if (s) { window.history.replaceState(null, '', window.location.pathname); return s; }
     return null;
   });
+  const [pendingInvite] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const inv = p.get('invite');
+    if (inv) { window.history.replaceState(null, '', window.location.pathname); return inv; }
+    return null;
+  });
+  const [inviteError, setInviteError] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('provo_theme');
     if (stored) return stored === 'dark';
@@ -81,6 +90,16 @@ function AppInner() {
       .catch(() => alert('Voyage introuvable ou lien expiré.'));
   }, []);
 
+  // Gérer le lien d'invitation collaboration
+  useEffect(() => {
+    if (!pendingInvite || authLoading) return;
+    if (!userId) { setShowAuth(true); return; }
+    joinTripByInvite(pendingInvite).then(result => {
+      if (result?.error) setInviteError(result.error);
+      else if (result?.tripId) navigate('trip', result.tripId);
+    });
+  }, [pendingInvite, userId, authLoading]);
+
   const navigate = (page, tripId = null) => setRoute({ page, tripId });
 
   const handleImport = () => {
@@ -89,10 +108,25 @@ function AppInner() {
     navigate('trip', id);
   };
 
+  if (showAuth) {
+    return (
+      <AuthScreen
+        onSignIn={async (email, pw) => { const r = await signIn(email, pw); if (!r?.error) setShowAuth(false); return r; }}
+        onSignUp={signUp}
+        onSkip={() => setShowAuth(false)}
+      />
+    );
+  }
+
   return (
     <div className="app">
       {!settings.onboardingDone && (
         <OnboardingOverlay onDone={() => setSetting('onboardingDone', true)} />
+      )}
+      {inviteError && (
+        <div className="offline-banner" style={{ background: 'var(--red)' }}>
+          ❌ {inviteError} <button onClick={() => setInviteError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
+        </div>
       )}
       {!isOnline && (
         <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
@@ -107,7 +141,7 @@ function AppInner() {
         </div>
       )}
       {route.page === 'dashboard'
-        ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} />
+        ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
         : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
       }
     </div>

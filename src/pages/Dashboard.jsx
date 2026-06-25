@@ -12,8 +12,8 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip }) {
-  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip } = useTripsContext();
+export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip, onShowAuth }) {
+  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, userId, signOut } = useTripsContext();
   const [showNew, setShowNew] = useState(autoNewTrip || false);
   const [editingTrip, setEditingTrip] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -76,9 +76,13 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
               📲 Installer
             </button>
           )}
+          {userId
+            ? <button className="btn btn--ghost-white btn--sm" onClick={signOut} title="Se déconnecter">↩ Déco</button>
+            : <button className="btn btn--ghost-white btn--sm" onClick={onShowAuth} title="Se connecter">🔑 Connexion</button>
+          }
         </div>
       </div>
-      <p className="dashboard__logo-sub">Ton gestionnaire de voyages hors-ligne</p>
+      <p className="dashboard__logo-sub">{userId ? '☁️ Voyages synchronisés' : 'Ton gestionnaire de voyages'}</p>
 
       {!isEmpty && (
         <div className="dashboard__search">
