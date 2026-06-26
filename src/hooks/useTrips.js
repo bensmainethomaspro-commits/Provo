@@ -161,7 +161,7 @@ export function useTrips() {
   // ── Auth helpers ──────────────────────────────────────────────────────────
   const signIn = useCallback(async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? { error: error.message } : { success: true };
+    return error ? { error: error.message || error.toString() } : { success: true };
   }, []);
 
   const signUp = useCallback(async (email, password, displayName) => {
@@ -169,7 +169,7 @@ export function useTrips() {
       email, password,
       options: { data: { display_name: displayName } },
     });
-    return error ? { error: error.message } : { success: true };
+    return error ? { error: error.message || error.toString() } : { success: true };
   }, []);
 
   const signOut = useCallback(async () => {

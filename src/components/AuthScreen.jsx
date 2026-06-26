@@ -23,9 +23,10 @@ export default function AuthScreen({ onSignIn, onSignUp, onSkip }) {
     setLoading(false);
 
     if (result?.error) {
-      const msg = result.error;
-      if (msg.includes('Invalid login')) setError('Email ou mot de passe incorrect.');
-      else if (msg.includes('already registered')) setError('Cet email est déjà utilisé. Connecte-toi !');
+      const msg = typeof result.error === 'string' ? result.error : 'Une erreur est survenue. Réessaie.';
+      if (msg.includes('Invalid login') || msg.includes('invalid_credentials')) setError('Email ou mot de passe incorrect.');
+      else if (msg.includes('already registered') || msg.includes('already_registered')) setError('Cet email est déjà utilisé. Connecte-toi !');
+      else if (msg.includes('Database error')) setError('Erreur serveur. Réessaie dans quelques secondes.');
       else setError(msg);
     } else if (mode === 'signup') {
       setDone(true);
