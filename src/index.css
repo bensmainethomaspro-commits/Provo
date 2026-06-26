@@ -4701,6 +4701,12 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   background: var(--surface-sunken);
   border-radius: 10px;
 }
+.traveler-chip-link-picker__empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  flex: 1;
+}
 
 /* ── Emoji picker as horizontal scroll strip ─────────────────────────────── */
 .emoji-grid--scroll {

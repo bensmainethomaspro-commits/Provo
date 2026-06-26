@@ -264,7 +264,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                             title="Dissocier le compte"
                           >✕</button>
                         ) : (
-                          availableMembers.length > 0 && linkingTravelerId !== t.id && (
+                          tripMembers && tripMembers.length > 0 && linkingTravelerId !== t.id && (
                             <button
                               className="traveler-chip__link-btn"
                               onClick={() => setLinkingTravelerId(t.id)}
@@ -276,26 +276,32 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                       </div>
                       {linkingTravelerId === t.id && (
                         <div className="traveler-chip-link-picker">
-                          <select
-                            className="form-select form-select--xs"
-                            defaultValue=""
-                            onChange={e => {
-                              if (!e.target.value) return;
-                              onUpdateTrip(trip.id, {
-                                tripTravelers: travelers.map(x =>
-                                  x.id === t.id ? { ...x, profileId: e.target.value } : x
-                                ),
-                              });
-                              setLinkingTravelerId(null);
-                            }}
-                          >
-                            <option value="">Choisir un compte…</option>
-                            {availableMembers.map(m => (
-                              <option key={m.userId} value={m.userId}>
-                                {m.name || 'Compte sans nom'} · {m.role === 'owner' ? 'Propriétaire' : 'Membre'}
-                              </option>
-                            ))}
-                          </select>
+                          {availableMembers.length === 0 ? (
+                            <span className="traveler-chip-link-picker__empty">
+                              Tous les comptes sont déjà associés — invitez d'autres membres via le lien de collaboration.
+                            </span>
+                          ) : (
+                            <select
+                              className="form-select form-select--xs"
+                              defaultValue=""
+                              onChange={e => {
+                                if (!e.target.value) return;
+                                onUpdateTrip(trip.id, {
+                                  tripTravelers: travelers.map(x =>
+                                    x.id === t.id ? { ...x, profileId: e.target.value } : x
+                                  ),
+                                });
+                                setLinkingTravelerId(null);
+                              }}
+                            >
+                              <option value="">Choisir un compte…</option>
+                              {availableMembers.map(m => (
+                                <option key={m.userId} value={m.userId}>
+                                  {m.name || 'Compte sans nom'} · {m.role === 'owner' ? 'Propriétaire' : 'Membre'}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <button className="btn btn--ghost btn--sm" onClick={() => setLinkingTravelerId(null)}>Annuler</button>
                         </div>
                       )}
