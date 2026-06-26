@@ -57,8 +57,15 @@ export function useTrips() {
       setUserId(session?.user?.id ?? null);
       setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUserId(session?.user?.id ?? null);
+      if (event === 'SIGNED_OUT') {
+        // Supprimer du state et du localStorage les trips qui étaient dans Supabase
+        const remoteIds = remoteIdsRef.current;
+        setTrips(prev => prev.filter(t => !remoteIds.has(t.id)));
+        remoteIdsRef.current = new Set();
+        syncedHashRef.current = {};
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
