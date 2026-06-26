@@ -107,6 +107,10 @@ export function useTrips() {
     setUserId(uid);
     setUserEmail(session?.user?.email ?? null);
     setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
+    // Sync display_name to profiles table so other trip members can see it
+    if (uid && meta.display_name) {
+      supabase.from('profiles').upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' });
+    }
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -727,7 +731,7 @@ export function useTrips() {
     const { error } = await supabase.auth.updateUser({ data: meta });
     if (error) return { error: error.message };
     if (name !== undefined && userId) {
-      await supabase.from('profiles').update({ name }).eq('id', userId);
+      await supabase.from('profiles').upsert({ id: userId, name }, { onConflict: 'id' });
     }
     setUserProfile(prev => ({
       name: name !== undefined ? name : prev.name,
