@@ -9,7 +9,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
-import LiveDayCard from '../components/LiveDayCard';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
@@ -767,13 +766,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
-            {isActive && todayDay && (
-              <LiveDayCard
-                day={todayDay}
-                dayIndex={todayDayIndex}
-                onStatusChange={handleStatusChange}
-              />
-            )}
             {viewMode === 'agenda' ? (
               <AgendaView
                 days={trip.days}

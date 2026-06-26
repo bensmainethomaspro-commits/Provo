@@ -3066,7 +3066,7 @@ body {
   overflow: hidden;
 }
 .trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) {
-  z-index: 100;
+  z-index: 200;
 }
 .trip-card__dropdown-item {
   font-size: 15px; font-weight: 500; padding: 12px 16px;
@@ -4507,6 +4507,8 @@ body {
 .day-section__header { border-radius: 15px 15px 0 0; }
 .day-section__date { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; text-shadow: none; }
 .day-section__title { font-size: 10px; font-weight: 600; letter-spacing: 0.7px; text-shadow: none; }
+.day-section--past { opacity: 0.45; }
+.day-section--past .day-section__header { filter: grayscale(0.4); }
 
 /* ── Sheets ──────────────────────────────────────────────────────────────── */
 .sheet { border-radius: 28px 28px 0 0; }
@@ -4555,6 +4557,10 @@ body {
 .auth-skip { font-size: 14px; font-weight: 600; color: var(--text-muted); }
 .auth-confirm-icon { font-size: 52px; margin-bottom: 10px; }
 .auth-title { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+.auth-forgot { font-size: 13px; font-weight: 600; color: var(--orange); margin-top: 2px; }
+.auth-reset-header { margin-bottom: 16px; text-align: left; }
+.auth-back-btn { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; display: block; }
+.auth-reset-desc { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.5; }
 
 /* ── Trip header menu ────────────────────────────────────────────────────── */
 .trip-header-menu {
@@ -4581,7 +4587,7 @@ body {
 /* ── Micro-interaction: all interactive elements ─────────────────────────── */
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .trip-card--clickable { cursor: pointer; }
-.trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) { z-index: 100; }
+.trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) { z-index: 200; }
 
 /* ── Account members (TripSettingsSheet) ─────────────────────────────────── */
 .settings-subsection { margin-bottom: 14px; }

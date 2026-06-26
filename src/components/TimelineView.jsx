@@ -93,7 +93,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
             <button
               className="tl-day__action-btn"
               onClick={(e) => { e.stopPropagation(); onSweep(day.id); }}
-              title="On verra demain — envoyer en réserve"
+              title="On verra plus tard — envoyer en réserve"
             >🪄</button>
           )}
           <button

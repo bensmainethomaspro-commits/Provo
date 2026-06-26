@@ -57,6 +57,9 @@ export default function DaySection({
   const todoActivities = day.activities.filter(a => a.status === 'todo');
   const hasTodo = todoActivities.length > 0;
 
+  const todayStr = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; })();
+  const isPastDay = !isPastTrip && day.date < todayStr;
+
   // Confetti: trigger when all activities become done/nogo
   const allActsDone = day.activities.length > 0 && day.activities.every(a => a.status !== 'todo');
   useEffect(() => {
@@ -129,7 +132,7 @@ export default function DaySection({
   };
 
   return (
-    <div id={`day-${day.id}`} className="day-section">
+    <div id={`day-${day.id}`} className={`day-section${isPastDay ? ' day-section--past' : ''}`}>
       <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
       <div
         className="day-section__header"
@@ -210,7 +213,7 @@ export default function DaySection({
             onClick={() => setSweepConfirm(true)}
             title="Déplacer tout ce qu'il reste à faire dans la Réserve"
           >
-            🪄 On verra demain
+            🪄 On verra plus tard
           </button>
         )}
       </div>
@@ -377,7 +380,7 @@ export default function DaySection({
       {sweepConfirm && (
         <ConfirmDialog
           icon="🪄"
-          title="On verra demain ?"
+          title="On verra plus tard ?"
           message={`${todoActivities.length} activité${todoActivities.length > 1 ? 's' : ''} "à faire" seront déplacées au sommet de la Réserve.`}
           confirmLabel="Balayer !"
           onConfirm={handleSweepConfirm}

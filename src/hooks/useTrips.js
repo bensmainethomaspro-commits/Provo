@@ -189,6 +189,13 @@ export function useTrips() {
     await supabase.auth.signOut();
   }, []);
 
+  const resetPassword = useCallback(async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    return error ? { error: error.message || error.toString() } : { success: true };
+  }, []);
+
   // ── Collaboration ─────────────────────────────────────────────────────────
   const enableCollaboration = useCallback(async (tripId) => {
     if (!userId) return null;
@@ -661,6 +668,9 @@ export function useTrips() {
     }));
   }, []);
 
+  const userProfileRef = useRef(null);
+  useEffect(() => { userProfileRef.current = userProfile; }, [userProfile]);
+
   const fetchTripMembers = useCallback(async (tripId) => {
     const { data: members, error } = await supabase
       .from('trip_members')
@@ -672,12 +682,13 @@ export function useTrips() {
       .from('profiles')
       .select('id, name')
       .in('id', userIds);
-    return members.map(m => ({
-      userId: m.user_id,
-      role: m.role,
-      name: (profiles || []).find(p => p.id === m.user_id)?.name || null,
-    }));
-  }, []);
+    return members.map(m => {
+      const profileName = (profiles || []).find(p => p.id === m.user_id)?.name || null;
+      // Fallback to local auth metadata for the current user (in case profiles UPDATE is blocked by RLS)
+      const name = profileName || (m.user_id === userId ? (userProfileRef.current?.name || null) : null);
+      return { userId: m.user_id, role: m.role, name };
+    });
+  }, [userId]);
 
   const removeTripMember = useCallback(async (tripId, memberUserId) => {
     const { error } = await supabase
@@ -713,7 +724,7 @@ export function useTrips() {
     authLoading,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
-    signIn, signUp, signOut,
+    signIn, signUp, signOut, resetPassword,
     enableCollaboration, joinTripByInvite,
     createTrip, updateTrip, deleteTrip, getTripById,
     addToReserve, addToDay,
