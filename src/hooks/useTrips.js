@@ -11,6 +11,27 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function buildMealActivities() {
+  return [
+    { id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] },
+    { id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] },
+  ];
+}
+
+function ensureMeals(day) {
+  const hasMidi = day.activities.some(a => a.isMeal && a.mealSlot === 'midi');
+  const hasSoir = day.activities.some(a => a.isMeal && a.mealSlot === 'soir');
+  if (hasMidi && hasSoir) return day;
+  const extras = [];
+  if (!hasMidi) extras.push({ id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] });
+  if (!hasSoir) extras.push({ id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] });
+  return { ...day, activities: [...day.activities, ...extras] };
+}
+
+function migrateMeals(trips) {
+  return trips.map(t => ({ ...t, days: t.days.map(ensureMeals) }));
+}
+
 function buildDays(startDate, endDate) {
   const days = [];
   const [sy, sm, sd] = startDate.split('-').map(Number);
@@ -18,7 +39,7 @@ function buildDays(startDate, endDate) {
   const cursor = new Date(sy, sm - 1, sd);
   const end = new Date(ey, em - 1, ed);
   while (cursor <= end) {
-    days.push({ id: genId(), date: localDateStr(cursor), activities: [], startTime: '09:00' });
+    days.push({ id: genId(), date: localDateStr(cursor), activities: buildMealActivities(), startTime: '09:00' });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
@@ -42,7 +63,7 @@ function generateUUID() {
 }
 
 export function useTrips() {
-  const [trips, setTrips] = useState(load);
+  const [trips, setTrips] = useState(() => migrateMeals(load()));
   const [userId, setUserId] = useState(null);
   const [userEmail, setUserEmail] = useState(null);
   const [userProfile, setUserProfile] = useState({ name: null, emoji: null });
@@ -76,7 +97,7 @@ export function useTrips() {
           data: trip, updated_at: new Date().toISOString(),
         }).then(({ error: e }) => { if (!e) remoteIdsRef.current.add(trip.id); });
       });
-      return [...cloudTrips, ...localOnly];
+      return migrateMeals([...cloudTrips, ...localOnly]);
     });
   }, []);
 

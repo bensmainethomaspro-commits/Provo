@@ -660,21 +660,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
           </span>
         )}
-        {totalTripCost > 0 && (
-          <span className={`budget-pill${budgetExceeded ? ' budget-pill--over' : ' budget-pill--total'}`} title="Estimation coût total (activités + dépenses)">
-            {budgetExceeded ? '🚨' : '💰'} {formatPrice(totalTripCost)} estimé
-          </span>
-        )}
         {showBudget && (
-          <>
-            {initBudget > 0
-              ? <span className="budget-pill budget-pill--total">💰 {formatPrice(initBudget)}</span>
-              : stats.total > 0 && <span className="budget-pill budget-pill--total">💰 {formatPrice(stats.total)}</span>
-            }
-            {stats.spent > 0 && <span className="budget-pill budget-pill--spent">✅ {formatPrice(stats.spent)}</span>}
-            {budgetRemaining > 0 && <span className="budget-pill budget-pill--remaining">💵 {formatPrice(budgetRemaining)}</span>}
-            {budgetRemaining < 0 && <span className="budget-pill budget-pill--over">🚨 {formatPrice(Math.abs(budgetRemaining))} dépassé</span>}
-          </>
+          <div className="budget-inline">
+            {initBudget > 0 && (
+              <span className="budget-inline__item">💰 {formatPrice(initBudget)}</span>
+            )}
+            {totalTripCost > 0 && (
+              <span className="budget-inline__item budget-inline__item--est">🧮 {formatPrice(totalTripCost)} estimé</span>
+            )}
+            {initBudget > 0 && (
+              budgetExceeded
+                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(totalTripCost - initBudget)} dépassé</span>
+                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - totalTripCost)} restants</span>
+            )}
+          </div>
         )}
       </div>
 

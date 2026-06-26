@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { formatPrice, CATEGORIES } from '../utils/helpers';
+import { formatPrice, CATEGORIES, formatDateShort } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
@@ -155,6 +155,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const travelers = trip.tripTravelers || [];
   const expenses = trip.expenses || [];
   const allActivities = trip.days.flatMap(d => d.activities);
+  const activitiesByDay = trip.days.map((d, i) => ({ day: d, dayIdx: i })).filter(({ day }) => day.activities.length > 0);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
   const [error, setError] = useState('');
@@ -485,12 +486,18 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               ))}
             </div>
           </div>
-          {allActivities.length > 0 && (
+          {activitiesByDay.length > 0 && (
             <div className="form-group">
               <label className="form-label">Lier à une activité <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>— optionnel</span></label>
               <select className="form-select" value={form.activityId} onChange={e => set('activityId', e.target.value)}>
                 <option value="">— aucune —</option>
-                {allActivities.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                {activitiesByDay.map(({ day, dayIdx }) => (
+                  <optgroup key={day.id} label={`Jour ${dayIdx + 1} · ${formatDateShort(day.date)}`}>
+                    {day.activities.map(a => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
           )}
