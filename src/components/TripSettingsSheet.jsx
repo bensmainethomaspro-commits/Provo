@@ -26,7 +26,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
   const [inviteCode, setInviteCode] = useState(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [linkingMemberId, setLinkingMemberId] = useState(null);
+  const [linkingTravelerId, setLinkingTravelerId] = useState(null);
   const travelers = trip.tripTravelers || [];
   const dailyTemplates = trip.dailyTemplates || [];
 
@@ -192,7 +192,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
             <div className="settings-section__title">Voyageurs</div>
             <div className="settings-section__desc">Ajoute les personnes du voyage pour assigner les activités et voir le budget par personne.</div>
 
-            {/* Account members — shown when collaboration is enabled */}
+            {/* Account members info — read-only overview + remove */}
             {userId && tripMembers && tripMembers.length > 0 && (
               <div className="settings-subsection">
                 <div className="settings-subsection__label">Membres du compte</div>
@@ -215,73 +215,19 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                             <span className={`member-item__role member-item__role--${member.role}`}>
                               {isOwnerRole ? 'Propriétaire' : 'Membre'}
                             </span>
-                            {linkedTraveler && (
-                              <span className="member-item__linked-to">→ {linkedTraveler.emoji} {linkedTraveler.name}</span>
-                            )}
+                            {linkedTraveler
+                              ? <span className="member-item__linked-to">→ {linkedTraveler.emoji} {linkedTraveler.name}</span>
+                              : <span className="member-item__unlinked">non associé</span>
+                            }
                           </div>
                         </div>
-                        <div className="member-item__actions">
-                          {linkedTraveler ? (
-                            <button
-                              className="member-item__unlink"
-                              onClick={() => onUpdateTrip(trip.id, {
-                                tripTravelers: travelers.map(t =>
-                                  t.id === linkedTraveler.id ? { ...t, profileId: null } : t
-                                ),
-                              })}
-                              title="Dissocier"
-                            >🔗✕</button>
-                          ) : linkingMemberId === member.userId ? (
-                            <div className="member-item__link-picker">
-                              <select
-                                className="form-select form-select--xs"
-                                defaultValue=""
-                                onChange={e => {
-                                  if (!e.target.value) return;
-                                  onUpdateTrip(trip.id, {
-                                    tripTravelers: travelers.map(t =>
-                                      t.id === e.target.value ? { ...t, profileId: member.userId } : t
-                                    ),
-                                  });
-                                  setLinkingMemberId(null);
-                                }}
-                              >
-                                <option value="">Choisir…</option>
-                                {travelers.filter(t => !t.profileId).map(t => (
-                                  <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>
-                                ))}
-                              </select>
-                              <button className="btn btn--ghost btn--sm" onClick={() => setLinkingMemberId(null)}>✕</button>
-                            </div>
-                          ) : (
-                            <div className="member-item__link-actions">
-                              {travelers.some(t => !t.profileId) && (
-                                <button
-                                  className="btn btn--secondary btn--sm"
-                                  onClick={() => setLinkingMemberId(member.userId)}
-                                >🔗 Associer</button>
-                              )}
-                              <button
-                                className="btn btn--ghost btn--sm"
-                                onClick={() => onUpdateTrip(trip.id, {
-                                  tripTravelers: [...travelers, {
-                                    id: Date.now().toString(36),
-                                    name: member.name || 'Voyageur',
-                                    emoji: '😀',
-                                    profileId: member.userId,
-                                  }],
-                                })}
-                              >+ Créer</button>
-                            </div>
-                          )}
-                          {!isCurrentUser && !isOwnerRole && onRemoveMember && (
-                            <button
-                              className="member-item__remove"
-                              onClick={() => onRemoveMember(member.userId)}
-                              title={`Retirer ${member.name || 'ce membre'}`}
-                            >✕</button>
-                          )}
-                        </div>
+                        {!isCurrentUser && !isOwnerRole && onRemoveMember && (
+                          <button
+                            className="member-item__remove"
+                            onClick={() => onRemoveMember(member.userId)}
+                            title={`Retirer ${member.name || 'ce membre'}`}
+                          >✕</button>
+                        )}
                       </div>
                     );
                   })}
@@ -289,17 +235,73 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
               </div>
             )}
 
-            {/* Local travelers */}
+            {/* Travelers — tap to link/unlink an account */}
             {travelers.length > 0 && (
               <div className="travelers-list">
-                {travelers.map(t => (
-                  <div key={t.id} className="traveler-chip">
-                    <span className="traveler-chip__emoji">{t.emoji}</span>
-                    <span className="traveler-chip__name">{t.name}</span>
-                    {t.profileId && <span className="traveler-chip__linked" title="Compte lié">🔗</span>}
-                    <button className="traveler-chip__remove" onClick={() => handleRemoveTraveler(t.id)}>✕</button>
-                  </div>
-                ))}
+                {travelers.map(t => {
+                  const linkedMember = (tripMembers || []).find(m => m.userId === t.profileId);
+                  const availableMembers = (tripMembers || []).filter(m =>
+                    !travelers.some(tr => tr.profileId === m.userId)
+                  );
+                  return (
+                    <div key={t.id} className="traveler-chip-wrap">
+                      <div className="traveler-chip">
+                        <span className="traveler-chip__emoji">{t.emoji}</span>
+                        <span className="traveler-chip__name">{t.name}</span>
+                        {linkedMember && (
+                          <span className="traveler-chip__account" title={`Compte lié : ${linkedMember.name || 'Compte'}`}>
+                            🔗 {linkedMember.name || 'Compte'}
+                          </span>
+                        )}
+                        {linkedMember ? (
+                          <button
+                            className="traveler-chip__unlink-btn"
+                            onClick={() => onUpdateTrip(trip.id, {
+                              tripTravelers: travelers.map(x =>
+                                x.id === t.id ? { ...x, profileId: null } : x
+                              ),
+                            })}
+                            title="Dissocier le compte"
+                          >✕</button>
+                        ) : (
+                          availableMembers.length > 0 && linkingTravelerId !== t.id && (
+                            <button
+                              className="traveler-chip__link-btn"
+                              onClick={() => setLinkingTravelerId(t.id)}
+                              title="Associer à un compte"
+                            >🔗</button>
+                          )
+                        )}
+                        <button className="traveler-chip__remove" onClick={() => handleRemoveTraveler(t.id)}>✕</button>
+                      </div>
+                      {linkingTravelerId === t.id && (
+                        <div className="traveler-chip-link-picker">
+                          <select
+                            className="form-select form-select--xs"
+                            defaultValue=""
+                            onChange={e => {
+                              if (!e.target.value) return;
+                              onUpdateTrip(trip.id, {
+                                tripTravelers: travelers.map(x =>
+                                  x.id === t.id ? { ...x, profileId: e.target.value } : x
+                                ),
+                              });
+                              setLinkingTravelerId(null);
+                            }}
+                          >
+                            <option value="">Choisir un compte…</option>
+                            {availableMembers.map(m => (
+                              <option key={m.userId} value={m.userId}>
+                                {m.name || 'Compte sans nom'} · {m.role === 'owner' ? 'Propriétaire' : 'Membre'}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="btn btn--ghost btn--sm" onClick={() => setLinkingTravelerId(null)}>Annuler</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
             <div className="traveler-add-row">

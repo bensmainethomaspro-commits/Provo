@@ -61,18 +61,6 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
         <form onSubmit={handleSubmit}>
           <div className="modal__body">
             <div className="form-group">
-              <label className="form-label">Emoji du voyage</label>
-              <div className="emoji-grid">
-                {TRIP_EMOJIS.map(em => (
-                  <button key={em} type="button"
-                    className={`emoji-option${form.emoji === em ? ' selected' : ''}`}
-                    onClick={() => set('emoji', em)}>
-                    {em}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="form-group">
               <label className="form-label">Nom du voyage *</label>
               <input className="form-input" placeholder="Ex: Road trip Islande" value={form.name}
                 onChange={e => set('name', e.target.value)} autoFocus />
@@ -136,6 +124,18 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
                 <label className="form-label">Retour</label>
                 <input className="form-input" type="date" value={form.endDate} min={form.startDate}
                   onChange={e => set('endDate', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Emoji du voyage</label>
+              <div className="emoji-grid emoji-grid--scroll">
+                {TRIP_EMOJIS.map(em => (
+                  <button key={em} type="button"
+                    className={`emoji-option${form.emoji === em ? ' selected' : ''}`}
+                    onClick={() => set('emoji', em)}>
+                    {em}
+                  </button>
+                ))}
               </div>
             </div>
             {error && <p style={{ color: 'var(--red)', fontSize: '13px', marginTop: '4px' }}>{error}</p>}
