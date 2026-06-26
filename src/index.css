@@ -3604,7 +3604,7 @@ body {
 [data-theme="dark"] .tbs__exp-badge--paid { background: rgba(255,107,53,0.2); }
 
 /* ── Trip card cover photo blur ──────────────────────────────────────────── */
-.trip-card { position: relative; overflow: hidden; }
+.trip-card { position: relative; }
 .trip-card__cover-wrap {
   position: absolute; inset: 0; z-index: 0;
   pointer-events: none;

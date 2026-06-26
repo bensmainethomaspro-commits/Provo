@@ -305,7 +305,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   // ─── Tab order + swipe navigation ───────────────────────
   const orderedTabs = [
-    ...(isActive && todayDay ? ['today'] : []),
+    ...(isActive ? ['today'] : []),
     'planning', 'reserve', 'depenses', 'map', 'notes', 'valise',
   ];
 
@@ -660,10 +660,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Tabs */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
-        {isActive && todayDay && (
+        {isActive && (
           <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
             🟢 Aujourd'hui
-            {todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
+            {todayDay && todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
               <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
             )}
           </button>
@@ -729,7 +729,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
 
         {/* ── AUJOURD'HUI TAB ── */}
-        {tab === 'today' && isActive && todayDay && (
+        {tab === 'today' && isActive && (
           <TodayMode
             day={todayDay}
             dayIndex={todayDayIndex}
@@ -738,8 +738,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             onStatusChange={handleStatusChange}
             reserve={trip.reserve}
             days={trip.days}
-            onAddFromReserve={(actId) => moveFromReserveToDay(tripId, todayDay.id, actId)}
-            onMoveFromDay={(srcDayId, actId) => moveDayToDay(tripId, srcDayId, todayDay.id, actId)}
+            onAddFromReserve={todayDay ? (actId) => moveFromReserveToDay(tripId, todayDay.id, actId) : null}
+            onMoveFromDay={todayDay ? (srcDayId, actId) => moveDayToDay(tripId, srcDayId, todayDay.id, actId) : null}
           />
         )}
 

@@ -8,6 +8,18 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTab, setPickerTab] = useState('reserve');
 
+  if (!day) {
+    return (
+      <div className="today-mode">
+        <div className="today-mode__empty">
+          <div style={{ fontSize: 48 }}>🗓️</div>
+          <p>Aucun jour planifié pour aujourd'hui.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-light)' }}>Va dans l'onglet Planning pour ajouter des activités.</p>
+        </div>
+      </div>
+    );
+  }
+
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
   const remaining = day.activities.filter(a => a.status === 'todo');
   const done = day.activities.filter(a => a.status === 'done');
