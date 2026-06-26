@@ -12,17 +12,23 @@
   "lang": "fr",
   "icons": [
     {
-      "src": "icons.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],
   "screenshots": [
     {
-      "src": "icons.svg",
+      "src": "apple-touch-icon.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "form_factor": "narrow",
       "label": "Dashboard Provo"
     }
@@ -33,7 +39,7 @@
       "short_name": "Nouveau",
       "description": "Créer un nouveau voyage",
       "url": "/?action=new",
-      "icons": [{ "src": "icons.svg", "sizes": "any", "type": "image/svg+xml" }]
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
   "categories": ["travel", "productivity", "lifestyle"],
