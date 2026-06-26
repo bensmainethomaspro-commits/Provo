@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { formatPrice, CATEGORIES } from '../utils/helpers';
+import { formatPrice, CATEGORIES, formatDateShort } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
@@ -82,6 +82,20 @@ function calcDebts(expenses, travelers) {
   return transfers;
 }
 
+function calcBalances(expenses, travelers) {
+  const bal = {};
+  travelers.forEach(t => { bal[t.id] = 0; });
+  expenses.forEach(exp => {
+    const n = exp.participantIds.length;
+    if (!n) return;
+    const eurAmount = exp.eurAmount ?? exp.amount;
+    const share = eurAmount / n;
+    bal[exp.payerId] = (bal[exp.payerId] || 0) + eurAmount;
+    exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - share; });
+  });
+  return bal;
+}
+
 const EXPENSE_CATEGORIES = [
   { id: 'transport', emoji: '🚗', label: 'Transport' },
   { id: 'hebergement', emoji: '🏨', label: 'Hébergement' },
@@ -155,12 +169,14 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const travelers = trip.tripTravelers || [];
   const expenses = trip.expenses || [];
   const allActivities = trip.days.flatMap(d => d.activities);
+  const activitiesByDay = trip.days.map((d, i) => ({ day: d, dayIdx: i })).filter(({ day }) => day.activities.length > 0);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
   const [error, setError] = useState('');
   const [activeSection, setActiveSection] = useState('list'); // 'list' | 'categories' | 'travelers'
   const [selectedTraveler, setSelectedTraveler] = useState(null);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
+  const [showDebtDetail, setShowDebtDetail] = useState(false);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -195,10 +211,24 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     setShowForm(false);
   };
 
+  const handleSettleDebt = (d) => {
+    onAddExpense({
+      description: 'Remboursement',
+      amount: d.amount,
+      eurAmount: d.amount,
+      payerId: d.from,
+      participantIds: [d.to],
+      currency: 'EUR',
+      expenseCategory: 'autre',
+      isSettlement: true,
+    });
+  };
+
   const totalSpent = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const tripBudget = parseFloat(trip.initialBudget) || 0;
   const budgetOver = tripBudget > 0 && totalSpent > tripBudget;
   const debts = calcDebts(expenses, travelers);
+  const balances = calcBalances(expenses, travelers);
 
   // Category breakdown
   const byCategory = EXPENSE_CATEGORIES.map(cat => {
@@ -298,7 +328,12 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
       {/* Debt settlement */}
       {debts.length > 0 && (
         <div className="debts-card">
-          <div className="debts-card__title">💳 Remboursements</div>
+          <div className="debts-card__header">
+            <div className="debts-card__title">💳 Remboursements</div>
+            <button className="debts-card__detail-btn" onClick={() => setShowDebtDetail(o => !o)}>
+              {showDebtDetail ? '▲ Masquer' : '▼ Détail'}
+            </button>
+          </div>
           {debts.map((d, i) => (
             <div key={i} className="debt-row">
               <span className="debt-emoji">{getEmoji(d.from)}</span>
@@ -308,8 +343,26 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               <span className="debt-arrow">→</span>
               <span className="debt-emoji">{getEmoji(d.to)}</span>
               <span className="debt-to">{getName(d.to)}</span>
+              <button className="debt-settle-btn" onClick={() => handleSettleDebt(d)} title="Marquer comme remboursé">✅</button>
             </div>
           ))}
+          {showDebtDetail && (
+            <div className="debt-detail">
+              <div className="debt-detail__title">📊 Soldes individuels</div>
+              {travelers.map(t => {
+                const b = Math.round((balances[t.id] || 0) * 100) / 100;
+                return (
+                  <div key={t.id} className="debt-detail__row">
+                    <span className="debt-detail__person">{t.emoji} {t.name}</span>
+                    <span className={`debt-detail__bal${b >= 0 ? ' debt-detail__bal--pos' : ' debt-detail__bal--neg'}`}>
+                      {b >= 0 ? '+' : ''}{formatPrice(b)}
+                    </span>
+                  </div>
+                );
+              })}
+              <div className="debt-detail__note">Positif = à recevoir · Négatif = à rembourser</div>
+            </div>
+          )}
         </div>
       )}
       {expenses.length > 0 && debts.length === 0 && (
@@ -413,6 +466,11 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                         </div>
                       )}
                     </div>
+                  <button
+                    className="expense-item__delete"
+                    onClick={e => { e.stopPropagation(); onDeleteExpense(exp.id); }}
+                    title="Supprimer"
+                  >🗑️</button>
                   </div>
                 </div>
               </SwipeableExpenseItem>
@@ -485,12 +543,18 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               ))}
             </div>
           </div>
-          {allActivities.length > 0 && (
+          {activitiesByDay.length > 0 && (
             <div className="form-group">
               <label className="form-label">Lier à une activité <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>— optionnel</span></label>
               <select className="form-select" value={form.activityId} onChange={e => set('activityId', e.target.value)}>
                 <option value="">— aucune —</option>
-                {allActivities.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                {activitiesByDay.map(({ day, dayIdx }) => (
+                  <optgroup key={day.id} label={`Jour ${dayIdx + 1} · ${formatDateShort(day.date)}`}>
+                    {day.activities.map(a => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </div>
           )}

@@ -279,6 +279,26 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         </div>
 
         <div className="sheet__body">
+          {/* Meal quick options */}
+          {isEdit && editActivity?.isMeal && (
+            <div className="meal-quick">
+              <div className="form-label">Où mange-t-on ?</div>
+              <div className="meal-quick__row">
+                {[
+                  { label: '🏠 Maison', title: 'Repas maison', price: '5' },
+                  { label: '🍽️ Restaurant', title: form.title === 'Repas midi' || form.title === 'Repas soir' || form.title === 'Repas maison' || form.title === 'Pique-nique' ? (editActivity.mealSlot === 'midi' ? 'Repas midi' : 'Repas soir') : form.title, price: '20' },
+                  { label: '🧺 Pique-nique', title: 'Pique-nique', price: '10' },
+                ].map(opt => (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    className={`meal-quick__btn${form.title === opt.title ? ' meal-quick__btn--active' : ''}`}
+                    onClick={() => { set('title', opt.title); set('price', opt.price); }}
+                  >{opt.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Reserve picker (when adding to a specific day) */}
           {!isEdit && defaultDayId && reserveActivities?.length > 0 && (
             <div className="reserve-picker">

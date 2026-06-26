@@ -9,7 +9,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
-import LiveDayCard from '../components/LiveDayCard';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
@@ -596,8 +595,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
   const totalTripCost = totalActivitiesCost + totalExpenses;
-  const initBudgetNum = parseFloat(trip.initialBudget) || 0;
-  const budgetExceeded = initBudgetNum > 0 && totalTripCost > initBudgetNum;
+  const doneActivitiesCost = trip.days
+    .flatMap(d => d.activities)
+    .filter(a => a.status === 'done')
+    .reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const alreadySpent = doneActivitiesCost + totalExpenses;
+  const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
   return (
     <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
@@ -661,21 +664,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
           </span>
         )}
-        {totalTripCost > 0 && (
-          <span className={`budget-pill${budgetExceeded ? ' budget-pill--over' : ' budget-pill--total'}`} title="Estimation coût total (activités + dépenses)">
-            {budgetExceeded ? '🚨' : '💰'} {formatPrice(totalTripCost)} estimé
-          </span>
-        )}
         {showBudget && (
-          <>
-            {initBudget > 0
-              ? <span className="budget-pill budget-pill--total">💰 {formatPrice(initBudget)}</span>
-              : stats.total > 0 && <span className="budget-pill budget-pill--total">💰 {formatPrice(stats.total)}</span>
-            }
-            {stats.spent > 0 && <span className="budget-pill budget-pill--spent">✅ {formatPrice(stats.spent)}</span>}
-            {budgetRemaining > 0 && <span className="budget-pill budget-pill--remaining">💵 {formatPrice(budgetRemaining)}</span>}
-            {budgetRemaining < 0 && <span className="budget-pill budget-pill--over">🚨 {formatPrice(Math.abs(budgetRemaining))} dépassé</span>}
-          </>
+          <div className="budget-inline">
+            {initBudget > 0 && (
+              <span className="budget-inline__item">💰 {formatPrice(initBudget)}</span>
+            )}
+            {totalTripCost > 0 && (
+              <span className="budget-inline__item budget-inline__item--est">🧮 {formatPrice(totalTripCost)} estimé</span>
+            )}
+            {initBudget > 0 && (
+              budgetExceeded
+                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(alreadySpent - initBudget)} dépassé</span>
+                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - alreadySpent)} restants</span>
+            )}
+          </div>
         )}
       </div>
 
@@ -767,19 +769,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
-            {isActive && todayDay && (
-              <LiveDayCard
-                day={todayDay}
-                dayIndex={todayDayIndex}
-                onStatusChange={handleStatusChange}
-              />
-            )}
             {viewMode === 'agenda' ? (
               <AgendaView
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
                 compareMode={compareMode}
                 onReorderDay={(dayId, dir) => reorderDay(tripId, dayId, dir)}
+                weatherByDate={weather?.byDate}
               />
             ) : viewMode === 'timeline' ? (
               <TimelineView
@@ -792,6 +788,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
                 onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                 onTouchDragStart={handleTouchDragStart}
+                weatherByDate={weather?.byDate}
               />
             ) : (
               trip.days.map((day, i) => (

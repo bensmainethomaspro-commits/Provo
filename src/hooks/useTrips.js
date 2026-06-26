@@ -11,6 +11,27 @@ function localDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function buildMealActivities() {
+  return [
+    { id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] },
+    { id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] },
+  ];
+}
+
+function ensureMeals(day) {
+  const hasMidi = day.activities.some(a => a.isMeal && a.mealSlot === 'midi');
+  const hasSoir = day.activities.some(a => a.isMeal && a.mealSlot === 'soir');
+  if (hasMidi && hasSoir) return day;
+  const extras = [];
+  if (!hasMidi) extras.push({ id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] });
+  if (!hasSoir) extras.push({ id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] });
+  return { ...day, activities: [...day.activities, ...extras] };
+}
+
+function migrateMeals(trips) {
+  return trips.map(t => ({ ...t, days: t.days.map(ensureMeals) }));
+}
+
 function buildDays(startDate, endDate) {
   const days = [];
   const [sy, sm, sd] = startDate.split('-').map(Number);
@@ -18,7 +39,7 @@ function buildDays(startDate, endDate) {
   const cursor = new Date(sy, sm - 1, sd);
   const end = new Date(ey, em - 1, ed);
   while (cursor <= end) {
-    days.push({ id: genId(), date: localDateStr(cursor), activities: [], startTime: '09:00' });
+    days.push({ id: genId(), date: localDateStr(cursor), activities: buildMealActivities(), startTime: '09:00' });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
@@ -42,8 +63,10 @@ function generateUUID() {
 }
 
 export function useTrips() {
-  const [trips, setTrips] = useState(load);
+  const [trips, setTrips] = useState(() => migrateMeals(load()));
   const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  const [userProfile, setUserProfile] = useState({ name: null, emoji: null });
   const [authLoading, setAuthLoading] = useState(true);
   const syncedHashRef = useRef({});
   const syncTimeouts = useRef({});
@@ -74,23 +97,33 @@ export function useTrips() {
           data: trip, updated_at: new Date().toISOString(),
         }).then(({ error: e }) => { if (!e) remoteIdsRef.current.add(trip.id); });
       });
-      return [...cloudTrips, ...localOnly];
+      return migrateMeals([...cloudTrips, ...localOnly]);
     });
+  }, []);
+
+  const applySession = useCallback((session) => {
+    const uid = session?.user?.id ?? null;
+    const meta = session?.user?.user_metadata || {};
+    setUserId(uid);
+    setUserEmail(session?.user?.email ?? null);
+    setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
+    // Sync display_name to profiles table so other trip members can see it
+    if (uid && meta.display_name) {
+      supabase.from('profiles').upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' });
+    }
   }, []);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
+      applySession(session);
       setAuthLoading(false);
-      if (uid) loadFromSupabase(uid);
+      if (session?.user?.id) loadFromSupabase(session.user.id);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
+      applySession(session);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (uid) loadFromSupabase(uid);
+        if (session?.user?.id) loadFromSupabase(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setTrips([]);
         remoteIdsRef.current = new Set();
@@ -98,7 +131,7 @@ export function useTrips() {
       }
     });
     return () => subscription.unsubscribe();
-  }, [loadFromSupabase]);
+  }, [loadFromSupabase, applySession]);
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
@@ -179,6 +212,13 @@ export function useTrips() {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+  }, []);
+
+  const resetPassword = useCallback(async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    return error ? { error: error.message || error.toString() } : { success: true };
   }, []);
 
   // ── Collaboration ─────────────────────────────────────────────────────────
@@ -653,6 +693,9 @@ export function useTrips() {
     }));
   }, []);
 
+  const userProfileRef = useRef(null);
+  useEffect(() => { userProfileRef.current = userProfile; }, [userProfile]);
+
   const fetchTripMembers = useCallback(async (tripId) => {
     const { data: members, error } = await supabase
       .from('trip_members')
@@ -664,12 +707,13 @@ export function useTrips() {
       .from('profiles')
       .select('id, name')
       .in('id', userIds);
-    return members.map(m => ({
-      userId: m.user_id,
-      role: m.role,
-      name: (profiles || []).find(p => p.id === m.user_id)?.name || null,
-    }));
-  }, []);
+    return members.map(m => {
+      const profileName = (profiles || []).find(p => p.id === m.user_id)?.name || null;
+      // Fallback to local auth metadata for the current user (in case profiles UPDATE is blocked by RLS)
+      const name = profileName || (m.user_id === userId ? (userProfileRef.current?.name || null) : null);
+      return { userId: m.user_id, role: m.role, name };
+    });
+  }, [userId]);
 
   const removeTripMember = useCallback(async (tripId, memberUserId) => {
     const { error } = await supabase
@@ -680,13 +724,32 @@ export function useTrips() {
     return error ? { error: error.message } : { success: true };
   }, []);
 
+  const updateProfile = useCallback(async ({ name, emoji }) => {
+    const meta = {};
+    if (name !== undefined) meta.display_name = name;
+    if (emoji !== undefined) meta.profile_emoji = emoji;
+    const { error } = await supabase.auth.updateUser({ data: meta });
+    if (error) return { error: error.message };
+    if (name !== undefined && userId) {
+      await supabase.from('profiles').upsert({ id: userId, name }, { onConflict: 'id' });
+    }
+    setUserProfile(prev => ({
+      name: name !== undefined ? name : prev.name,
+      emoji: emoji !== undefined ? emoji : prev.emoji,
+    }));
+    return { success: true };
+  }, [userId]);
+
   return {
     trips,
     userId,
+    userEmail,
+    userProfile,
+    updateProfile,
     authLoading,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
-    signIn, signUp, signOut,
+    signIn, signUp, signOut, resetPassword,
     enableCollaboration, joinTripByInvite,
     createTrip, updateTrip, deleteTrip, getTripById,
     addToReserve, addToDay,

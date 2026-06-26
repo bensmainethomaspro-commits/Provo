@@ -4,6 +4,7 @@ import TripCard from '../components/TripCard';
 import TripPreviewSheet from '../components/TripPreviewSheet';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AccountSheet from '../components/AccountSheet';
 import { getCategoryMeta, formatDate } from '../utils/helpers';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
@@ -13,11 +14,12 @@ function todayStr() {
 }
 
 export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip, onShowAuth }) {
-  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, userId, signOut } = useTripsContext();
+  const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, userId, signOut, userEmail, userProfile, updateProfile } = useTripsContext();
   const [showNew, setShowNew] = useState(autoNewTrip || false);
   const [editingTrip, setEditingTrip] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [previewTrip, setPreviewTrip] = useState(null);
+  const [showAccount, setShowAccount] = useState(false);
   const [search, setSearch] = useState('');
   const { canInstall, install } = useInstallPrompt();
 
@@ -77,7 +79,16 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
             </button>
           )}
           {userId
-            ? <button className="btn btn--ghost-white btn--sm" onClick={signOut} title="Se déconnecter">↩ Déco</button>
+            ? (
+              <button
+                className="btn btn--account-avatar"
+                onClick={() => setShowAccount(true)}
+                title="Mon compte"
+                aria-label="Mon compte"
+              >
+                {userProfile?.emoji || '😀'}
+              </button>
+            )
             : <button className="btn btn--ghost-white btn--sm" onClick={onShowAuth} title="Se connecter">🔑 Connexion</button>
           }
         </div>
@@ -217,6 +228,20 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           trip={previewTrip}
           onClose={() => setPreviewTrip(null)}
           onOpen={() => { setPreviewTrip(null); onNavigate('trip', previewTrip.id); }}
+        />
+      )}
+
+      {showAccount && (
+        <AccountSheet
+          onClose={() => setShowAccount(false)}
+          userId={userId}
+          userEmail={userEmail}
+          userProfile={userProfile}
+          onUpdateProfile={updateProfile}
+          signOut={signOut}
+          darkMode={darkMode}
+          onToggleDark={onToggleDark}
+          trips={[...currentTrips, ...pastTrips]}
         />
       )}
     </div>

@@ -8,7 +8,7 @@ import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, signOut, userId, authLoading, joinTripByInvite } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
@@ -113,6 +113,7 @@ function AppInner() {
       <AuthScreen
         onSignIn={async (email, pw) => { const r = await signIn(email, pw); if (!r?.error) setShowAuth(false); return r; }}
         onSignUp={signUp}
+        onResetPassword={resetPassword}
         onSkip={() => setShowAuth(false)}
       />
     );

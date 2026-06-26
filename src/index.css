@@ -736,6 +736,20 @@ body {
 .budget-pill--spent    { background: rgba(239,68,68,0.2); color: #fee2e2; }
 .budget-pill--remaining { background: rgba(34,197,94,0.25); color: #dcfce7; }
 
+/* ── Budget inline row (one-line budget display in trip header) ── */
+.budget-inline {
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+  background: rgba(0,0,0,0.18); border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 800;
+  white-space: nowrap; overflow: hidden;
+}
+.budget-inline__item { color: rgba(255,255,255,0.9); white-space: nowrap; }
+.budget-inline__item + .budget-inline__item::before { content: '·'; margin-right: 6px; opacity: 0.5; }
+.budget-inline__item--ok  { color: #86efac; }
+.budget-inline__item--est { color: rgba(255,255,255,0.75); }
+.budget-inline__item--over { color: #fca5a5; }
+
 /* Empty day add button */
 .day-section__empty-actions { display: flex; align-items: center; justify-content: center; gap: 10px; }
 
@@ -1131,6 +1145,7 @@ body {
   font-size: 12px; font-weight: 600; opacity: 0.9;
 }
 .tl-day__empty-hint { opacity: 0.7; font-style: italic; }
+.tl-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; margin-top: 3px; opacity: 0.85; }
 
 .tl-day__body {
   padding: 6px 8px 8px;
@@ -2190,6 +2205,7 @@ body {
 .agenda-day__emojis {
   font-size: 15px; letter-spacing: 2px; flex: 1;
 }
+.agenda-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; opacity: 0.85; margin-left: auto; }
 .agenda-day__stats {
   display: flex; gap: 8px; flex-wrap: wrap;
 }
@@ -2456,8 +2472,21 @@ body {
   border-color: color-mix(in srgb, var(--green) 30%, transparent);
   text-align: center; font-size: 14px; font-weight: 700; color: var(--green);
 }
-.debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; }
+.debts-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+.debts-card__detail-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 2px 8px; }
+.debts-card__detail-btn:hover { color: var(--text); }
 .debt-row { display: flex; align-items: center; gap: 5px; font-size: 13px; margin: 5px 0; flex-wrap: wrap; }
+.debt-settle-btn { background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 2px; margin-left: auto; opacity: 0.7; }
+.debt-settle-btn:hover { opacity: 1; }
+.debt-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.debt-detail__title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px; }
+.debt-detail__row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.debt-detail__person { color: var(--text); font-weight: 600; }
+.debt-detail__bal { font-weight: 800; font-size: 13px; }
+.debt-detail__bal--pos { color: var(--green); }
+.debt-detail__bal--neg { color: var(--red); }
+.debt-detail__note { font-size: 11px; color: var(--text-light); margin-top: 6px; font-style: italic; }
 .debt-emoji { font-size: 16px; }
 .debt-from, .debt-to { font-weight: 700; color: var(--text); }
 .debt-arrow { color: var(--text-light); font-size: 11px; }
@@ -3066,7 +3095,7 @@ body {
   overflow: hidden;
 }
 .trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) {
-  z-index: 100;
+  z-index: 200;
 }
 .trip-card__dropdown-item {
   font-size: 15px; font-weight: 500; padding: 12px 16px;
@@ -4507,6 +4536,8 @@ body {
 .day-section__header { border-radius: 15px 15px 0 0; }
 .day-section__date { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; text-shadow: none; }
 .day-section__title { font-size: 10px; font-weight: 600; letter-spacing: 0.7px; text-shadow: none; }
+.day-section--past { opacity: 0.45; }
+.day-section--past .day-section__header { filter: grayscale(0.4); }
 
 /* ── Sheets ──────────────────────────────────────────────────────────────── */
 .sheet { border-radius: 28px 28px 0 0; }
@@ -4538,6 +4569,13 @@ body {
 }
 .form-label { font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text-muted); }
 
+/* ── Meal quick options (AddActivitySheet) ─────────────────────────────── */
+.meal-quick { margin-bottom: 16px; padding: 12px 14px; background: var(--surface-sunken); border-radius: 14px; }
+.meal-quick__row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.meal-quick__btn { padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 700; background: var(--surface); border: 1.5px solid var(--border); color: var(--text); transition: all 0.15s; }
+.meal-quick__btn--active { background: var(--orange); border-color: var(--orange); color: white; }
+.meal-quick__btn:active { transform: scale(0.96); }
+
 /* ── Auth screen ─────────────────────────────────────────────────────────── */
 .auth-card {
   border-radius: 28px;
@@ -4555,6 +4593,10 @@ body {
 .auth-skip { font-size: 14px; font-weight: 600; color: var(--text-muted); }
 .auth-confirm-icon { font-size: 52px; margin-bottom: 10px; }
 .auth-title { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+.auth-forgot { font-size: 13px; font-weight: 600; color: var(--orange); margin-top: 2px; }
+.auth-reset-header { margin-bottom: 16px; text-align: left; }
+.auth-back-btn { font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; display: block; }
+.auth-reset-desc { font-size: 14px; color: var(--text-muted); margin: 0; line-height: 1.5; }
 
 /* ── Trip header menu ────────────────────────────────────────────────────── */
 .trip-header-menu {
@@ -4581,7 +4623,7 @@ body {
 /* ── Micro-interaction: all interactive elements ─────────────────────────── */
 button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .trip-card--clickable { cursor: pointer; }
-.trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) { z-index: 100; }
+.trip-card:has(.trip-card__menu-btn[aria-expanded="true"]) { z-index: 200; }
 
 /* ── Account members (TripSettingsSheet) ─────────────────────────────────── */
 .settings-subsection { margin-bottom: 14px; }
@@ -4701,6 +4743,12 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   background: var(--surface-sunken);
   border-radius: 10px;
 }
+.traveler-chip-link-picker__empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  flex: 1;
+}
 
 /* ── Emoji picker as horizontal scroll strip ─────────────────────────────── */
 .emoji-grid--scroll {
@@ -4715,3 +4763,94 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
 .emoji-grid--scroll::-webkit-scrollbar { display: none; }
 .emoji-grid--scroll .emoji-option { flex-shrink: 0; }
+
+/* ── Account avatar button (dashboard header) ────────────────────────────── */
+.btn--account-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.22);
+  border: 2px solid rgba(255,255,255,0.42);
+  backdrop-filter: blur(8px);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.btn--account-avatar:hover,
+.btn--account-avatar:focus { background: rgba(255,255,255,0.34); transform: scale(1.08); }
+
+/* ── Account sheet ───────────────────────────────────────────────────────── */
+.account-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0 16px;
+  gap: 4px;
+}
+.account-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FF8244, #F55F2E);
+  font-size: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 6px 20px rgba(245,95,46,0.28);
+  transition: transform 0.15s;
+}
+.account-avatar:hover { transform: scale(1.04); }
+.account-avatar__edit {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 15px;
+  background: var(--surface);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.account-name-preview {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 10px;
+}
+.account-email {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.account-emoji-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  background: var(--surface-sunken);
+  border-radius: 14px;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+.btn--danger {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  border-radius: var(--radius-md, 14px);
+  padding: 14px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn--danger:hover { background: #dc2626; }

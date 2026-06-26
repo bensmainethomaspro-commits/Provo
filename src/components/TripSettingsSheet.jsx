@@ -86,107 +86,6 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
         </div>
         <div className="sheet__body">
 
-          {/* Color */}
-          <div className="settings-section">
-            <div className="settings-section__title">Couleur du voyage</div>
-            <div className="color-swatches">
-              {TRIP_COLORS.map(c => (
-                <button
-                  key={c.value}
-                  className={`color-swatch${(trip.color || '#FF6B35') === c.value ? ' color-swatch--active' : ''}`}
-                  style={{ background: c.value }}
-                  onClick={() => handleColor(c.value)}
-                  title={c.label}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Timezone */}
-          <div className="settings-section">
-            <div className="settings-section__title">Fuseau horaire</div>
-            <div className="settings-section__desc">Décalage par rapport à l'heure locale (ex. +2 pour Paris en été, +9 pour Tokyo).</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <select
-                className="form-select"
-                value={trip.timezoneOffset ?? 0}
-                onChange={e => handleTimezone(parseInt(e.target.value))}
-              >
-                {Array.from({ length: 27 }, (_, i) => i - 12).map(h => (
-                  <option key={h} value={h}>{h >= 0 ? `UTC+${h}` : `UTC${h}`}</option>
-                ))}
-              </select>
-              {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
-                <span className="timezone-badge">UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Road trip mode */}
-          <div className="settings-section">
-            <div className="settings-section__title">Mode Road Trip</div>
-            <div className="settings-section__desc">Affiche un tracé de l'itinéraire sur la carte en reliant toutes les activités dans l'ordre.</div>
-            <label className="settings-toggle">
-              <input type="checkbox" checked={!!trip.roadTripMode} onChange={e => handleRoadTrip(e.target.checked)} />
-              <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
-              <span className="settings-toggle__label">{trip.roadTripMode ? 'Activé' : 'Désactivé'}</span>
-            </label>
-          </div>
-
-          {/* Haptics */}
-          <div className="settings-section">
-            <div className="settings-section__title">Vibrations (haptics)</div>
-            <div className="settings-section__desc">Retour haptique lors des actions importantes.</div>
-            <label className="settings-toggle">
-              <input type="checkbox" checked={settings.haptics !== false} onChange={e => setSetting('haptics', e.target.checked)} />
-              <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
-              <span className="settings-toggle__label">{settings.haptics !== false ? 'Activées' : 'Désactivées'}</span>
-            </label>
-          </div>
-
-          {/* Recurring templates */}
-          {onAddDailyTemplate && (
-            <div className="settings-section">
-              <div className="settings-section__title">Activités récurrentes</div>
-              <div className="settings-section__desc">Ces activités sont ajoutées automatiquement à tous les jours du voyage.</div>
-              {dailyTemplates.length > 0 && (
-                <div className="travelers-list">
-                  {dailyTemplates.map(t => (
-                    <div key={t.id} className="traveler-chip">
-                      <span className="traveler-chip__emoji">{t.emoji || '📌'}</span>
-                      <span className="traveler-chip__name">{t.title}</span>
-                      <button className="traveler-chip__remove" onClick={() => onRemoveDailyTemplate(trip.id, t.id)}>✕</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="recurring-presets">
-                {RECURRING_PRESETS.map(p => (
-                  <button
-                    key={p.title}
-                    className="recurring-preset-btn"
-                    disabled={dailyTemplates.some(t => t.title === p.title)}
-                    onClick={() => onAddDailyTemplate(trip.id, p)}
-                  >
-                    {p.emoji} {p.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Accommodation address */}
-          <div className="settings-section">
-            <div className="settings-section__title">Adresse d'hébergement</div>
-            <div className="settings-section__desc">Utilisée pour calculer les temps de trajet depuis/vers le logement.</div>
-            <input
-              className="form-input"
-              placeholder="Ex: 5 rue de Rivoli, Paris"
-              value={trip.accommodationAddress || ''}
-              onChange={e => onUpdateTrip(trip.id, { accommodationAddress: e.target.value })}
-            />
-          </div>
-
           {/* Travelers */}
           <div className="settings-section">
             <div className="settings-section__title">Voyageurs</div>
@@ -264,7 +163,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                             title="Dissocier le compte"
                           >✕</button>
                         ) : (
-                          availableMembers.length > 0 && linkingTravelerId !== t.id && (
+                          tripMembers && tripMembers.length > 0 && linkingTravelerId !== t.id && (
                             <button
                               className="traveler-chip__link-btn"
                               onClick={() => setLinkingTravelerId(t.id)}
@@ -276,26 +175,32 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                       </div>
                       {linkingTravelerId === t.id && (
                         <div className="traveler-chip-link-picker">
-                          <select
-                            className="form-select form-select--xs"
-                            defaultValue=""
-                            onChange={e => {
-                              if (!e.target.value) return;
-                              onUpdateTrip(trip.id, {
-                                tripTravelers: travelers.map(x =>
-                                  x.id === t.id ? { ...x, profileId: e.target.value } : x
-                                ),
-                              });
-                              setLinkingTravelerId(null);
-                            }}
-                          >
-                            <option value="">Choisir un compte…</option>
-                            {availableMembers.map(m => (
-                              <option key={m.userId} value={m.userId}>
-                                {m.name || 'Compte sans nom'} · {m.role === 'owner' ? 'Propriétaire' : 'Membre'}
-                              </option>
-                            ))}
-                          </select>
+                          {availableMembers.length === 0 ? (
+                            <span className="traveler-chip-link-picker__empty">
+                              Tous les comptes sont déjà associés — invitez d'autres membres via le lien de collaboration.
+                            </span>
+                          ) : (
+                            <select
+                              className="form-select form-select--xs"
+                              defaultValue=""
+                              onChange={e => {
+                                if (!e.target.value) return;
+                                onUpdateTrip(trip.id, {
+                                  tripTravelers: travelers.map(x =>
+                                    x.id === t.id ? { ...x, profileId: e.target.value } : x
+                                  ),
+                                });
+                                setLinkingTravelerId(null);
+                              }}
+                            >
+                              <option value="">Choisir un compte…</option>
+                              {availableMembers.map(m => (
+                                <option key={m.userId} value={m.userId}>
+                                  {m.name || 'Compte sans nom'} · {m.role === 'owner' ? 'Propriétaire' : 'Membre'}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                           <button className="btn btn--ghost btn--sm" onClick={() => setLinkingTravelerId(null)}>Annuler</button>
                         </div>
                       )}
@@ -355,6 +260,107 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
               )}
             </div>
           )}
+
+          {/* Color */}
+          <div className="settings-section">
+            <div className="settings-section__title">Couleur du voyage</div>
+            <div className="color-swatches">
+              {TRIP_COLORS.map(c => (
+                <button
+                  key={c.value}
+                  className={`color-swatch${(trip.color || '#FF6B35') === c.value ? ' color-swatch--active' : ''}`}
+                  style={{ background: c.value }}
+                  onClick={() => handleColor(c.value)}
+                  title={c.label}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Road trip mode */}
+          <div className="settings-section">
+            <div className="settings-section__title">Mode Road Trip</div>
+            <div className="settings-section__desc">Affiche un tracé de l'itinéraire sur la carte en reliant toutes les activités dans l'ordre.</div>
+            <label className="settings-toggle">
+              <input type="checkbox" checked={!!trip.roadTripMode} onChange={e => handleRoadTrip(e.target.checked)} />
+              <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
+              <span className="settings-toggle__label">{trip.roadTripMode ? 'Activé' : 'Désactivé'}</span>
+            </label>
+          </div>
+
+          {/* Recurring templates */}
+          {onAddDailyTemplate && (
+            <div className="settings-section">
+              <div className="settings-section__title">Activités récurrentes</div>
+              <div className="settings-section__desc">Ces activités sont ajoutées automatiquement à tous les jours du voyage.</div>
+              {dailyTemplates.length > 0 && (
+                <div className="travelers-list">
+                  {dailyTemplates.map(t => (
+                    <div key={t.id} className="traveler-chip">
+                      <span className="traveler-chip__emoji">{t.emoji || '📌'}</span>
+                      <span className="traveler-chip__name">{t.title}</span>
+                      <button className="traveler-chip__remove" onClick={() => onRemoveDailyTemplate(trip.id, t.id)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="recurring-presets">
+                {RECURRING_PRESETS.map(p => (
+                  <button
+                    key={p.title}
+                    className="recurring-preset-btn"
+                    disabled={dailyTemplates.some(t => t.title === p.title)}
+                    onClick={() => onAddDailyTemplate(trip.id, p)}
+                  >
+                    {p.emoji} {p.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Accommodation address */}
+          <div className="settings-section">
+            <div className="settings-section__title">Adresse d'hébergement</div>
+            <div className="settings-section__desc">Utilisée pour calculer les temps de trajet depuis/vers le logement.</div>
+            <input
+              className="form-input"
+              placeholder="Ex: 5 rue de Rivoli, Paris"
+              value={trip.accommodationAddress || ''}
+              onChange={e => onUpdateTrip(trip.id, { accommodationAddress: e.target.value })}
+            />
+          </div>
+
+          {/* Haptics */}
+          <div className="settings-section">
+            <div className="settings-section__title">Vibrations (haptics)</div>
+            <div className="settings-section__desc">Retour haptique lors des actions importantes.</div>
+            <label className="settings-toggle">
+              <input type="checkbox" checked={settings.haptics !== false} onChange={e => setSetting('haptics', e.target.checked)} />
+              <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
+              <span className="settings-toggle__label">{settings.haptics !== false ? 'Activées' : 'Désactivées'}</span>
+            </label>
+          </div>
+
+          {/* Timezone — last */}
+          <div className="settings-section">
+            <div className="settings-section__title">Fuseau horaire</div>
+            <div className="settings-section__desc">Décalage par rapport à l'heure locale (ex. +2 pour Paris en été, +9 pour Tokyo).</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <select
+                className="form-select"
+                value={trip.timezoneOffset ?? 0}
+                onChange={e => handleTimezone(parseInt(e.target.value))}
+              >
+                {Array.from({ length: 27 }, (_, i) => i - 12).map(h => (
+                  <option key={h} value={h}>{h >= 0 ? `UTC+${h}` : `UTC${h}`}</option>
+                ))}
+              </select>
+              {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
+                <span className="timezone-badge">UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}</span>
+              )}
+            </div>
+          </div>
 
         </div>
       </div>

@@ -276,7 +276,7 @@ export default function ActivityCard({
               )}
               {context === 'day' && onMoveToNextDay && (
                 <button className="act-sheet__item" onClick={() => { onMoveToNextDay(); setMenuOpen(false); }}>
-                  🌅 On verra demain
+                  🌅 On verra plus tard
                 </button>
               )}
               {onDuplicate && otherDays.length > 0 && (
