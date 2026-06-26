@@ -51,49 +51,54 @@ export function useTrips() {
   const tripsRef = useRef(trips);
   useEffect(() => { tripsRef.current = trips; }, [trips]);
 
+  // ── Charger depuis Supabase (appelé directement à la connexion) ───────────
+  const loadFromSupabase = useCallback(async (uid) => {
+    const { data, error } = await supabase
+      .from('trips')
+      .select('id, data')
+      .order('updated_at', { ascending: false });
+    if (error || !data) return;
+
+    const cloudTrips = data.map(r => r.data).filter(Boolean);
+    cloudTrips.forEach(t => {
+      remoteIdsRef.current.add(t.id);
+      syncedHashRef.current[t.id] = JSON.stringify(t);
+    });
+
+    setTrips(prev => {
+      const cloudIds = new Set(cloudTrips.map(t => t.id));
+      const localOnly = prev.filter(t => !cloudIds.has(t.id));
+      localOnly.forEach(trip => {
+        supabase.from('trips').insert({
+          id: trip.id, owner_id: uid,
+          data: trip, updated_at: new Date().toISOString(),
+        }).then(({ error: e }) => { if (!e) remoteIdsRef.current.add(trip.id); });
+      });
+      return [...cloudTrips, ...localOnly];
+    });
+  }, []);
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUserId(session?.user?.id ?? null);
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
       setAuthLoading(false);
+      if (uid) loadFromSupabase(uid);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUserId(session?.user?.id ?? null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const uid = session?.user?.id ?? null;
+      setUserId(uid);
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (uid) loadFromSupabase(uid);
+      } else if (event === 'SIGNED_OUT') {
+        setTrips([]);
+        remoteIdsRef.current = new Set();
+        syncedHashRef.current = {};
+      }
     });
     return () => subscription.unsubscribe();
-  }, []);
-
-  // ── Charger depuis Supabase à la connexion ────────────────────────────────
-  useEffect(() => {
-    if (!userId) return;
-    const load = async () => {
-      const { data, error } = await supabase
-        .from('trips')
-        .select('id, data')
-        .order('updated_at', { ascending: false });
-      if (error || !data) return;
-
-      const cloudTrips = data.map(r => r.data).filter(Boolean);
-      cloudTrips.forEach(t => {
-        remoteIdsRef.current.add(t.id);
-        syncedHashRef.current[t.id] = JSON.stringify(t);
-      });
-
-      setTrips(prev => {
-        const cloudIds = new Set(cloudTrips.map(t => t.id));
-        const localOnly = prev.filter(t => !cloudIds.has(t.id));
-        // Upload local-only trips
-        localOnly.forEach(trip => {
-          supabase.from('trips').insert({
-            id: trip.id, owner_id: userId,
-            data: trip, updated_at: new Date().toISOString(),
-          }).then(({ error }) => { if (!error) remoteIdsRef.current.add(trip.id); });
-        });
-        return [...cloudTrips, ...localOnly];
-      });
-    };
-    load();
-  }, [userId]);
+  }, [loadFromSupabase]);
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
@@ -161,7 +166,7 @@ export function useTrips() {
   // ── Auth helpers ──────────────────────────────────────────────────────────
   const signIn = useCallback(async (email, password) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return error ? { error: error.message } : { success: true };
+    return error ? { error: error.message || error.toString() } : { success: true };
   }, []);
 
   const signUp = useCallback(async (email, password, displayName) => {
@@ -169,7 +174,7 @@ export function useTrips() {
       email, password,
       options: { data: { display_name: displayName } },
     });
-    return error ? { error: error.message } : { success: true };
+    return error ? { error: error.message || error.toString() } : { success: true };
   }, []);
 
   const signOut = useCallback(async () => {
