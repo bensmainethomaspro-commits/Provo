@@ -1,6 +1,8 @@
+import { createPortal } from 'react-dom';
+
 export default function ConfirmDialog({ icon = '❓', title, message, onConfirm, onCancel,
   confirmLabel = 'Confirmer', cancelLabel = 'Annuler', danger = false, extra = null }) {
-  return (
+  return createPortal(
     <div className="confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-msg" onClick={(e) => e.target === e.currentTarget && onCancel()}>
       <div className="confirm-box">
         <div className="confirm-box__icon">{icon}</div>
@@ -14,6 +16,7 @@ export default function ConfirmDialog({ icon = '❓', title, message, onConfirm,
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
