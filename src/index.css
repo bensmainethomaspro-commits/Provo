@@ -2472,8 +2472,21 @@ body {
   border-color: color-mix(in srgb, var(--green) 30%, transparent);
   text-align: center; font-size: 14px; font-weight: 700; color: var(--green);
 }
-.debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 8px; }
+.debts-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+.debts-card__detail-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 2px 8px; }
+.debts-card__detail-btn:hover { color: var(--text); }
 .debt-row { display: flex; align-items: center; gap: 5px; font-size: 13px; margin: 5px 0; flex-wrap: wrap; }
+.debt-settle-btn { background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 2px; margin-left: auto; opacity: 0.7; }
+.debt-settle-btn:hover { opacity: 1; }
+.debt-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.debt-detail__title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px; }
+.debt-detail__row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 13px; }
+.debt-detail__person { color: var(--text); font-weight: 600; }
+.debt-detail__bal { font-weight: 800; font-size: 13px; }
+.debt-detail__bal--pos { color: var(--green); }
+.debt-detail__bal--neg { color: var(--red); }
+.debt-detail__note { font-size: 11px; color: var(--text-light); margin-top: 6px; font-style: italic; }
 .debt-emoji { font-size: 16px; }
 .debt-from, .debt-to { font-weight: 700; color: var(--text); }
 .debt-arrow { color: var(--text-light); font-size: 11px; }

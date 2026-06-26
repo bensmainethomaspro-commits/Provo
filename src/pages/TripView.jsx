@@ -595,8 +595,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
   const totalTripCost = totalActivitiesCost + totalExpenses;
-  const initBudgetNum = parseFloat(trip.initialBudget) || 0;
-  const budgetExceeded = initBudgetNum > 0 && totalTripCost > initBudgetNum;
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const pastActivitiesCost = trip.days
+    .filter(d => d.date && d.date <= todayDateStr)
+    .flatMap(d => d.activities)
+    .reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  const alreadySpent = pastActivitiesCost + totalExpenses;
+  const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
   return (
     <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
@@ -670,8 +675,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             )}
             {initBudget > 0 && (
               budgetExceeded
-                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(totalTripCost - initBudget)} dépassé</span>
-                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - totalTripCost)} restants</span>
+                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(alreadySpent - initBudget)} dépassé</span>
+                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - alreadySpent)} restants</span>
             )}
           </div>
         )}
