@@ -1,6 +1,6 @@
 import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta } from '../utils/helpers';
 
-export default function AgendaView({ days, onOpenDetail, compareMode, onReorderDay }) {
+export default function AgendaView({ days, onOpenDetail, compareMode, onReorderDay, weatherByDate }) {
   return (
     <div className="agenda-view">
       {days.map((day, i) => {
@@ -11,6 +11,7 @@ export default function AgendaView({ days, onOpenDetail, compareMode, onReorderD
         const total = day.activities.length;
         const pct = total > 0 ? Math.round(done / total * 100) : 0;
         const emojis = [...new Set(day.activities.map(a => getCategoryMeta(a.category).emoji))].slice(0, 5).join(' ');
+        const w = weatherByDate?.[day.date];
 
         return (
           <div
@@ -21,6 +22,12 @@ export default function AgendaView({ days, onOpenDetail, compareMode, onReorderD
             <div className="agenda-day__header">
               <span className="agenda-day__label">{getDayLabel(i, days.length)}</span>
               <span className="agenda-day__date">{formatDateShort(day.date)}</span>
+              {w && (
+                <span className="agenda-day__weather">
+                  <span>{w.icon}</span>
+                  <span>{w.max}°/{w.min}°</span>
+                </span>
+              )}
               {onReorderDay && (
                 <div className="agenda-day__reorder" onClick={e => e.stopPropagation()}>
                   <button className="agenda-reorder-btn" onClick={() => onReorderDay(day.id, 'up')} disabled={i === 0}>▲</button>

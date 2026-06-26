@@ -44,7 +44,7 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart, weather }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
@@ -87,6 +87,12 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
             {budget > 0 && <span>{formatPrice(budget)}</span>}
             {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
           </div>
+          {weather && (
+            <div className="tl-day__weather">
+              <span>{weather.icon}</span>
+              <span>{weather.max}°/{weather.min}°</span>
+            </div>
+          )}
         </div>
         <div className="tl-day__actions">
           {todoActivities.length > 0 && !compareMode && onSweep && (
@@ -146,7 +152,7 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart, weatherByDate }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -163,6 +169,7 @@ export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, 
           onNotesChange={onNotesChange}
           onSweep={onSweep}
           onTouchDragStart={onTouchDragStart}
+          weather={weatherByDate?.[day.date]}
         />
       ))}
     </div>

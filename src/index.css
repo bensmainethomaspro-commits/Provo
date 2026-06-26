@@ -1131,6 +1131,7 @@ body {
   font-size: 12px; font-weight: 600; opacity: 0.9;
 }
 .tl-day__empty-hint { opacity: 0.7; font-style: italic; }
+.tl-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; margin-top: 3px; opacity: 0.85; }
 
 .tl-day__body {
   padding: 6px 8px 8px;
@@ -2190,6 +2191,7 @@ body {
 .agenda-day__emojis {
   font-size: 15px; letter-spacing: 2px; flex: 1;
 }
+.agenda-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; opacity: 0.85; margin-left: auto; }
 .agenda-day__stats {
   display: flex; gap: 8px; flex-wrap: wrap;
 }

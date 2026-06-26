@@ -772,6 +772,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onOpenDetail={(day) => setDetailDay(day)}
                 compareMode={compareMode}
                 onReorderDay={(dayId, dir) => reorderDay(tripId, dayId, dir)}
+                weatherByDate={weather?.byDate}
               />
             ) : viewMode === 'timeline' ? (
               <TimelineView
@@ -784,6 +785,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
                 onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                 onTouchDragStart={handleTouchDragStart}
+                weatherByDate={weather?.byDate}
               />
             ) : (
               trip.days.map((day, i) => (
