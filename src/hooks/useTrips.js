@@ -653,6 +653,33 @@ export function useTrips() {
     }));
   }, []);
 
+  const fetchTripMembers = useCallback(async (tripId) => {
+    const { data: members, error } = await supabase
+      .from('trip_members')
+      .select('user_id, role')
+      .eq('trip_id', tripId);
+    if (error || !members || members.length === 0) return [];
+    const userIds = members.map(m => m.user_id);
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, name')
+      .in('id', userIds);
+    return members.map(m => ({
+      userId: m.user_id,
+      role: m.role,
+      name: (profiles || []).find(p => p.id === m.user_id)?.name || null,
+    }));
+  }, []);
+
+  const removeTripMember = useCallback(async (tripId, memberUserId) => {
+    const { error } = await supabase
+      .from('trip_members')
+      .delete()
+      .eq('trip_id', tripId)
+      .eq('user_id', memberUserId);
+    return error ? { error: error.message } : { success: true };
+  }, []);
+
   return {
     trips,
     userId,
@@ -676,5 +703,6 @@ export function useTrips() {
     addExpense, deleteExpense,
     copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
+    fetchTripMembers, removeTripMember,
   };
 }

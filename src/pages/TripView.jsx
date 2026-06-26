@@ -138,6 +138,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
     enableCollaboration, userId,
+    fetchTripMembers, removeTripMember,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
@@ -166,6 +167,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  const [tripMembers, setTripMembers] = useState([]);
   const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
   const undoTimerRef = useRef(null);
@@ -203,6 +205,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }, [tab]);
 
+  // Fetch trip members when settings sheet opens
+  useEffect(() => {
+    if (!showTripSettings || !userId) return;
+    fetchTripMembers(tripId).then(members => setTripMembers(members || []));
+  }, [showTripSettings, tripId, userId, fetchTripMembers]);
+
   const pushUndo = (snapshot, msg = 'Action annulée') => {
     undoRef.current = snapshot;
     setUndoMsg(msg);
@@ -216,6 +224,19 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     clearTimeout(undoTimerRef.current);
     setUndoVisible(false);
     undoRef.current = null;
+  };
+
+  const handleRemoveMember = async (memberUserId) => {
+    await removeTripMember(tripId, memberUserId);
+    const travelers = trip.tripTravelers || [];
+    if (travelers.some(t => t.profileId === memberUserId)) {
+      updateTrip(tripId, {
+        tripTravelers: travelers.map(t =>
+          t.profileId === memberUserId ? { ...t, profileId: null } : t
+        ),
+      });
+    }
+    fetchTripMembers(tripId).then(members => setTripMembers(members || []));
   };
 
   const handleTouchDragStart = useTouchDnd({
@@ -1121,6 +1142,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onRemoveDailyTemplate={removeDailyTemplate}
         enableCollaboration={enableCollaboration}
         userId={userId}
+        tripMembers={tripMembers}
+        currentUserId={userId}
+        onRemoveMember={handleRemoveMember}
       />
 
       <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}`}>
