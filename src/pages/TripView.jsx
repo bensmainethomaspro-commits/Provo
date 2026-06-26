@@ -595,12 +595,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
   const totalTripCost = totalActivitiesCost + totalExpenses;
-  const todayDateStr = new Date().toISOString().slice(0, 10);
-  const pastActivitiesCost = trip.days
-    .filter(d => d.date && d.date <= todayDateStr)
+  const doneActivitiesCost = trip.days
     .flatMap(d => d.activities)
+    .filter(a => a.status === 'done')
     .reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  const alreadySpent = pastActivitiesCost + totalExpenses;
+  const alreadySpent = doneActivitiesCost + totalExpenses;
   const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
   return (
