@@ -44,6 +44,8 @@ function generateUUID() {
 export function useTrips() {
   const [trips, setTrips] = useState(load);
   const [userId, setUserId] = useState(null);
+  const [userEmail, setUserEmail] = useState(null);
+  const [userProfile, setUserProfile] = useState({ name: null, emoji: null });
   const [authLoading, setAuthLoading] = useState(true);
   const syncedHashRef = useRef({});
   const syncTimeouts = useRef({});
@@ -78,19 +80,25 @@ export function useTrips() {
     });
   }, []);
 
+  const applySession = useCallback((session) => {
+    const uid = session?.user?.id ?? null;
+    const meta = session?.user?.user_metadata || {};
+    setUserId(uid);
+    setUserEmail(session?.user?.email ?? null);
+    setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
+  }, []);
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
+      applySession(session);
       setAuthLoading(false);
-      if (uid) loadFromSupabase(uid);
+      if (session?.user?.id) loadFromSupabase(session.user.id);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
+      applySession(session);
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (uid) loadFromSupabase(uid);
+        if (session?.user?.id) loadFromSupabase(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setTrips([]);
         remoteIdsRef.current = new Set();
@@ -98,7 +106,7 @@ export function useTrips() {
       }
     });
     return () => subscription.unsubscribe();
-  }, [loadFromSupabase]);
+  }, [loadFromSupabase, applySession]);
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
@@ -680,9 +688,28 @@ export function useTrips() {
     return error ? { error: error.message } : { success: true };
   }, []);
 
+  const updateProfile = useCallback(async ({ name, emoji }) => {
+    const meta = {};
+    if (name !== undefined) meta.display_name = name;
+    if (emoji !== undefined) meta.profile_emoji = emoji;
+    const { error } = await supabase.auth.updateUser({ data: meta });
+    if (error) return { error: error.message };
+    if (name !== undefined && userId) {
+      await supabase.from('profiles').update({ name }).eq('id', userId);
+    }
+    setUserProfile(prev => ({
+      name: name !== undefined ? name : prev.name,
+      emoji: emoji !== undefined ? emoji : prev.emoji,
+    }));
+    return { success: true };
+  }, [userId]);
+
   return {
     trips,
     userId,
+    userEmail,
+    userProfile,
+    updateProfile,
     authLoading,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),

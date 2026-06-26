@@ -4721,3 +4721,94 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
 .emoji-grid--scroll::-webkit-scrollbar { display: none; }
 .emoji-grid--scroll .emoji-option { flex-shrink: 0; }
+
+/* ── Account avatar button (dashboard header) ────────────────────────────── */
+.btn--account-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.22);
+  border: 2px solid rgba(255,255,255,0.42);
+  backdrop-filter: blur(8px);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.btn--account-avatar:hover,
+.btn--account-avatar:focus { background: rgba(255,255,255,0.34); transform: scale(1.08); }
+
+/* ── Account sheet ───────────────────────────────────────────────────────── */
+.account-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0 16px;
+  gap: 4px;
+}
+.account-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #FF8244, #F55F2E);
+  font-size: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  box-shadow: 0 6px 20px rgba(245,95,46,0.28);
+  transition: transform 0.15s;
+}
+.account-avatar:hover { transform: scale(1.04); }
+.account-avatar__edit {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  font-size: 15px;
+  background: var(--surface);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.account-name-preview {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 10px;
+}
+.account-email {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.account-emoji-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  background: var(--surface-sunken);
+  border-radius: 14px;
+  margin-bottom: 12px;
+  justify-content: center;
+}
+.btn--danger {
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  border-radius: var(--radius-md, 14px);
+  padding: 14px;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn--danger:hover { background: #dc2626; }
