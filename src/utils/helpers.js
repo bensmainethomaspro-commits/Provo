@@ -1,3 +1,24 @@
+import { supabase } from '../lib/supabase';
+
+// Server-side extractor (Supabase Edge Function "extract-place").
+// Resolves short links (TikTok / Google Maps) and returns structured place
+// data. Returns null on any failure so callers can fall back to the legacy
+// client-side parsers.
+export async function extractViaEdge(url) {
+  try {
+    const { data, error } = await supabase.functions.invoke('extract-place', {
+      body: { url },
+    });
+    if (error) return null;
+    if (data?.ok && data.result && (data.result.title || data.result.lat != null)) {
+      return data.result;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export const CATEGORIES = [
   { id: 'resto',    emoji: '🍽️', label: 'Resto' },
   { id: 'visite',   emoji: '🏛️', label: 'Visite' },

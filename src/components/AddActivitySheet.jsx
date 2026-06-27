@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, fetchUrlMetadata, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, fetchUrlMetadata, parseGoogleMapsUrl, getCategoryMeta, extractViaEdge } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
@@ -104,6 +104,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         openingHours: result.openingHours || f.openingHours,
         lat: result.lat ?? f.lat,
         lon: result.lon ?? f.lon,
+        ...(result.notes && !f.notes.trim() ? { notes: result.notes } : {}),
         ...(result.price && !f.price ? { price: String(result.price) } : {}),
         ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
       };
@@ -119,6 +120,15 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app') || raw.includes('tiktok.com') || raw.includes('vm.tiktok.com') || raw.includes('vt.tiktok.com');
 
       if (isUrl) {
+        // Preferred path: server-side extractor (resolves short links, classifies,
+        // geocodes). Falls through to the legacy parsers below if it's unavailable.
+        const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+        const edge = await extractViaEdge(normalized);
+        if (edge && (edge.title || edge.lat != null)) {
+          applyResult({ ...edge, link: edge.link || raw }, raw);
+          return;
+        }
+
         // TikTok: fetch oEmbed to pre-fill title and thumbnail
         const isTikTok = /tiktok\.com/.test(raw);
         if (isTikTok) {
@@ -341,11 +351,11 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
           {/* Google Maps import / place search */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Lien Google Maps ou nom du lieu</label>
+            <label className="form-label">📍 Lien Google Maps / TikTok ou nom du lieu</label>
             <div className="import-row">
               <input
                 className="form-input"
-                placeholder="maps.app.goo.gl/… ou tapez un nom de lieu"
+                placeholder="Colle un lien Maps, TikTok… ou tape un nom de lieu"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}

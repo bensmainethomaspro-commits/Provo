@@ -4854,3 +4854,22 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   transition: background 0.15s;
 }
 .btn--danger:hover { background: #dc2626; }
+
+/* ── Full-screen sheets ──────────────────────────────────────────────────────
+   Bottom sheets (day detail, trip settings, add activity, traveler balance…)
+   open over the whole interface instead of a short panel hugging the bottom,
+   so the content is visible immediately without scrolling up to reveal it. */
+.sheet,
+.day-detail-sheet {
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+.tbs { max-height: 100dvh; }
+.sheet__header,
+.day-detail__header {
+  padding-top: max(14px, env(safe-area-inset-top));
+  border-radius: 0;
+}
+/* keep the grab handle subtle at the very top of full-screen sheets */
+.sheet__handle { margin-top: max(8px, env(safe-area-inset-top)); }
