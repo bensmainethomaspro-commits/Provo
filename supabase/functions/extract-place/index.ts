@@ -259,25 +259,32 @@ function categoryFromHashtags(text: string): string | null {
   return null;
 }
 
+function stripEmoji(s: string): string {
+  return s.replace(
+    /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}\u{2122}\u{2139}\u{2300}-\u{23FF}]/gu,
+    " ",
+  );
+}
+
 function cleanTitle(raw: string | null): string {
   if (!raw) return "";
-  let t = raw
+  let t = stripEmoji(raw)
     .replace(/#[\p{L}\p{N}_]+/gu, " ")        // hashtags
     .replace(/https?:\/\/\S+/g, " ")          // urls
     .replace(/@[\w.]+/g, " ")                 // mentions
-    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/gu, " ") // emoji
     .replace(/\s+/g, " ")
     .trim();
   // First sentence / segment, capped.
   t = t.split(/[\n.!?•|]/)[0].trim();
   if (t.length > 70) t = t.slice(0, 70).trim();
-  return t;
+  return t.replace(/[\s,]+$/, "").trim();
 }
 
 function extractLocationHint(caption: string): string | null {
-  // "📍 Place, City"
-  const pin = caption.match(/📍\s*([^\n#@]{2,80})/);
-  if (pin) return pin[1].replace(/[|•].*$/, "").trim();
+  // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
+  // stays clean instead of swallowing the rest of the caption.
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
+  if (pin) return pin[1].replace(/\s+/g, " ").trim().replace(/[\s,]+$/, "");
   // "at <Place>" / "à <Place>"
   const at = caption.match(/(?:^|\s)(?:at|à|chez|in)\s+([A-ZÀ-Ý][\p{L}'’\- ]{2,50})/u);
   if (at) return at[1].trim();
