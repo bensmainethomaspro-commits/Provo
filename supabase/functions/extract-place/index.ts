@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
     let result = null;
     if (/tiktok\.com/i.test(url)) {
       result = await handleTikTok(url);
-    } else if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google/i.test(url)) {
+    } else if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google|share\.google/i.test(url)) {
       result = await handleGoogleMaps(url);
     } else {
       result = await handleGeneric(url);

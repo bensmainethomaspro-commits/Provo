@@ -20,11 +20,6 @@ import { useTravelTimes } from '../hooks/useTravelTimes';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
 
-// True when the app runs as an installed PWA (home-screen / standalone window).
-const isStandalonePWA = typeof window !== 'undefined' && (
-  window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
-);
-
 // Clear cached assets, pull the newest service worker, and reload from network —
 // gets the installed app onto the latest Vercel deploy without re-adding it.
 async function forceRefreshApp() {
@@ -653,11 +648,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
-          {isStandalonePWA && (
-            <button className="btn btn--ghost-white btn--sm" onClick={forceRefreshApp} title="Mettre à jour vers la dernière version" aria-label="Rafraîchir l'application">
-              🔄
-            </button>
-          )}
+          <button className="btn btn--ghost-white btn--sm" onClick={forceRefreshApp} title="Mettre à jour vers la dernière version" aria-label="Rafraîchir l'application">
+            🔄
+          </button>
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
@@ -1085,8 +1078,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         )}
       </div>
 
-      {/* FAB — hidden on notes, map, valise and depenses tabs */}
-      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && (
+      {/* FAB — hidden on notes, map, valise, depenses and planning (planning has its own inline button) */}
+      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && tab !== 'planning' && (
         <div className="fab">
           <button className="fab__btn" onClick={() => openAddSheet(null)}>
             + Ajouter une activité
