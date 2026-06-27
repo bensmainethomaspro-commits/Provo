@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTripsContext } from '../context/TripsContext';
 import TripCard from '../components/TripCard';
+import RefreshButton from '../components/RefreshButton';
 import TripPreviewSheet from '../components/TripPreviewSheet';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -70,6 +71,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         <span className="dashboard__logo-icon">🧭</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
+          <RefreshButton />
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>

@@ -1,15 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import Confetti from './Confetti';
 
 // Drag-to-reorder list for the day's remaining activities (touch + mouse).
+// Order is tracked as an array of ids; the parent commit happens on drop from a
+// ref (never inside a setState updater) so we never feed it a malformed list.
 function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
-  const [list, setList] = useState(items);
+  const [orderIds, setOrderIds] = useState(() => items.map(a => a.id));
   const [dragId, setDragId] = useState(null);
+  const orderRef = useRef(orderIds);
+  orderRef.current = orderIds;
 
-  // Sync with parent whenever we're not mid-drag.
-  useEffect(() => { if (!dragId) setList(items); }, [items, dragId]);
+  // Re-sync from parent whenever we're not mid-drag.
+  useEffect(() => { if (!dragId) setOrderIds(items.map(a => a.id)); }, [items, dragId]);
 
   useEffect(() => {
     if (!dragId) return;
@@ -19,20 +23,22 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
       const card = document.elementFromPoint(pt.clientX, pt.clientY)?.closest('[data-today-id]');
       if (!card) return;
       const overId = card.getAttribute('data-today-id');
-      setList(prev => {
-        const from = prev.findIndex(a => a.id === dragId);
-        const to = prev.findIndex(a => a.id === overId);
+      if (!overId || overId === dragId) return;
+      setOrderIds(prev => {
+        const from = prev.indexOf(dragId);
+        const to = prev.indexOf(overId);
         if (from === -1 || to === -1 || from === to) return prev;
         const next = [...prev];
-        const [m] = next.splice(from, 1);
-        next.splice(to, 0, m);
+        next.splice(from, 1);
+        next.splice(to, 0, dragId);
         return next;
       });
       if (e.cancelable) e.preventDefault();
     };
     const end = () => {
+      document.body.classList.remove('dragging-noselect');
       setDragId(null);
-      setList(prev => { onCommit(prev.map(a => a.id)); return prev; });
+      onCommit(orderRef.current);
     };
     window.addEventListener('touchmove', move, { passive: false });
     window.addEventListener('mousemove', move);
@@ -48,6 +54,9 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
   }, [dragId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startDrag = (id) => { setDragId(id); vibrate([10]); };
+
+  const byId = new Map(items.map(a => [a.id, a]));
+  const list = orderIds.map(id => byId.get(id)).filter(Boolean);
 
   return list.map(act => {
     const meta = getCategoryMeta(act.category);
@@ -144,15 +153,17 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
     vibrate([10]);
   };
 
-  // Rebuild the full day order from a reordered list of "remaining" ids,
-  // leaving done/skipped activities in their existing slots.
+  // Rebuild the full day order from a reordered list of "remaining" ids, leaving
+  // done/skipped activities in their existing slots. Defensive: only uses ids that
+  // actually exist, so we never store an undefined activity (which would crash render).
   const commitRemainingOrder = (remainingIds) => {
     if (!onReorderActivities) return;
-    const remSet = new Set(remainingIds);
+    const byId = new Map(day.activities.map(a => [a.id, a]));
+    const reordered = remainingIds.map(id => byId.get(id)).filter(Boolean);
+    const remSet = new Set(reordered.map(a => a.id));
     let ri = 0;
-    const newOrder = day.activities.map(a =>
-      remSet.has(a.id) ? day.activities.find(x => x.id === remainingIds[ri++]) : a
-    );
+    const newOrder = day.activities.map(a => (remSet.has(a.id) ? (reordered[ri++] || a) : a));
+    if (newOrder.length !== day.activities.length || newOrder.some(a => !a)) return;
     vibrate([15]);
     onReorderActivities(day.id, newOrder);
   };

@@ -12,6 +12,7 @@ import AgendaView from '../components/AgendaView';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import TripSummary from '../components/TripSummary';
+import RefreshButton from '../components/RefreshButton';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
@@ -19,22 +20,6 @@ import { useSettings } from '../hooks/useSettings';
 import { useTravelTimes } from '../hooks/useTravelTimes';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
-
-// Clear cached assets, pull the newest service worker, and reload from network —
-// gets the installed app onto the latest Vercel deploy without re-adding it.
-async function forceRefreshApp() {
-  try {
-    if ('serviceWorker' in navigator) {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) { reg.waiting?.postMessage({ type: 'SKIP_WAITING' }); await reg.update(); }
-    }
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter(k => k !== 'provo-tiles-v1').map(k => caches.delete(k)));
-    }
-  } catch { /* ignore */ }
-  window.location.reload();
-}
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -648,9 +633,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
-          <button className="btn btn--ghost-white btn--sm" onClick={forceRefreshApp} title="Mettre à jour vers la dernière version" aria-label="Rafraîchir l'application">
-            🔄
-          </button>
+          <RefreshButton />
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
