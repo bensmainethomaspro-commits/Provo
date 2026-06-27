@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, importFromGoogleMaps, fetchPlaceData, fetchUrlMetadata, parseGoogleMapsUrl, getCategoryMeta } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
@@ -104,6 +104,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         openingHours: result.openingHours || f.openingHours,
         lat: result.lat ?? f.lat,
         lon: result.lon ?? f.lon,
+        ...(result.notes && !f.notes.trim() ? { notes: result.notes } : {}),
         ...(result.price && !f.price ? { price: String(result.price) } : {}),
         ...(dur && isDefaultDuration(f) ? { durationHours: dur.h, durationMinutes: dur.m } : {}),
       };
@@ -116,64 +117,23 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImporting(true);
     setError('');
     try {
-      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app') || raw.includes('tiktok.com') || raw.includes('vm.tiktok.com') || raw.includes('vt.tiktok.com');
+      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app') || raw.includes('tiktok.com');
 
       if (isUrl) {
-        // TikTok: fetch oEmbed to pre-fill title and thumbnail
-        const isTikTok = /tiktok\.com/.test(raw);
-        if (isTikTok) {
-          try {
-            const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(raw)}`;
-            const res = await fetch(oembedUrl);
-            if (res.ok) {
-              const data = await res.json();
-              applyResult({
-                title: data.title || data.author_name || '',
-                photoUrl: data.thumbnail_url || '',
-                link: raw,
-                category: 'fun',
-              }, raw);
-              return;
-            }
-          } catch {}
-          applyResult({ title: 'Activité TikTok', link: raw, category: 'fun' }, raw);
-          setError('TikTok importé — ajoute le titre manuellement si besoin.');
-          return;
-        }
-        // Google Maps: dedicated parser
-        const isGoogleMaps = /google\.com\/maps|goo\.gl|maps\.app/.test(raw);
-        if (isGoogleMaps) {
-          const result = await importFromGoogleMaps(raw);
-          if (result) { applyResult(result, raw); return; }
-          const name = parseGoogleMapsUrl(raw);
-          if (name) {
-            const placeData = await fetchPlaceData(name);
-            if (placeData) { applyResult({ ...placeData, link: raw }, raw); return; }
-            const clean = name.replace(/\+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-            applyResult({ title: clean, link: raw }, raw);
-            setError('Lieu non trouvé dans OpenStreetMap — lien et titre sauvegardés.');
-            return;
+        const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+        // 1) server-side agent (best — resolves short links + classifies + geocodes)
+        // 2) robust client extractor (TikTok oEmbed, Maps proxy chain, geocoding)
+        let result = await extractViaEdge(normalized);
+        if (!result) result = await extractPlaceClient(normalized);
+
+        if (result && (result.title || result.lat != null)) {
+          applyResult({ ...result, link: result.link || raw }, raw);
+          if (result.source === 'tiktok' && result.lat == null) {
+            setError('Vidéo importée ✓ — vérifie le titre et ajoute un lieu si besoin.');
           }
-          const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/.test(raw);
-          setError(isShortLink
-            ? 'Lien iOS non résolu. Entre directement le nom du lieu, ou copie l\'URL depuis Safari.'
-            : 'Lien non reconnu. Essaie de coller directement le nom du lieu.');
           return;
         }
-        // Any website URL — try Microlink for metadata
-        const meta = await fetchUrlMetadata(raw);
-        if (meta?.title) {
-          const placeData = await fetchPlaceData(meta.title).catch(() => null);
-          applyResult({
-            title: meta.title,
-            photoUrl: meta.photoUrl,
-            link: raw,
-            ...(placeData ? { address: placeData.address, lat: placeData.lat, lon: placeData.lon, category: placeData.category } : {}),
-          }, raw);
-          if (!placeData) setError('Titre importé. Ajoute l\'adresse manuellement si besoin.');
-          return;
-        }
-        setError('Impossible d\'extraire les infos de ce site. Essaie un nom de lieu ou un lien Google Maps.');
+        setError('Lien non reconnu. Colle l\'URL complète ou tape directement le nom du lieu.');
       } else {
         // Plain text: search Nominatim directly
         const placeData = await fetchPlaceData(raw);
@@ -341,11 +301,11 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
           {/* Google Maps import / place search */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Lien Google Maps ou nom du lieu</label>
+            <label className="form-label">📍 Lien Google Maps / TikTok ou nom du lieu</label>
             <div className="import-row">
               <input
                 className="form-input"
-                placeholder="maps.app.goo.gl/… ou tapez un nom de lieu"
+                placeholder="Colle un lien Maps, TikTok… ou tape un nom de lieu"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}

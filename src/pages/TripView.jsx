@@ -50,23 +50,37 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
       s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
 
-      // Vertical auto-scroll when near top/bottom edges
+      // Vertical auto-scroll (Liste / Agenda). Use the container's own bounding box for the
+      // edge zones — otherwise the sticky header eats the top zone and you can't drag an
+      // activity *upward* onto an earlier day.
       const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
       if (sc) {
-        const h = window.innerHeight;
-        const EDGE = 90, MAX = 14;
+        const r = sc.getBoundingClientRect();
+        const EDGE = 110, MAX = 20;
         const y = touch.clientY;
-        if (y < EDGE) sc.scrollTop -= Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
-        else if (y > h - EDGE) sc.scrollTop += Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
+        if (y < r.top + EDGE) {
+          const k = Math.min(1, (r.top + EDGE - y) / EDGE);
+          sc.scrollTop -= Math.round(MAX * Math.pow(k, 1.4));
+        } else if (y > r.bottom - EDGE) {
+          const k = Math.min(1, (y - (r.bottom - EDGE)) / EDGE);
+          sc.scrollTop += Math.round(MAX * Math.pow(k, 1.4));
+        }
       }
-      // Horizontal auto-scroll for days tab bar when dragging near left/right edges
-      const tabs = s.tabsContainer || (s.tabsContainer = document.querySelector('.tabs'));
-      if (tabs) {
-        const w = window.innerWidth;
-        const HEDGE = 70, HMAX = 10;
+      // Horizontal auto-scroll for the Timeline, where days are laid out left-to-right.
+      // Lets you drag an activity onto a day several days further along.
+      if (s.timelineWrap === undefined) s.timelineWrap = document.querySelector('.timeline-view-wrap') || null;
+      const tl = s.timelineWrap;
+      if (tl) {
+        const r = tl.getBoundingClientRect();
+        const HEDGE = 84, HMAX = 20;
         const x = touch.clientX;
-        if (x < HEDGE) tabs.scrollLeft -= Math.round(HMAX * Math.pow(1 - x / HEDGE, 1.5));
-        else if (x > w - HEDGE) tabs.scrollLeft += Math.round(HMAX * Math.pow(1 - (w - x) / HEDGE, 1.5));
+        if (x < r.left + HEDGE) {
+          const k = Math.min(1, (r.left + HEDGE - x) / HEDGE);
+          tl.scrollLeft -= Math.round(HMAX * Math.pow(k, 1.4));
+        } else if (x > r.right - HEDGE) {
+          const k = Math.min(1, (x - (r.right - HEDGE)) / HEDGE);
+          tl.scrollLeft += Math.round(HMAX * Math.pow(k, 1.4));
+        }
       }
 
       s.ghost.style.visibility = 'hidden';
@@ -109,7 +123,7 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       zone?.classList.remove('day-section__body--drop-target');
       if (s.ghost) { s.ghost.remove(); s.ghost = null; }
       s.sourceEl?.classList.remove('activity-card--dragging');
-      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null;
+      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null; s.timelineWrap = undefined;
     };
 
     document.addEventListener('touchmove', onMove, { passive: false });
