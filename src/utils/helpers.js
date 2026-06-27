@@ -19,6 +19,116 @@ export async function extractViaEdge(url) {
   }
 }
 
+// ── Client-side extractor (works without the Edge Function) ────────────────
+// Mirrors the server agent: cleans the caption, classifies it, and geocodes
+// the place. TikTok oEmbed and Nominatim are both CORS-accessible from the
+// browser; Google Maps short links go through importFromGoogleMaps' proxy chain.
+const _TT_CAT_RULES = [
+  [/restaurant|resto|food|foodie|eat|cafe|coffee|brunch|cuisine|miam|gastronom/, 'resto'],
+  [/beach|plage|\bmer\b|ocean|\bsea\b|seaside|crique/, 'plage'],
+  [/hike|hiking|rando|trail|trek|montagne|mountain|forest|nature|cascade|waterfall|balade|walk/, 'balade'],
+  [/museum|musee|monument|castle|chateau|church|eglise|histo|culture|\bart\b|gallery|visite|sightseeing/, 'visite'],
+  [/sport|gym|fitness|surf|\bski\b|climb|escalade|velo|bike|kayak|dive|plong/, 'sport'],
+  [/spa|wellness|hotel|relax|chill|repos|massage/, 'repos'],
+  [/party|club|\bbar\b|nightlife|concert|festival|\bfun\b|game|parc|amusement/, 'fun'],
+];
+function _catFromHashtags(text) {
+  const t = (text || '').toLowerCase();
+  for (const [re, cat] of _TT_CAT_RULES) if (re.test(t)) return cat;
+  return null;
+}
+function _stripEmoji(s) {
+  return s.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}\u{2122}\u{2139}\u{2300}-\u{23FF}]/gu, ' ');
+}
+function _cleanCaption(raw) {
+  if (!raw) return '';
+  let t = _stripEmoji(raw)
+    .replace(/#[\p{L}\p{N}_]+/gu, ' ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/@[\w.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  t = t.split(/[\n.!?•|]/)[0].trim();
+  if (t.length > 70) t = t.slice(0, 70).trim();
+  return t.replace(/[\s,]+$/, '').trim();
+}
+function _locationHint(caption) {
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
+  if (pin) return pin[1].replace(/\s+/g, ' ').trim().replace(/[\s,]+$/, '');
+  const at = caption.match(/(?:^|\s)(?:at|à|chez|in)\s+([A-ZÀ-Ý][\p{L}'’\- ]{2,50})/u);
+  if (at) return at[1].trim();
+  return null;
+}
+
+export async function extractPlaceClient(url) {
+  const raw = (url || '').trim();
+  if (!raw) return null;
+
+  // ── TikTok ──
+  if (/tiktok\.com/i.test(raw)) {
+    // Resolve vm./vt. short links to the canonical video URL — oEmbed is more
+    // reliable with the full URL.
+    let target = raw;
+    if (/(?:vm|vt)\.tiktok\.com/i.test(raw)) {
+      try {
+        const { finalUrl, html } = await fetchHtmlViaProxy(raw);
+        if (finalUrl && /tiktok\.com\/.+\/video\//.test(finalUrl)) target = finalUrl;
+        else if (html) {
+          const m = html.match(/https?:\/\/www\.tiktok\.com\/@[^/"'\s]+\/video\/\d+/);
+          if (m) target = m[0];
+        }
+      } catch { /* ignore */ }
+    }
+    let caption = '', author = '', thumb = '';
+    try {
+      const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(target)}`);
+      if (r.ok) { const d = await r.json(); caption = d.title || ''; author = d.author_name || ''; thumb = d.thumbnail_url || ''; }
+    } catch { /* ignore */ }
+    const loc = _locationHint(caption);
+    const title = _cleanCaption(loc) || _cleanCaption(caption) || (author ? `Idée de ${author}` : 'Activité TikTok');
+    const result = {
+      title,
+      category: _catFromHashtags(caption) || 'fun',
+      link: raw,
+      photoUrl: thumb,
+      notes: caption ? caption.slice(0, 400) : '',
+      source: 'tiktok',
+    };
+    if (loc) {
+      const place = await fetchPlaceData(loc).catch(() => null);
+      if (place?.lat != null) {
+        result.address = place.address;
+        result.lat = place.lat;
+        result.lon = place.lon;
+        result.category = _catFromHashtags(caption) || place.category;
+      }
+    }
+    return result;
+  }
+
+  // ── Google Maps ──
+  if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google/i.test(raw)) {
+    const r = await importFromGoogleMaps(raw).catch(() => null);
+    return r ? { source: 'google_maps', ...r } : null;
+  }
+
+  // ── Any other website ──
+  const meta = await fetchUrlMetadata(raw).catch(() => null);
+  if (meta?.title) {
+    const place = await fetchPlaceData(meta.title).catch(() => null);
+    return {
+      title: meta.title,
+      photoUrl: meta.photoUrl || '',
+      link: raw,
+      source: 'web',
+      ...(place?.lat != null
+        ? { address: place.address, lat: place.lat, lon: place.lon, category: place.category }
+        : { category: getSiteCategory(raw) || 'visite' }),
+    };
+  }
+  return null;
+}
+
 export const CATEGORIES = [
   { id: 'resto',    emoji: '🍽️', label: 'Resto' },
   { id: 'visite',   emoji: '🏛️', label: 'Visite' },
@@ -198,7 +308,18 @@ async function fetchHtmlViaProxy(url) {
     }
   } catch {}
 
-  // Fallback: corsproxy.io
+  // Fallback 1: codetabs — follows redirects server-side, returns final body
+  try {
+    const { signal, clear } = makeAbortSignal(12000);
+    const r = await fetch(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, { signal });
+    clear();
+    if (r.ok) {
+      const html = await r.text();
+      if (html) return { html, finalUrl: null };
+    }
+  } catch {}
+
+  // Fallback 2: corsproxy.io
   try {
     const { signal, clear } = makeAbortSignal(12000);
     const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { signal });
@@ -235,6 +356,9 @@ function extractCoordsFromHtml(html) {
   // @lat,lon in embedded Google Maps URLs
   const urlCoords = html.match(/\/@(-?\d{1,3}\.\d{4,}),(-?\d{1,3}\.\d{4,})[,/]/);
   if (urlCoords) return { lat: parseFloat(urlCoords[1]), lon: parseFloat(urlCoords[2]) };
+  // !3dLAT!4dLON place-data blob (common in resolved share links)
+  const blob = html.match(/!3d(-?\d{1,3}\.\d{4,})!4d(-?\d{1,3}\.\d{4,})/);
+  if (blob) return { lat: parseFloat(blob[1]), lon: parseFloat(blob[2]) };
   // ll=lat,lon pattern
   const llParam = html.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (llParam) return { lat: parseFloat(llParam[1]), lon: parseFloat(llParam[2]) };
