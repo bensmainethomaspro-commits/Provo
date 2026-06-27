@@ -106,8 +106,8 @@ export async function extractPlaceClient(url) {
     return result;
   }
 
-  // ── Google Maps ──
-  if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google/i.test(raw)) {
+  // ── Google Maps (incl. share.google universal links) ──
+  if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google|share\.google/i.test(raw)) {
     const r = await importFromGoogleMaps(raw).catch(() => null);
     return r ? { source: 'google_maps', ...r } : null;
   }
@@ -467,7 +467,7 @@ export async function importFromGoogleMaps(url) {
   let resolvedUrl = url;
   let placeName = null;
 
-  if (/google\.com\/maps|goo\.gl|maps\.app/.test(url)) {
+  if (/google\.com\/maps|goo\.gl|maps\.app|share\.google/.test(url)) {
     const { html, finalUrl } = await fetchHtmlViaProxy(cleaned);
     if (finalUrl) resolvedUrl = finalUrl;
 

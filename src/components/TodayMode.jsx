@@ -13,6 +13,7 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
 
   useEffect(() => {
     if (!dragId) return;
+    document.body.classList.add('dragging-noselect');
     const move = (e) => {
       const pt = e.touches ? e.touches[0] : e;
       const card = document.elementFromPoint(pt.clientX, pt.clientY)?.closest('[data-today-id]');
@@ -38,6 +39,7 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
     window.addEventListener('touchend', end);
     window.addEventListener('mouseup', end);
     return () => {
+      document.body.classList.remove('dragging-noselect');
       window.removeEventListener('touchmove', move);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('touchend', end);
@@ -61,7 +63,7 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
             className="today-act-card__drag"
             title="Glisser pour réorganiser"
             onTouchStart={(e) => { e.preventDefault(); startDrag(act.id); }}
-            onMouseDown={() => startDrag(act.id)}
+            onMouseDown={(e) => { e.preventDefault(); startDrag(act.id); }}
           >⠿</span>
           <span className="today-act-card__emoji">{meta.emoji}</span>
           <div className="today-act-card__info">
