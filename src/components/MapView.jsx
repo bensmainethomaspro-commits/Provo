@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CATEGORY_COLORS, getCategoryMeta } from '../utils/helpers';
+import { CATEGORY_COLORS, getCategoryMeta, fetchPlaceData } from '../utils/helpers';
 
 function markerIcon(category) {
   const color = CATEGORY_COLORS[category] || '#FF6B35';
@@ -15,9 +15,31 @@ function markerIcon(category) {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor }) {
+function homeIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="background:#1a1a2e;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,0.45);border:2.5px solid #fff;">🏠</div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -20],
+  });
+}
+
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const [accom, setAccom] = useState(null);
+
+  // Geocode the accommodation address from trip settings (Nominatim, CORS-ok).
+  useEffect(() => {
+    const addr = (accommodationAddress || '').trim();
+    if (!addr) { setAccom(null); return; }
+    let cancelled = false;
+    fetchPlaceData(addr)
+      .then(p => { if (!cancelled && p?.lat != null) setAccom({ lat: p.lat, lon: p.lon, address: p.address || addr }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [accommodationAddress]);
 
   const geoActs = [
     ...days.flatMap((d, i) => d.activities
@@ -26,9 +48,11 @@ export default function MapView({ days, reserve, roadTripMode, tripColor }) {
     ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999 })),
   ];
 
+  const hasContent = geoActs.length > 0 || (accom && accom.lat != null);
+
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || geoActs.length === 0) return;
+    if (!container || !hasContent) return;
     if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
 
     const map = L.map(container);
@@ -70,13 +94,21 @@ export default function MapView({ days, reserve, roadTripMode, tripColor }) {
       }).addTo(map);
     }
 
+    // Accommodation marker (🏠) from trip settings
+    if (accom && accom.lat != null) {
+      L.marker([accom.lat, accom.lon], { icon: homeIcon(), zIndexOffset: 200 })
+        .addTo(map)
+        .bindPopup(`<strong>🏠 Hébergement</strong>${accom.address ? `<br><small style="color:#888">${accom.address}</small>` : ''}`);
+      bounds.push([accom.lat, accom.lon]);
+    }
+
     if (bounds.length === 1) map.setView(bounds[0], 14);
     else map.fitBounds(bounds, { padding: [24, 24] });
 
     return () => { map.remove(); mapRef.current = null; };
-  }, [days, reserve, roadTripMode, tripColor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [days, reserve, roadTripMode, tripColor, accom]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (geoActs.length === 0) {
+  if (!hasContent) {
     return (
       <div className="map-empty">
         <div className="map-empty__icon">🗺️</div>
@@ -90,6 +122,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor }) {
     <div className="map-wrap">
       <div className="map-pill">
         {geoActs.length} lieu{geoActs.length > 1 ? 'x' : ''} sur la carte
+        {accom && accom.lat != null && <span> · 🏠 Hébergement</span>}
         {roadTripMode && <span className="map-pill__road"> · 🛣️ Road trip</span>}
       </div>
       <div ref={containerRef} className="map-canvas" />

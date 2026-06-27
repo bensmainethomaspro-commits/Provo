@@ -2205,7 +2205,7 @@ body {
 .agenda-day__emojis {
   font-size: 15px; letter-spacing: 2px; flex: 1;
 }
-.agenda-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; opacity: 0.85; margin-left: auto; }
+.agenda-day__weather { display: flex; gap: 4px; align-items: center; font-size: 12px; font-weight: 600; opacity: 0.85; margin-left: auto; color: var(--text); }
 .agenda-day__stats {
   display: flex; gap: 8px; flex-wrap: wrap;
 }
@@ -2575,6 +2575,10 @@ body {
 }
 .today-act-card--done { opacity: 0.6; }
 .today-act-card--skip { opacity: 0.5; text-decoration: line-through; }
+.today-act-card--dragging { opacity: 0.6; box-shadow: var(--shadow-md); transform: scale(1.02); border-color: var(--orange); }
+.today-act-card__drag { font-size: 18px; color: var(--text-light); cursor: grab; touch-action: none; flex-shrink: 0; align-self: center; padding: 0 2px; user-select: none; }
+.today-act-card__drag:active { cursor: grabbing; }
+.today-mode__hint { font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-light); font-size: 10px; }
 .today-act-card__left { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
 .today-act-card__emoji { font-size: 24px; flex-shrink: 0; }
 .today-act-card__info { flex: 1; min-width: 0; }
@@ -4873,3 +4877,6 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
 /* keep the grab handle subtle at the very top of full-screen sheets */
 .sheet__handle { margin-top: max(8px, env(safe-area-inset-top)); }
+
+/* Inline "add activity" button above the trip summary in the planning views */
+.planning-add-inline { width: 100%; margin: 4px 0 14px; }
