@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import RefreshButton from './RefreshButton';
 
 export default function AuthScreen({ onSignIn, onSignUp, onResetPassword, onSkip }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'reset'
@@ -80,6 +81,9 @@ export default function AuthScreen({ onSignIn, onSignUp, onResetPassword, onSkip
 
   return (
     <div className="auth-screen">
+      <div style={{ position: 'absolute', top: 'max(12px, env(safe-area-inset-top))', right: 12, zIndex: 5 }}>
+        <RefreshButton />
+      </div>
       <div className="auth-card">
         <div className="auth-logo">🧭</div>
         <h1 className="auth-app-name">Provo</h1>
