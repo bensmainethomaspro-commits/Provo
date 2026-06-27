@@ -20,6 +20,27 @@ import { useTravelTimes } from '../hooks/useTravelTimes';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
 
+// True when the app runs as an installed PWA (home-screen / standalone window).
+const isStandalonePWA = typeof window !== 'undefined' && (
+  window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+);
+
+// Clear cached assets, pull the newest service worker, and reload from network —
+// gets the installed app onto the latest Vercel deploy without re-adding it.
+async function forceRefreshApp() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) { reg.waiting?.postMessage({ type: 'SKIP_WAITING' }); await reg.update(); }
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter(k => k !== 'provo-tiles-v1').map(k => caches.delete(k)));
+    }
+  } catch { /* ignore */ }
+  window.location.reload();
+}
+
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
 
@@ -632,6 +653,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
+          {isStandalonePWA && (
+            <button className="btn btn--ghost-white btn--sm" onClick={forceRefreshApp} title="Mettre à jour vers la dernière version" aria-label="Rafraîchir l'application">
+              🔄
+            </button>
+          )}
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
@@ -773,6 +799,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             totalDays={trip.days.length}
             trip={trip}
             onStatusChange={handleStatusChange}
+            onReorderActivities={(dayId, newOrder) => setDayActivitiesOrder(tripId, dayId, newOrder)}
             reserve={trip.reserve}
             days={trip.days}
             onAddFromReserve={todayDay ? (actId) => moveFromReserveToDay(tripId, todayDay.id, actId) : null}
@@ -845,8 +872,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               ))
             )}
 
-            <TripSummary trip={trip} />
-
             {/* Reserve mini-panel */}
             <div className="planning-reserve">
               <button
@@ -890,6 +915,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </div>
               )}
             </div>
+
+            <button className="btn btn--primary planning-add-inline" onClick={() => openAddSheet(null)}>
+              + Ajouter une activité
+            </button>
+
+            <TripSummary trip={trip} />
           </>
         )}
 
@@ -1050,7 +1081,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
-          <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} />
+          <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} />
         )}
       </div>
 

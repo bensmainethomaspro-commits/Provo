@@ -1,9 +1,95 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import Confetti from './Confetti';
 
-export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChange, reserve, days, onAddFromReserve, onMoveFromDay }) {
+// Drag-to-reorder list for the day's remaining activities (touch + mouse).
+function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
+  const [list, setList] = useState(items);
+  const [dragId, setDragId] = useState(null);
+
+  // Sync with parent whenever we're not mid-drag.
+  useEffect(() => { if (!dragId) setList(items); }, [items, dragId]);
+
+  useEffect(() => {
+    if (!dragId) return;
+    const move = (e) => {
+      const pt = e.touches ? e.touches[0] : e;
+      const card = document.elementFromPoint(pt.clientX, pt.clientY)?.closest('[data-today-id]');
+      if (!card) return;
+      const overId = card.getAttribute('data-today-id');
+      setList(prev => {
+        const from = prev.findIndex(a => a.id === dragId);
+        const to = prev.findIndex(a => a.id === overId);
+        if (from === -1 || to === -1 || from === to) return prev;
+        const next = [...prev];
+        const [m] = next.splice(from, 1);
+        next.splice(to, 0, m);
+        return next;
+      });
+      if (e.cancelable) e.preventDefault();
+    };
+    const end = () => {
+      setDragId(null);
+      setList(prev => { onCommit(prev.map(a => a.id)); return prev; });
+    };
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('mousemove', move);
+    window.addEventListener('touchend', end);
+    window.addEventListener('mouseup', end);
+    return () => {
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('touchend', end);
+      window.removeEventListener('mouseup', end);
+    };
+  }, [dragId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startDrag = (id) => { setDragId(id); vibrate([10]); };
+
+  return list.map(act => {
+    const meta = getCategoryMeta(act.category);
+    const slot = slots[act.id];
+    return (
+      <div
+        key={act.id}
+        data-today-id={act.id}
+        className={`today-act-card${dragId === act.id ? ' today-act-card--dragging' : ''}`}
+      >
+        <div className="today-act-card__left">
+          <span
+            className="today-act-card__drag"
+            title="Glisser pour réorganiser"
+            onTouchStart={(e) => { e.preventDefault(); startDrag(act.id); }}
+            onMouseDown={() => startDrag(act.id)}
+          >⠿</span>
+          <span className="today-act-card__emoji">{meta.emoji}</span>
+          <div className="today-act-card__info">
+            <div className="today-act-card__title">{act.title}</div>
+            {slot && <div className="today-act-card__time">{slot.start} – {slot.end}</div>}
+            {act.address && (
+              <a
+                className="today-act-card__addr"
+                href={`https://maps.google.com/maps?daddr=${encodeURIComponent(act.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+              >
+                📍 {act.address}
+              </a>
+            )}
+          </div>
+        </div>
+        <div className="today-act-card__actions">
+          <button className="today-act-card__btn today-act-card__btn--skip" onClick={() => onSkip(act.id)}>❌</button>
+          <button className="today-act-card__btn today-act-card__btn--done" onClick={() => onDone(act.id)}>✅</button>
+        </div>
+      </div>
+    );
+  });
+}
+
+export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChange, onReorderActivities, reserve, days, onAddFromReserve, onMoveFromDay }) {
   const [showConfetti, setShowConfetti] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTab, setPickerTab] = useState('reserve');
@@ -56,6 +142,19 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
     vibrate([10]);
   };
 
+  // Rebuild the full day order from a reordered list of "remaining" ids,
+  // leaving done/skipped activities in their existing slots.
+  const commitRemainingOrder = (remainingIds) => {
+    if (!onReorderActivities) return;
+    const remSet = new Set(remainingIds);
+    let ri = 0;
+    const newOrder = day.activities.map(a =>
+      remSet.has(a.id) ? day.activities.find(x => x.id === remainingIds[ri++]) : a
+    );
+    vibrate([15]);
+    onReorderActivities(day.id, newOrder);
+  };
+
   return (
     <div className="today-mode">
       <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
@@ -84,37 +183,14 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
 
       {remaining.length > 0 && (
         <div className="today-mode__section">
-          <div className="today-mode__section-title">À faire ({remaining.length})</div>
-          {remaining.map(act => {
-            const meta = getCategoryMeta(act.category);
-            const slot = slots[act.id];
-            return (
-              <div key={act.id} className="today-act-card">
-                <div className="today-act-card__left">
-                  <span className="today-act-card__emoji">{meta.emoji}</span>
-                  <div className="today-act-card__info">
-                    <div className="today-act-card__title">{act.title}</div>
-                    {slot && <div className="today-act-card__time">{slot.start} – {slot.end}</div>}
-                    {act.address && (
-                      <a
-                        className="today-act-card__addr"
-                        href={`https://maps.google.com/maps?daddr=${encodeURIComponent(act.address)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        📍 {act.address}
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <div className="today-act-card__actions">
-                  <button className="today-act-card__btn today-act-card__btn--skip" onClick={() => handleSkip(act.id)}>❌</button>
-                  <button className="today-act-card__btn today-act-card__btn--done" onClick={() => handleDone(act.id)}>✅</button>
-                </div>
-              </div>
-            );
-          })}
+          <div className="today-mode__section-title">À faire ({remaining.length}) <span className="today-mode__hint">⠿ glisse pour réorganiser</span></div>
+          <TodayReorderList
+            items={remaining}
+            slots={slots}
+            onCommit={commitRemainingOrder}
+            onDone={handleDone}
+            onSkip={handleSkip}
+          />
         </div>
       )}
 

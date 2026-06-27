@@ -45,6 +45,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const [error, setError] = useState('');
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [recurring, setRecurring] = useState(false);
 
   useEffect(() => {
@@ -198,13 +199,33 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     set('travelerIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (saving) return;
     const rawTitle = form.title.trim();
     const title = rawTitle || deduceTitle(form.category, form.address, form.notes);
     const { fixedEnd, ...formRest } = form;
+    if (!isEdit && dest !== 'reserve' && !recurring && !selectedDayId) {
+      setError('Choisis un jour.'); return;
+    }
+
+    // Geocode the address when coordinates are missing so the activity shows up
+    // on the map (covers TikTok imports and manually-typed addresses). Capped so
+    // saving never hangs if Nominatim is slow.
+    let lat = form.lat, lon = form.lon;
+    if ((lat == null || lon == null) && form.address && form.address.trim()) {
+      setSaving(true);
+      const place = await Promise.race([
+        fetchPlaceData(form.address.trim()).catch(() => null),
+        new Promise(r => setTimeout(() => r(null), 4500)),
+      ]);
+      setSaving(false);
+      if (place?.lat != null) { lat = place.lat; lon = place.lon; }
+    }
+
     const activity = {
       ...formRest,
       title,
+      lat, lon,
       fixedStart: form.fixedStart || null,
       durationHours: parseInt(form.durationHours) || 0,
       durationMinutes: parseInt(form.durationMinutes) || 0,
@@ -221,7 +242,6 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     } else if (recurring && onAddToAllDays) {
       onAddToAllDays(activity);
     } else {
-      if (!selectedDayId) { setError('Choisis un jour.'); return; }
       onAddToDay(selectedDayId, activity);
     }
     close();
@@ -591,8 +611,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
         <div className="sheet__footer">
           <button className="btn btn--secondary btn--full" onClick={close}>Annuler</button>
-          <button className="btn btn--primary btn--full" onClick={handleSubmit}>
-            {isEdit ? '✅ Enregistrer' : dest === 'reserve' ? '📦 En réserve' : '📅 Assigner'}
+          <button className="btn btn--primary btn--full" onClick={handleSubmit} disabled={saving}>
+            {saving ? '📍 Localisation…' : isEdit ? '✅ Enregistrer' : dest === 'reserve' ? '📦 En réserve' : '📅 Assigner'}
           </button>
         </div>
       </div>
