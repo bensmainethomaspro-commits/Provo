@@ -4893,6 +4893,10 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   -webkit-touch-callout: none !important;
 }
 
+/* While dragging an activity across the Timeline, disable scroll-snap so the
+   horizontal auto-scroll (near the left/right edges) glides instead of snapping. */
+.dnd-active .timeline-view-wrap { scroll-snap-type: none; }
+
 /* ── Bottom tab bar (mobile bottom-nav) ──────────────────────────────────────
    The trip's section tabs (Aujourd'hui, Planning, Réserve…) are pinned to the
    bottom of the screen so they're reachable with the thumb without scrolling.
@@ -4942,11 +4946,19 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   background: #fff;
   color: var(--trip-accent, var(--orange));
 }
-/* Lift the floating "add" button above the bottom bar */
-.trip-view .fab {
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
-}
-/* Clear the fixed bar so the last content isn't hidden behind it */
+/* Clear the fixed bottom bar so the last content isn't hidden behind it */
 .trip-view .tab-content {
-  padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
+
+/* Small "add activity" button, top-right of the header, on every trip tab */
+.header__add-btn {
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: none; border-radius: 50%;
+  background: #fff; color: var(--trip-accent, var(--orange));
+  font-size: 21px; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.20);
+  -webkit-tap-highlight-color: transparent;
+}
+.header__add-btn:active { transform: scale(0.92); }

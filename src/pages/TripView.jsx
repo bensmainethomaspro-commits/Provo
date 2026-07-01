@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTripsContext } from '../context/TripsContext';
-import DaySection from '../components/DaySection';
 import DayDetailModal from '../components/DayDetailModal';
 import ActivityCard from '../components/ActivityCard';
 import AddActivitySheet from '../components/AddActivitySheet';
@@ -39,6 +38,8 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
     document.body.appendChild(ghost);
     s.ghost = ghost;
     sourceEl.classList.add('activity-card--dragging');
+    // Disable scroll-snap on the timeline so the horizontal auto-scroll is smooth.
+    document.body.classList.add('dnd-active');
   };
 
   useEffect(() => {
@@ -123,6 +124,7 @@ function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, move
       zone?.classList.remove('day-section__body--drop-target');
       if (s.ghost) { s.ghost.remove(); s.ghost = null; }
       s.sourceEl?.classList.remove('activity-card--dragging');
+      document.body.classList.remove('dnd-active');
       s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null; s.timelineWrap = undefined;
     };
 
@@ -172,7 +174,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('provo_viewMode') || 'timeline');
+  const [viewMode, setViewMode] = useState(() => {
+    const stored = localStorage.getItem('provo_viewMode');
+    return stored === 'agenda' ? 'agenda' : 'timeline'; // 'list' removed → fallback timeline
+  });
   const [reserveFilter, setReserveFilter] = useState('all');
   const [reserveSearch, setReserveSearch] = useState('');
   const [reserveSort, setReserveSort] = useState('default');
@@ -257,30 +262,42 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     moveFromReserveToDay, moveDayToDay, moveToReserve,
   });
 
-  // Auto-scroll during drag near viewport edges
+  // Auto-scroll during HTML5 (mouse / touch-PC) drag near the edges — vertically
+  // for Liste/Agenda and horizontally for the Timeline (days laid out left→right).
   useEffect(() => {
     let animFrame;
-    let dy = 0;
-    const EDGE = 90;
-    const MAX = 14;
+    let dy = 0, dx = 0;
+    let tlWrap = null;
+    const EDGE = 90, MAX = 14;
+    const HEDGE = 96, HMAX = 24;
+    const onDragStart = () => { document.body.classList.add('dnd-active'); };
     const onDragOver = (e) => {
-      const y = e.clientY;
-      const h = window.innerHeight;
+      const y = e.clientY, x = e.clientX, h = window.innerHeight;
       if (y < EDGE) dy = -Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
       else if (y > h - EDGE) dy = Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
       else dy = 0;
+      tlWrap = tlWrap || document.querySelector('.timeline-view-wrap');
+      if (tlWrap) {
+        const r = tlWrap.getBoundingClientRect();
+        if (x < r.left + HEDGE) dx = -Math.round(HMAX * Math.min(1, (r.left + HEDGE - x) / HEDGE));
+        else if (x > r.right - HEDGE) dx = Math.round(HMAX * Math.min(1, (x - (r.right - HEDGE)) / HEDGE));
+        else dx = 0;
+      } else dx = 0;
     };
-    const stop = () => { dy = 0; };
+    const stop = () => { dy = 0; dx = 0; tlWrap = null; document.body.classList.remove('dnd-active'); };
     const tick = () => {
       if (dy !== 0 && tabContentRef.current) tabContentRef.current.scrollTop += dy;
+      if (dx !== 0 && tlWrap) tlWrap.scrollLeft += dx;
       animFrame = requestAnimationFrame(tick);
     };
     animFrame = requestAnimationFrame(tick);
+    window.addEventListener('dragstart', onDragStart);
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('dragend', stop);
     window.addEventListener('drop', stop);
     return () => {
       cancelAnimationFrame(animFrame);
+      window.removeEventListener('dragstart', onDragStart);
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('dragend', stop);
       window.removeEventListener('drop', stop);
@@ -411,7 +428,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const VIEW_MODES = [
     { id: 'timeline', icon: '🗓', label: 'Timeline' },
-    { id: 'list',     icon: '☰',  label: 'Liste' },
     { id: 'agenda',   icon: '📆', label: 'Agenda' },
   ];
   const cycleView = () => {
@@ -632,6 +648,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
+          <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
           <RefreshButton />
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
@@ -793,7 +810,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onReorderDay={(dayId, dir) => reorderDay(tripId, dayId, dir)}
                 weatherByDate={weather?.byDate}
               />
-            ) : viewMode === 'timeline' ? (
+            ) : (
               <TimelineView
                 days={trip.days}
                 onOpenDetail={(day) => setDetailDay(day)}
@@ -806,45 +823,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
               />
-            ) : (
-              trip.days.map((day, i) => (
-                <DaySection
-                  key={day.id}
-                  day={day}
-                  dayIndex={i}
-                  totalDays={trip.days.length}
-                  isPastTrip={isPast}
-                  onStatusChange={handleStatusChange}
-                  onDelete={handleDeleteFromDay}
-                  onMoveToReserve={(dayId, actId) => { pushUndo(trip, 'Activité déplacée en réserve'); moveToReserve(tripId, dayId, actId); }}
-                  onMoveToNextDay={(dayId, actId) => moveToNextDay(tripId, dayId, actId)}
-                  onReorder={(dayId, actId, dir) => reorderActivity(tripId, dayId, actId, dir)}
-                  onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
-                  onEdit={(activity, location) => setEditingActivity({ activity, location })}
-                  onAddActivity={openAddSheet}
-                  onOpenDetail={(day) => setDetailDay(day)}
-                  onDrop={handleDropOnDay}
-                  onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
-                  onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
-                  weather={weather?.byDate[day.date]}
-                  onTouchDragStart={handleTouchDragStart}
-                  reserve={trip.reserve}
-                  distFromPrev={dayDistances[i]}
-                  getTravelTime={getTravelTime}
-                  onAddFromReserve={(dayId, actId) => { pushUndo(trip, 'Activité ajoutée depuis la réserve'); moveFromReserveToDay(tripId, dayId, actId); }}
-                  onAddTravel={(dayId, afterId, durationMin) => { pushUndo(trip); addTravelBlock(tripId, dayId, afterId, durationMin); }}
-                  onOptimizeOrder={(dayId) => {
-                    const d = trip.days.find(x => x.id === dayId);
-                    if (!d) return;
-                    pushUndo(trip, 'Ordre optimisé');
-                    setDayActivitiesOrder(tripId, dayId, nearestNeighborSort(d.activities));
-                  }}
-                  onSwipeDay={(dir) => handleSwipeDay(day.id, dir)}
-                  onCopyDay={(srcId, tgtId) => { pushUndo(trip, 'Jour copié'); copyDay(tripId, srcId, tgtId); }}
-                  onSortByTime={(dayId) => { pushUndo(trip, 'Trié par heure'); sortDayByTime(tripId, dayId); }}
-                  {...sharedDayProps}
-                />
-              ))
             )}
 
             {/* Reserve mini-panel */}
@@ -890,10 +868,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </div>
               )}
             </div>
-
-            <button className="btn btn--primary planning-add-inline" onClick={() => openAddSheet(null)}>
-              + Ajouter une activité
-            </button>
           </>
         )}
 
@@ -1058,14 +1032,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         )}
       </div>
 
-      {/* FAB — hidden on notes, map, valise, depenses and planning (planning has its own inline button) */}
-      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && tab !== 'planning' && (
-        <div className="fab">
-          <button className="fab__btn" onClick={() => openAddSheet(null)}>
-            + Ajouter une activité
-          </button>
-        </div>
-      )}
 
       {/* Modals & sheets */}
       <AddActivitySheet
