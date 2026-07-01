@@ -4892,3 +4892,61 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   -webkit-user-select: none !important;
   -webkit-touch-callout: none !important;
 }
+
+/* ── Bottom tab bar (mobile bottom-nav) ──────────────────────────────────────
+   The trip's section tabs (Aujourd'hui, Planning, Réserve…) are pinned to the
+   bottom of the screen so they're reachable with the thumb without scrolling.
+   Kept horizontally scrollable + swipe navigation and badges intact. */
+.trip-view .tabs {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  margin: 0;
+  z-index: 150;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+  gap: 3px;
+  background: var(--surface);
+  box-shadow: 0 -3px 16px rgba(0,0,0,0.10);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+[data-theme="dark"] .trip-view .tabs {
+  background: var(--surface);
+  border-top-color: var(--border-strong);
+  box-shadow: 0 -3px 16px rgba(0,0,0,0.4);
+}
+/* Buttons sit on a light bar now → theme-coloured text instead of white */
+.trip-view .tabs .tab-btn {
+  color: var(--text-muted);
+  text-shadow: none;
+  min-height: 46px;
+  border-radius: 12px;
+}
+.trip-view .tabs .tab-btn--active {
+  background: var(--trip-accent, var(--orange));
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--trip-accent, var(--orange)) 45%, transparent);
+}
+/* Badges: visible on the light bar (accent chip), inverted on the active tab */
+.trip-view .tabs .tab-btn .tab-badge {
+  background: var(--trip-accent, var(--orange));
+  color: #fff;
+}
+.trip-view .tabs .tab-btn--active .tab-badge {
+  background: #fff;
+  color: var(--trip-accent, var(--orange));
+}
+/* Lift the floating "add" button above the bottom bar */
+.trip-view .fab {
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+}
+/* Clear the fixed bar so the last content isn't hidden behind it */
+.trip-view .tab-content {
+  padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+}
