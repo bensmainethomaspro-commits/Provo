@@ -11,7 +11,6 @@ import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
-import TripSummary from '../components/TripSummary';
 import RefreshButton from '../components/RefreshButton';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
@@ -895,8 +894,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             <button className="btn btn--primary planning-add-inline" onClick={() => openAddSheet(null)}>
               + Ajouter une activité
             </button>
-
-            <TripSummary trip={trip} />
           </>
         )}
 
