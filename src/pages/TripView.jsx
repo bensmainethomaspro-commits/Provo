@@ -262,30 +262,42 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     moveFromReserveToDay, moveDayToDay, moveToReserve,
   });
 
-  // Auto-scroll during drag near viewport edges
+  // Auto-scroll during HTML5 (mouse / touch-PC) drag near the edges — vertically
+  // for Liste/Agenda and horizontally for the Timeline (days laid out left→right).
   useEffect(() => {
     let animFrame;
-    let dy = 0;
-    const EDGE = 90;
-    const MAX = 14;
+    let dy = 0, dx = 0;
+    let tlWrap = null;
+    const EDGE = 90, MAX = 14;
+    const HEDGE = 96, HMAX = 24;
+    const onDragStart = () => { document.body.classList.add('dnd-active'); };
     const onDragOver = (e) => {
-      const y = e.clientY;
-      const h = window.innerHeight;
+      const y = e.clientY, x = e.clientX, h = window.innerHeight;
       if (y < EDGE) dy = -Math.round(MAX * Math.pow(1 - y / EDGE, 1.5));
       else if (y > h - EDGE) dy = Math.round(MAX * Math.pow(1 - (h - y) / EDGE, 1.5));
       else dy = 0;
+      tlWrap = tlWrap || document.querySelector('.timeline-view-wrap');
+      if (tlWrap) {
+        const r = tlWrap.getBoundingClientRect();
+        if (x < r.left + HEDGE) dx = -Math.round(HMAX * Math.min(1, (r.left + HEDGE - x) / HEDGE));
+        else if (x > r.right - HEDGE) dx = Math.round(HMAX * Math.min(1, (x - (r.right - HEDGE)) / HEDGE));
+        else dx = 0;
+      } else dx = 0;
     };
-    const stop = () => { dy = 0; };
+    const stop = () => { dy = 0; dx = 0; tlWrap = null; document.body.classList.remove('dnd-active'); };
     const tick = () => {
       if (dy !== 0 && tabContentRef.current) tabContentRef.current.scrollTop += dy;
+      if (dx !== 0 && tlWrap) tlWrap.scrollLeft += dx;
       animFrame = requestAnimationFrame(tick);
     };
     animFrame = requestAnimationFrame(tick);
+    window.addEventListener('dragstart', onDragStart);
     window.addEventListener('dragover', onDragOver);
     window.addEventListener('dragend', stop);
     window.addEventListener('drop', stop);
     return () => {
       cancelAnimationFrame(animFrame);
+      window.removeEventListener('dragstart', onDragStart);
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('dragend', stop);
       window.removeEventListener('drop', stop);
@@ -636,6 +648,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           {trip.destination && <p>📍 {trip.destination}</p>}
         </div>
         <div className="header__action">
+          <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
           <RefreshButton />
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
@@ -855,10 +868,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </div>
               )}
             </div>
-
-            <button className="btn btn--primary planning-add-inline" onClick={() => openAddSheet(null)}>
-              + Ajouter une activité
-            </button>
           </>
         )}
 
@@ -1023,14 +1032,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         )}
       </div>
 
-      {/* FAB — hidden on notes, map, valise, depenses and planning (planning has its own inline button) */}
-      {tab !== 'notes' && tab !== 'map' && tab !== 'valise' && tab !== 'depenses' && tab !== 'planning' && (
-        <div className="fab">
-          <button className="fab__btn" onClick={() => openAddSheet(null)}>
-            + Ajouter une activité
-          </button>
-        </div>
-      )}
 
       {/* Modals & sheets */}
       <AddActivitySheet
