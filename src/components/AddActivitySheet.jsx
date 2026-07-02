@@ -208,10 +208,12 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setError('Choisis un jour.'); return;
     }
 
-    // Geocode the address when coordinates are missing so the activity shows up
-    // on the map (covers TikTok imports and manually-typed addresses). Capped so
-    // saving never hangs if Nominatim is slow.
+    // Geocode when coordinates are missing OR when the address was edited (stale
+    // coords would keep pointing the map at the old place). Capped so saving
+    // never hangs if Nominatim is slow.
     let lat = form.lat, lon = form.lon;
+    const addressChanged = isEdit && (form.address || '').trim() !== (editActivity?.address || '').trim();
+    if (addressChanged) { lat = null; lon = null; }
     if ((lat == null || lon == null) && form.address && form.address.trim()) {
       setSaving(true);
       const place = await Promise.race([

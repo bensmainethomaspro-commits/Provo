@@ -64,7 +64,7 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
     >
       {trip.coverPhoto && (
         <div className="trip-card__cover-wrap">
-          <img src={trip.coverPhoto} className="trip-card__cover-blur" alt="" />
+          <img src={trip.coverPhoto} className="trip-card__cover-blur" alt="" loading="lazy" decoding="async" />
         </div>
       )}
       <div

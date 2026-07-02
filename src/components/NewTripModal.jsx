@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { TRIP_EMOJIS } from '../utils/helpers';
 
-const today = () => new Date().toISOString().split('T')[0];
+// Local date (not UTC) — toISOString would give yesterday between midnight and ~2am in France.
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 function compressCoverPhoto(file) {
   return new Promise((resolve) => {

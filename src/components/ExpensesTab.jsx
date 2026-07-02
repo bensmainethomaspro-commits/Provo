@@ -224,7 +224,11 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     });
   };
 
-  const totalSpent = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  // Settlements are money transfers between travelers, not group spending:
+  // they count in the debt/balance math (that's how they cancel a debt) but
+  // must not inflate totals or the category breakdown.
+  const realExpenses = expenses.filter(e => !e.isSettlement);
+  const totalSpent = realExpenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const tripBudget = parseFloat(trip.initialBudget) || 0;
   const budgetOver = tripBudget > 0 && totalSpent > tripBudget;
   const debts = calcDebts(expenses, travelers);
@@ -232,7 +236,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
 
   // Category breakdown
   const byCategory = EXPENSE_CATEGORIES.map(cat => {
-    const total = expenses
+    const total = realExpenses
       .filter(e => e.expenseCategory === cat.id)
       .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
     return { ...cat, total };
@@ -438,7 +442,9 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
             const n = exp.participantIds.length;
             const eurAmt = exp.eurAmount ?? exp.amount;
             const share = n > 0 ? eurAmt / n : eurAmt;
-            const catMeta = EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5];
+            const catMeta = exp.isSettlement
+              ? { emoji: '🤝', label: 'Remboursement' }
+              : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5]);
             return (
               <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
                 <div className="expense-item">
@@ -447,14 +453,19 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                     <div className="expense-item__info">
                       <div className="expense-item__desc">{exp.description}</div>
                       <div className="expense-item__meta">
-                        {getName(exp.payerId)} a payé{' '}
-                        <strong>
-                          {exp.currency && exp.currency !== 'EUR'
-                            ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
-                            : formatPrice(eurAmt)
-                          }
-                        </strong>
-                        {n > 0 && ` · ${formatPrice(share)}/pers.`}
+                        {exp.isSettlement
+                          ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {exp.participantIds.map(getName).join(', ')}</>
+                          : <>
+                              {getName(exp.payerId)} a payé{' '}
+                              <strong>
+                                {exp.currency && exp.currency !== 'EUR'
+                                  ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
+                                  : formatPrice(eurAmt)
+                                }
+                              </strong>
+                              {n > 0 && ` · ${formatPrice(share)}/pers.`}
+                            </>
+                        }
                         {exp.activityId && (() => {
                           const act = allActivities.find(a => a.id === exp.activityId);
                           return act ? <span className="expense-item__linked"> · 🔗 {act.title}</span> : null;

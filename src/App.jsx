@@ -6,6 +6,7 @@ import AuthScreen from './components/AuthScreen';
 import { decodeTrip, getSkyGradient } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function AppInner() {
   const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite } = useTripsContext();
@@ -151,8 +152,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <TripsProvider>
-      <AppInner />
-    </TripsProvider>
+    <ErrorBoundary>
+      <TripsProvider>
+        <AppInner />
+      </TripsProvider>
+    </ErrorBoundary>
   );
 }
