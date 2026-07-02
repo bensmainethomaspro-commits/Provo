@@ -1,3 +1,6 @@
+> 🔎 Ce repo contient aussi **JobWatch**, une app indépendante de veille de
+> postes (HRBP / L&D) avec digest email matinal — voir [`jobwatch/README.md`](jobwatch/README.md).
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
