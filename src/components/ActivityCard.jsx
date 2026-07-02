@@ -213,7 +213,7 @@ export default function ActivityCard({
               {activity.screenshots?.length > 0 && (
                 <div className="activity-card__screenshots">
                   {activity.screenshots.map((src, i) => (
-                    <img key={i} src={src} className="screenshot-thumb" alt=""
+                    <img key={i} src={src} className="screenshot-thumb" alt="" loading="lazy" decoding="async"
                       onClick={() => setLightboxSrc(src)} />
                   ))}
                 </div>

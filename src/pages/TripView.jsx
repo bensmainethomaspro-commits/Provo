@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useTripsContext } from '../context/TripsContext';
 import DayDetailModal from '../components/DayDetailModal';
 import ActivityCard from '../components/ActivityCard';
@@ -8,16 +8,18 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
-import MapView from '../components/MapView';
 import PackingList from '../components/PackingList';
 import RefreshButton from '../components/RefreshButton';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
-import { useTravelTimes } from '../hooks/useTravelTimes';
 import { useLocalNews } from '../hooks/useLocalNews';
-import TripSettingsSheet from '../components/TripSettingsSheet';import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, getCategoryMeta, CATEGORIES, nearestNeighborSort, haversineKm, detectCountryTheme } from '../utils/helpers';
+import TripSettingsSheet from '../components/TripSettingsSheet';
+import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, CATEGORIES, detectCountryTheme } from '../utils/helpers';
+
+// Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
+const MapView = lazy(() => import('../components/MapView'));
 
 function useTouchDnd({ tripId, tripRef, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -147,10 +149,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
-    restoreTrip, addTravelBlock, setDayActivitiesOrder,
+    restoreTrip, setDayActivitiesOrder,
     reorderDay, addToAllDays,
     addExpense, deleteExpense,
-    copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
     enableCollaboration, userId,
     fetchTripMembers, removeTripMember,
@@ -304,6 +305,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     };
   }, []);
 
+  // Auto-open compare panel when 2+ activities are selected.
+  // These hooks must stay ABOVE the `!trip` early return — a hook below it
+  // changes the hook count when a trip is deleted mid-view and crashes the app.
+  useEffect(() => {
+    if (compareSelectedIds.size >= 2) setShowCompare(true);
+  }, [compareSelectedIds.size]);
+
   if (!trip) return (
     <div className="trip-view">
       <div className="header">
@@ -337,21 +345,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
   const stats = budgetStats(allActivities);
 
-  const allTripActivities = trip.days.flatMap(d => d.activities);
-  const { getTime: getTravelTime } = useTravelTimes(allTripActivities);
-
-  const dayDistances = trip.days.map((day, i) => {
-    if (i === 0) return null;
-    const prevDay = trip.days[i - 1];
-    const lastGeo = [...prevDay.activities].reverse().find(a => a.lat && a.lon && a.status !== 'nogo');
-    const firstGeo = day.activities.find(a => a.lat && a.lon && a.status !== 'nogo');
-    if (!lastGeo || !firstGeo) return null;
-    return haversineKm(lastGeo.lat, lastGeo.lon, firstGeo.lat, firstGeo.lon);
-  });
   const actTotal = trip.days.reduce((s, d) => s + d.activities.length, 0);
 
   const initBudget = parseFloat(trip.initialBudget) || 0;
-  const budgetRemaining = initBudget > 0 ? initBudget - stats.spent : stats.remaining;
   const showBudget = initBudget > 0 || stats.total > 0;
 
   // ─── Tab order + swipe navigation ───────────────────────
@@ -400,17 +396,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   };
 
   // ─── Day swipe navigation ─────────────────────────────
-  const handleSwipeDay = (dayId, direction) => {
-    const currentIdx = trip.days.findIndex(d => d.id === dayId);
-    const targetIdx = currentIdx + direction;
-    if (targetIdx < 0 || targetIdx >= trip.days.length) return;
-    const el = document.getElementById(`day-${trip.days[targetIdx].id}`);
-    if (el && tabContentRef.current) {
-      const offset = el.offsetTop - tabContentRef.current.offsetTop;
-      tabContentRef.current.scrollTo({ top: offset, behavior: 'smooth' });
-    }
-  };
-
   // ─── Compare helpers ──────────────────────────────────
   const toggleCompare = (id) => {
     setCompareSelectedIds(prev => {
@@ -420,11 +405,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     });
   };
   const compareActivities = allActivities.filter(a => compareSelectedIds.has(a.id));
-
-  // Auto-open compare panel when 2+ activities are selected
-  useEffect(() => {
-    if (compareSelectedIds.size >= 2) setShowCompare(true);
-  }, [compareSelectedIds.size]);
 
   const VIEW_MODES = [
     { id: 'timeline', icon: '🗓', label: 'Timeline' },
@@ -622,7 +602,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#FF6B35';
   const expenses = trip.expenses || [];
-  const totalExpenses = expenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  // Settlements (remboursements entre voyageurs) are transfers, not spending.
+  const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
   const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
   const totalTripCost = totalActivitiesCost + totalExpenses;
   const doneActivitiesCost = trip.days
@@ -662,6 +643,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
+                  {copyDone ? '✅ Copié !' : '📋 Copier l\'itinéraire'}
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { handleAutoBackup(); setTripMenuOpen(false); }}>
+                  💾 Sauvegarde (fichier)
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { handleWhatsAppShare(); setTripMenuOpen(false); }}>
                   💬 Partager WhatsApp
@@ -1028,7 +1015,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
-          <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} />
+          <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
+            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} />
+          </Suspense>
         )}
       </div>
 

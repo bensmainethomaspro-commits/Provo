@@ -637,7 +637,7 @@ export function useTrips() {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, expenses: [...(t.expenses || []), {
         ...expense, id: genId(),
-        date: new Date().toISOString().split('T')[0],
+        date: localDateStr(new Date()),
       }]
     }));
   }, []);

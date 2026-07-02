@@ -4897,6 +4897,40 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
    horizontal auto-scroll (near the left/right edges) glides instead of snapping. */
 .dnd-active .timeline-view-wrap { scroll-snap-type: none; }
 
+/* Keyboard navigation: visible focus ring (invisible for mouse/touch). */
+:focus-visible {
+  outline: 2px solid var(--trip-accent, var(--orange));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Error boundary screen ─────────────────────────────────────────────────── */
+.error-screen {
+  min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.error-screen__card {
+  background: var(--surface-raised, #fff);
+  border-radius: 24px;
+  padding: 32px 24px;
+  max-width: 400px; width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+}
+.error-screen__icon { font-size: 52px; margin-bottom: 12px; }
+.error-screen__title { font-size: 20px; font-weight: 800; color: var(--text, #1a1a2e); margin-bottom: 8px; }
+.error-screen__text { font-size: 14px; color: var(--text-muted, #5a5a7a); line-height: 1.55; margin-bottom: 20px; }
+.error-screen__actions { display: flex; flex-direction: column; gap: 10px; }
+.error-screen__details { margin-top: 16px; text-align: left; }
+.error-screen__details summary { font-size: 12px; color: var(--text-light, #9090b0); cursor: pointer; }
+.error-screen__details pre {
+  margin-top: 8px; padding: 10px; font-size: 10px; line-height: 1.4;
+  background: var(--surface-sunken, #f0efe9); border-radius: 10px;
+  overflow-x: auto; max-height: 180px; color: var(--text-muted, #5a5a7a);
+  white-space: pre-wrap; word-break: break-word;
+}
+
 /* ── Bottom tab bar (mobile bottom-nav) ──────────────────────────────────────
    The trip's section tabs (Aujourd'hui, Planning, Réserve…) are pinned to the
    bottom of the screen so they're reachable with the thumb without scrolling.
