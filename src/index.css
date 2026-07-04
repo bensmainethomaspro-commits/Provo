@@ -4996,3 +4996,182 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   -webkit-tap-highlight-color: transparent;
 }
 .header__add-btn:active { transform: scale(0.92); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESIGN 2.0 — direction « golden hour »
+   Un seul layer final et cohérent : typographie Inter réellement exploitée,
+   neutres chauds, mode sombre chaleureux (fini le bleu-nuit générique),
+   profondeur ambrée, rayons unifiés, micro-animations. Aucune modification
+   de structure — uniquement l'apparence.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Neutres chauds (papier / sable) */
+  --surface: #FBF7F2;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #F4EEE6;
+  --text: #221A12;
+  --text-muted: #6E6156;
+  --text-light: #9C8E80;
+  --border: rgba(60, 36, 16, 0.10);
+  --border-strong: rgba(60, 36, 16, 0.18);
+  /* Ombres teintées ambre — jamais de noir pur */
+  --shadow-sm: 0 1px 3px rgba(90, 46, 12, 0.07), 0 0 0 1px rgba(90, 46, 12, 0.03);
+  --shadow-md: 0 6px 20px rgba(90, 46, 12, 0.12), 0 2px 6px rgba(90, 46, 12, 0.06);
+  --shadow-lg: 0 14px 44px rgba(90, 46, 12, 0.18), 0 3px 10px rgba(90, 46, 12, 0.08);
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 26px;
+  --accent-grad: linear-gradient(135deg, #FF8A4C 0%, #FF6B35 55%, #F1500F 100%);
+}
+
+/* Mode sombre « braise » : charbon chaud, textes crème */
+[data-theme="dark"] {
+  --surface: #1D150F;
+  --surface-raised: #271D15;
+  --surface-sunken: #150F0A;
+  --text: #F4ECE3;
+  --text-muted: #C0B0A2;
+  --text-light: #8D7D6F;
+  --border: rgba(255, 214, 170, 0.10);
+  --border-strong: rgba(255, 214, 170, 0.20);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md: 0 6px 20px rgba(0,0,0,0.55);
+  --shadow-lg: 0 14px 44px rgba(0,0,0,0.65);
+}
+
+/* ── Typographie ─────────────────────────────────────────────────────────── */
+body, button, input, select, textarea {
+  font-family: var(--font-sans);
+}
+body {
+  letter-spacing: -0.011em;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+h1, h2, h3,
+.sheet__title, .auth-app-name, .dashboard__logo-text,
+.day-detail__title, .trip-card__name, .today-mode__date,
+.error-screen__title, .confirm-box__title {
+  letter-spacing: -0.025em;
+  font-weight: 800;
+}
+/* Chiffres tabulaires : heures, prix et compteurs alignés et stables */
+.tl-activity__time, .tl-activity__dur, .tl-activity__price,
+.today-act-card__time, .expense-item__meta, .expenses-summary__amount,
+.budget-inline__item, .debt-amount, .tbs__stat-value, .tab-badge,
+.day-section__total, .day-section__budget, .agenda-day__stats span {
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: rgba(255, 107, 53, 0.25); }
+
+/* ── Boutons ─────────────────────────────────────────────────────────────── */
+.btn { border-radius: 14px; }
+.btn--primary, .fab__btn {
+  background: var(--accent-grad);
+  border: none;
+  box-shadow: 0 3px 12px rgba(241, 80, 15, 0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+  text-shadow: 0 1px 2px rgba(120, 40, 0, 0.18);
+}
+.btn--primary:active { box-shadow: 0 1px 5px rgba(241, 80, 15, 0.3); }
+.header__add-btn {
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(90, 46, 12, 0.28), inset 0 -1px 0 rgba(90,46,12,0.06);
+}
+[data-theme="dark"] .header__add-btn { background: #F4ECE3; }
+
+/* ── Cartes : hairline + ombre ambrée douce ─────────────────────────────── */
+.trip-card, .tl-day, .agenda-day, .expense-item, .today-act-card,
+.expenses-summary, .debts-card, .traveler-card, .planning-reserve,
+.expense-form, .local-news {
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.tl-day { overflow: hidden; }
+.tl-day--drop { box-shadow: 0 0 0 2.5px var(--trip-accent, var(--orange)), var(--shadow-md); }
+
+/* Entrée en scène des jours de la Timeline (staggerée, une fois) */
+@keyframes tlDayIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.timeline-view-wrap .tl-day { animation: tlDayIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.timeline-view-wrap .tl-day:nth-child(1) { animation-delay: 0.03s; }
+.timeline-view-wrap .tl-day:nth-child(2) { animation-delay: 0.09s; }
+.timeline-view-wrap .tl-day:nth-child(3) { animation-delay: 0.15s; }
+.timeline-view-wrap .tl-day:nth-child(n+4) { animation-delay: 0.2s; }
+
+/* ── Barre d'onglets : pilule flottante en verre ────────────────────────── */
+.trip-view .tabs {
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  width: calc(100% - 20px);
+  max-width: 460px;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 5px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: 0 10px 34px rgba(90, 46, 12, 0.22), 0 2px 8px rgba(90, 46, 12, 0.10);
+}
+[data-theme="dark"] .trip-view .tabs {
+  background: color-mix(in srgb, var(--surface-raised) 86%, transparent);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.55);
+}
+.trip-view .tabs .tab-btn { min-height: 44px; border-radius: 18px; font-weight: 650; }
+.trip-view .tabs .tab-btn--active {
+  background: var(--accent-grad);
+  box-shadow: 0 3px 12px rgba(241, 80, 15, 0.38);
+}
+.trip-view .tab-content { padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+
+/* ── En-tête voyage : chips budget en verre ─────────────────────────────── */
+.budget-inline__item {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 3px 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Feuilles plein écran : voile + poignée plus douce ──────────────────── */
+.sheet-overlay, .day-detail-overlay {
+  background: rgba(24, 12, 4, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.sheet__handle { width: 44px; height: 5px; border-radius: 3px; opacity: 0.7; }
+
+/* ── Formulaires ─────────────────────────────────────────────────────────── */
+.form-input, .form-textarea, .form-select {
+  border-radius: 14px;
+  border-width: 1.5px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  border-color: var(--trip-accent, var(--orange));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--trip-accent, var(--orange)) 18%, transparent);
+  outline: none;
+}
+
+/* ── Détails ─────────────────────────────────────────────────────────────── */
+.tab-badge { border-radius: 999px; }
+.expense-item-swipe { border-radius: 20px; }
+.error-screen__card, .confirm-box, .auth-card { border-radius: 26px; }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+/* Respect de « réduire les animations » */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Les chips budget sont désormais des pilules séparées — plus besoin du « · » */
+.budget-inline__item + .budget-inline__item::before { content: none; }

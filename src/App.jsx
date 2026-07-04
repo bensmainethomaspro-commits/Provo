@@ -48,7 +48,8 @@ function AppInner() {
         document.body.style.background = getSkyGradient();
         document.body.style.backgroundAttachment = 'fixed';
       } else {
-        document.body.style.background = 'linear-gradient(160deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%)';
+        // Warm night — coherent with the sunset brand (no generic navy-blue dark).
+        document.body.style.background = 'linear-gradient(165deg, #140d08 0%, #1e130b 45%, #2a1810 100%)';
         document.body.style.backgroundAttachment = 'fixed';
       }
     }
