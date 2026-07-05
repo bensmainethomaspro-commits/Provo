@@ -1,25 +1,242 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/icon-192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Provo — planifiez vos voyages jour par jour : activités, budget, dépenses partagées, météo et carte, même hors ligne." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800;14..32,900&display=swap" rel="stylesheet" />
-    <meta name="theme-color" content="#FF6B35" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Provo" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
-    <title>Provo — Planifiez vos voyages</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thomas Bensmaine — Alternant Développement Managérial &amp; RH</title>
+  <meta name="description" content="Portfolio de Thomas Bensmaine, Alternant Développement Managérial & RH en Île-de-France. Former, animer, piloter : du conseil IT à la transformation des grands groupes.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="site-header" id="site-header">
+    <div class="header-inner">
+      <a href="#hero" class="brand">Thomas Bensmaine</a>
+      <nav class="site-nav" aria-label="Navigation principale">
+        <ul>
+          <li><a href="#a-propos">À propos</a></li>
+          <li><a href="#experiences">Expériences</a></li>
+          <li><a href="#projets">Projets</a></li>
+          <li><a href="#contact" class="btn btn-nav">Me contacter</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ===================== HERO ===================== -->
+    <section class="hero" id="hero">
+      <div class="container">
+        <p class="hero-kicker">Alternant Développement Managérial &amp; RH — Île-de-France</p>
+        <h1>Thomas Bensmaine</h1>
+        <p class="hero-tagline">Former, animer, piloter. Du conseil IT à la transformation des grands groupes.</p>
+        <a href="#contact" class="btn btn-primary">Me contacter</a>
+      </div>
+    </section>
+
+    <!-- ===================== À PROPOS ===================== -->
+    <section class="section fade-section" id="a-propos">
+      <div class="container">
+        <h2 class="section-title">À propos</h2>
+        <div class="about-grid">
+          <div class="about-photo">
+            <img src="assets/photo.webp" alt="Portrait de Thomas Bensmaine" width="260" height="260">
+          </div>
+          <div class="about-text">
+            <p>Avec 4 ans d'expérience chez Devoteam, une ESN de 1,2 Md€ de CA, j'ai animé des communautés, piloté des plans de formation et organisé plus de 50 événements par an auprès de grands comptes (Airbus, Carrefour, Société Générale). Aujourd'hui en alternance Développement Managérial chez Air France, je construis mon profil vers les métiers HRBP et Learning &amp; Development. Passionné par l'IA, la musique classique et le voyage.</p>
+          </div>
+        </div>
+        <div class="key-figures">
+          <div class="figure">
+            <span class="figure-number">50+</span>
+            <span class="figure-label">événements/an</span>
+          </div>
+          <div class="figure">
+            <span class="figure-number">80 000€</span>
+            <span class="figure-label">de budget géré</span>
+          </div>
+          <div class="figure">
+            <span class="figure-number">90</span>
+            <span class="figure-label">utilisateurs formés à l'IA</span>
+          </div>
+        </div>
+        <div class="services">
+          <article class="service">
+            <h3>Animation &amp; Engagement</h3>
+            <p>Concevoir et animer des programmes d'engagement managérial, séminaires et ateliers pour des équipes de grande taille.</p>
+          </article>
+          <article class="service">
+            <h3>Formation &amp; L&amp;D</h3>
+            <p>Élaborer des plans de formation gamifiés et diffuser des bonnes pratiques à l'échelle d'une organisation.</p>
+          </article>
+          <article class="service">
+            <h3>Pilotage &amp; Coordination</h3>
+            <p>Suivre des projets complexes multi-parties prenantes avec tableaux de bord KPI, comités de pilotage et reporting direction.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== EXPÉRIENCES ===================== -->
+    <section class="section fade-section" id="experiences">
+      <div class="container">
+        <h2 class="section-title">Expériences</h2>
+        <ol class="timeline">
+          <li class="timeline-item">
+            <div class="timeline-content">
+              <span class="timeline-date">À partir de sept. 2026</span>
+              <h3>Alternant Développement Managérial — Air France</h3>
+              <p>Alternance au sein de la direction Développement Managérial : accompagnement des managers, dispositifs Learning &amp; Development et construction d'un profil orienté HRBP.</p>
+            </div>
+          </li>
+          <li class="timeline-item">
+            <div class="timeline-content">
+              <span class="timeline-date">2024 — 2025 · Devoteam</span>
+              <h3>Coordinateur programmes &amp; événements</h3>
+              <p>Gestion de 30 clubs Happiness en Île-de-France et en régions (budget 80 000€), pilotage d'un POC Claude auprès de 90 utilisateurs et organisation d'une Summer Party pour 2000 personnes.</p>
+            </div>
+          </li>
+          <li class="timeline-item">
+            <div class="timeline-content">
+              <span class="timeline-date">2023 — 2025 · Devoteam</span>
+              <h3>Chargé de formation &amp; adoption</h3>
+              <p>Déploiement d'un plan de formation HubSpot gamifié auprès de managers et collaborateurs, diffusion de bonnes pratiques à l'échelle de l'organisation.</p>
+            </div>
+          </li>
+          <li class="timeline-item">
+            <div class="timeline-content">
+              <span class="timeline-date">2021 — 2023 · Devoteam</span>
+              <h3>Chargé d'animation de communautés</h3>
+              <p>Animation de communautés internes et organisation de plus de 50 événements par an auprès de grands comptes : Airbus, Carrefour, Société Générale.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===================== COMPÉTENCES ===================== -->
+    <section class="section fade-section" id="competences">
+      <div class="container">
+        <h2 class="section-title">Compétences</h2>
+        <div class="skills-grid">
+          <article class="skill-block">
+            <h3>Développement &amp; Formation</h3>
+            <ul>
+              <li>Ingénierie pédagogique &amp; gamification</li>
+              <li>Animation d'ateliers et de séminaires</li>
+              <li>Plans de formation &amp; onboarding</li>
+              <li>Diffusion de bonnes pratiques</li>
+            </ul>
+          </article>
+          <article class="skill-block">
+            <h3>Pilotage &amp; Analyse</h3>
+            <ul>
+              <li>Gestion de projet multi-parties prenantes</li>
+              <li>Tableaux de bord KPI &amp; reporting direction</li>
+              <li>Comités de pilotage</li>
+              <li>Gestion budgétaire (80 000€)</li>
+            </ul>
+          </article>
+          <article class="skill-block">
+            <h3>Outils</h3>
+            <ul>
+              <li>HubSpot (certifié)</li>
+              <li>Excel (certification TOSA)</li>
+              <li>Google Ads (certifié)</li>
+              <li>Suites Google &amp; Microsoft</li>
+            </ul>
+          </article>
+          <article class="skill-block">
+            <h3>IA &amp; Automatisation</h3>
+            <ul>
+              <li>Claude (IA générative) — pilotage de POC</li>
+              <li>Acculturation IA des équipes</li>
+              <li>Prompt engineering</li>
+              <li>Automatisation de reporting</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PROJETS ===================== -->
+    <section class="section fade-section" id="projets">
+      <div class="container">
+        <h2 class="section-title">Projets</h2>
+        <div class="projects-grid">
+          <article class="project-card">
+            <img src="assets/projet1.webp" alt="Plan de formation HubSpot gamifié" loading="lazy">
+            <div class="project-body">
+              <span class="project-context">Devoteam | 2023-2025</span>
+              <h3>Plan de formation HubSpot gamifié</h3>
+              <p>Déploiement d'un plan de formation HubSpot auprès de 8 managers et collaborateurs avec dispositif de gamification. Résultat : réduction significative des demandes à l'agence interne.</p>
+            </div>
+          </article>
+          <article class="project-card">
+            <img src="assets/projet2.webp" alt="Gestion des 30 clubs Happiness" loading="lazy">
+            <div class="project-body">
+              <span class="project-context">Devoteam | 2024-2025</span>
+              <h3>30 clubs Happiness</h3>
+              <p>Gestion de 30 clubs Happiness en Île-de-France et en régions, budget 80 000€, 15 roadmaps, coordination bimensuelle des responsables locaux.</p>
+            </div>
+          </article>
+          <article class="project-card">
+            <img src="assets/projet3.webp" alt="POC Claude IA générative" loading="lazy">
+            <div class="project-body">
+              <span class="project-context">Devoteam | 2024</span>
+              <h3>POC Claude — IA générative</h3>
+              <p>Pilotage de A à Z d'un POC sur Claude (IA générative) pendant 2 mois, auprès de 90 utilisateurs aux profils variés : managers, marketers, développeurs, chefs de projet. Conception du dispositif, animation, collecte de retours et restitution.</p>
+            </div>
+          </article>
+          <article class="project-card">
+            <img src="assets/projet4.webp" alt="Summer Party 2000 personnes au Trinquet by Poza" loading="lazy">
+            <div class="project-body">
+              <span class="project-context">Devoteam | 2026</span>
+              <h3>Summer Party — 2000 personnes</h3>
+              <p>Organisation en totale autonomie d'une Summer Party pour 2000 personnes au Trinquet by Poza, lieu événementiel en bord de Seine. Gestion de A à Z : conception du concept, communication, logistique, coordination prestataires, animation le jour J.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== DISTINCTIONS ===================== -->
+    <section class="section section-distinctions fade-section" id="distinctions">
+      <div class="container">
+        <h2 class="section-title">Distinctions</h2>
+        <ul class="badges">
+          <li>Certification HubSpot</li>
+          <li>Certification Google Ads</li>
+          <li>TOSA Excel</li>
+          <li>GenAI Devoteam</li>
+          <li>TOEIC 845</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== CONTACT ===================== -->
+    <section class="section fade-section" id="contact">
+      <div class="container">
+        <h2 class="section-title">Contact</h2>
+        <p class="contact-text">Un projet, une opportunité en Développement Managérial, HRBP ou Learning &amp; Development ? Parlons-en.</p>
+        <a href="mailto:bensmainethomaspro@gmail.com" class="btn btn-primary">bensmainethomaspro@gmail.com</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a href="mailto:bensmainethomaspro@gmail.com">bensmainethomaspro@gmail.com</a>
+      <a href="https://www.linkedin.com/search/results/all/?keywords=Thomas%20Bensmaine" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      <span class="footer-credit">Fait avec Claude Code</span>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
 </html>
