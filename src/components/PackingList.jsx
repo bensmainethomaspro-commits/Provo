@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { suggestSmartPacking } from '../utils/packingSuggest';
 
 const PACKING_CATS = [
   { id: 'docs',         emoji: '🪪', label: 'Documents',   color: '#3b82f6' },
@@ -62,8 +63,9 @@ function HamburgerIcon() {
   );
 }
 
-export default function PackingList({ items = [], onAdd, onToggle, onDelete, onReorder }) {
+export default function PackingList({ items = [], onAdd, onToggle, onDelete, onReorder, trip, weatherByDate }) {
   const [activeCat, setActiveCat] = useState('tous');
+  const [smartOpen, setSmartOpen] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [grouped, setGrouped] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState(new Set());
@@ -79,6 +81,12 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
   const pct = total > 0 ? Math.round(checkedCount / total * 100) : 0;
 
   const filtered = activeCat === 'tous' ? items : items.filter(i => i.category === activeCat);
+
+  // Suggestions contextuelles (météo + activités), sans doublon avec la liste.
+  const smartSuggestions = useMemo(() => {
+    const all = suggestSmartPacking(trip, weatherByDate);
+    return all.filter(s => !items.some(i => i.text.toLowerCase() === s.text.toLowerCase()));
+  }, [trip, weatherByDate, items]);
   const presetCat = activeCat === 'tous' ? 'autre' : activeCat;
   const availablePresets = (PRESETS[presetCat] || []).filter(
     p => !items.some(i => i.text.toLowerCase() === p.toLowerCase())
@@ -218,6 +226,41 @@ export default function PackingList({ items = [], onAdd, onToggle, onDelete, onR
           )}
         </div>
       </div>
+
+      {/* Valise intelligente : suggestions météo + activités */}
+      {smartSuggestions.length > 0 && (
+        <div className="smart-packing">
+          <button className="smart-packing__header" onClick={() => setSmartOpen(o => !o)}>
+            <span className="smart-packing__title">✨ Suggéré pour ce voyage</span>
+            <span className="smart-packing__count">{smartSuggestions.length}</span>
+            <span className="smart-packing__chevron">{smartOpen ? '⌄' : '›'}</span>
+          </button>
+          {smartOpen && (
+            <>
+              <div className="smart-packing__pills">
+                {smartSuggestions.map(s => (
+                  <button
+                    key={s.text}
+                    className="smart-pill"
+                    onClick={() => onAdd(s.text, s.category)}
+                    title={s.reason}
+                  >
+                    <span className="smart-pill__plus">+</span>
+                    <span className="smart-pill__text">{s.text}</span>
+                    <span className="smart-pill__reason">{s.reason}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                className="btn btn--secondary btn--sm smart-packing__all"
+                onClick={() => smartSuggestions.forEach(s => onAdd(s.text, s.category))}
+              >
+                Tout ajouter ({smartSuggestions.length})
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="packing-list__toolbar">

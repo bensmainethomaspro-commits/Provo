@@ -10,6 +10,7 @@ import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
 import RefreshButton from '../components/RefreshButton';
+import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import { useWeather } from '../hooks/useWeather';
@@ -169,6 +170,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [editingActivity, setEditingActivity] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
   const [detailDay, setDetailDay] = useState(null);
   const [reserveExpanded, setReserveExpanded] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
@@ -644,6 +646,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
                   📄 Exporter en PDF
                 </button>
+                <button className="trip-header-menu__item" onClick={() => { setShowRecap(true); setTripMenuOpen(false); }}>
+                  📊 Bilan du voyage
+                </button>
                 <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
                   {copyDone ? '✅ Copié !' : '📋 Copier l\'itinéraire'}
                 </button>
@@ -789,6 +794,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
+            {isPast && trip.days.some(d => d.activities.length > 0) && (
+              <button className="recap-banner" onClick={() => setShowRecap(true)}>
+                <span className="recap-banner__emoji">🎉</span>
+                <span className="recap-banner__text">
+                  <strong>Voyage terminé !</strong>
+                  <small>Découvre ton bilan : budget, activités, km…</small>
+                </span>
+                <span className="recap-banner__cta">Voir →</span>
+              </button>
+            )}
             {viewMode === 'agenda' ? (
               <AgendaView
                 days={trip.days}
@@ -985,6 +1000,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             onToggle={(itemId) => togglePackingItem(tripId, itemId)}
             onDelete={(itemId) => deletePackingItem(tripId, itemId)}
             onReorder={(newList) => setPackingOrder(tripId, newList)}
+            trip={trip}
+            weatherByDate={weather?.byDate}
           />
         )}
 
@@ -1070,6 +1087,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       )}
 
       {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} />}
+
+      {showRecap && <TripRecap trip={trip} onClose={() => setShowRecap(false)} />}
 
       {showDeleteTrip && (
         <ConfirmDialog
