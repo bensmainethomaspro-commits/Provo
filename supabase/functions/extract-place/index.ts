@@ -120,9 +120,10 @@ function shapePlace(p: any) {
 }
 
 // ── Redirect resolution ───────────────────────────────────────────────────
-async function resolve(url: string): Promise<{ finalUrl: string; html: string }> {
+async function fetchOnce(url: string): Promise<{ finalUrl: string; html: string }> {
   const { signal, clear } = withTimeout(10000);
   try {
+    const isGoogle = /google\.|goo\.gl/i.test(url);
     const r = await fetch(url, {
       redirect: "follow",
       signal,
@@ -130,6 +131,9 @@ async function resolve(url: string): Promise<{ finalUrl: string; html: string }>
         "User-Agent":
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
         "Accept-Language": "fr,en;q=0.8",
+        // Court-circuite l'interstitiel de consentement Google (UE) qui remplace
+        // la page Maps et vide l'extraction pour goo.gl / share.google.
+        ...(isGoogle ? { "Cookie": "CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg" } : {}),
       },
     });
     clear();
@@ -144,6 +148,20 @@ async function resolve(url: string): Promise<{ finalUrl: string; html: string }>
     clear();
     return { finalUrl: url, html: "" };
   }
+}
+
+async function resolve(url: string): Promise<{ finalUrl: string; html: string }> {
+  let res = await fetchOnce(url);
+  // Si on a quand même atterri sur consent.google.com, suivre le paramètre
+  // `continue` vers la vraie page Maps.
+  if (/consent\.google\./i.test(res.finalUrl)) {
+    try {
+      const u = new URL(res.finalUrl);
+      const cont = u.searchParams.get("continue");
+      if (cont) res = await fetchOnce(decodeURIComponent(cont));
+    } catch { /* ignore */ }
+  }
+  return res;
 }
 
 function metaTag(html: string, prop: string): string {
@@ -291,9 +309,46 @@ function extractLocationHint(caption: string): string | null {
   return null;
 }
 
+// Hashtags trop génériques pour désigner un lieu — ne jamais les géocoder.
+const HASHTAG_STOPLIST = new Set([
+  "fyp", "fypage", "foryou", "foryoupage", "pourtoi", "viral", "trending", "tiktok",
+  "travel", "voyage", "trip", "vacances", "holiday", "vacation", "wanderlust",
+  "food", "foodie", "foodtok", "recette", "recipe", "restaurant", "resto",
+  "amazing", "beautiful", "aesthetic", "satisfying", "explore", "adventure",
+  "nature", "beach", "plage", "sunset", "summer", "ete", "hiver", "love",
+  "hiddengem", "hiddengems", "traveltok", "traveltips", "bonplan", "bonsplans",
+]);
+
+// Géocodage strict : n'accepte que de vrais lieux (villes, régions, sites) pour
+// éviter les faux positifs quand on tente les hashtags.
+async function geocodePlaceStrict(query: string) {
+  const { signal, clear } = withTimeout(6000);
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`,
+      { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
+    );
+    clear();
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    const p = data[0];
+    if (!["place", "boundary", "tourism", "natural", "leisure", "waterway"].includes(p.class)) return null;
+    return shapePlace(p);
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+function hashtagCandidates(caption: string): string[] {
+  const tags = [...caption.matchAll(/#([\p{L}\p{N}_]{4,30})/gu)].map(m => m[1].toLowerCase());
+  return tags.filter(t => !HASHTAG_STOPLIST.has(t) && !/^\d+$/.test(t)).slice(0, 3);
+}
+
 async function handleTikTok(rawUrl: string) {
-  const { finalUrl } = await resolve(rawUrl);
-  const target = /tiktok\.com\/.+\/video\//.test(finalUrl) ? finalUrl : rawUrl;
+  const { finalUrl, html: pageHtml } = await resolve(rawUrl);
+  const target = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
 
   let caption = "";
   let author = "";
@@ -312,6 +367,18 @@ async function handleTikTok(rawUrl: string) {
       thumb = d.thumbnail_url || "";
     }
   } catch { /* ignore */ }
+
+  // Fallback : l'oEmbed échoue parfois (posts photo, liens régionaux) — les
+  // balises og: de la page contiennent la légende et la vignette.
+  if (!caption && pageHtml) {
+    caption = metaTag(pageHtml, "og:description") || "";
+    if (!author) {
+      const t = metaTag(pageHtml, "og:title");
+      const m = t.match(/^(.+?)\s+(?:on|sur)\s+TikTok/i);
+      if (m) author = m[1].trim();
+    }
+    if (!thumb) thumb = metaTag(pageHtml, "og:image") || "";
+  }
 
   const locationHint = extractLocationHint(caption);
   let title = cleanTitle(locationHint) || cleanTitle(caption);
@@ -333,17 +400,22 @@ async function handleTikTok(rawUrl: string) {
     source: "tiktok",
   };
 
-  // Try to geocode an extracted location for address + coordinates.
+  // Localisation : 1) lieu suggéré par l'IA ou repéré (📍 / "à …") dans la
+  // légende, 2) sinon, hashtags qui géocodent vers un vrai lieu (#lisbonne…).
   const geoQuery = (ai?.location) || locationHint;
-  if (geoQuery) {
-    const place = await geocode(geoQuery);
-    if (place) {
-      result.address = place.address;
-      result.lat = place.lat;
-      result.lon = place.lon;
-      if (!ai?.category) result.category = place.category;
-      if (!title) result.title = place.title;
+  let place = geoQuery ? await geocode(geoQuery) : null;
+  if (!place) {
+    for (const tag of hashtagCandidates(caption)) {
+      place = await geocodePlaceStrict(tag);
+      if (place) break;
     }
+  }
+  if (place) {
+    result.address = place.address;
+    result.lat = place.lat;
+    result.lon = place.lon;
+    if (!ai?.category) result.category = categoryFromHashtags(caption) || place.category;
+    if (!title) result.title = place.title;
   }
   return result;
 }

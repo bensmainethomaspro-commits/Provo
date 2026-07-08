@@ -60,6 +60,35 @@ function _locationHint(caption) {
   return null;
 }
 
+// Hashtags trop génériques pour désigner un lieu.
+const _TAG_STOP = new Set([
+  'fyp', 'fypage', 'foryou', 'foryoupage', 'pourtoi', 'viral', 'trending', 'tiktok',
+  'travel', 'voyage', 'trip', 'vacances', 'holiday', 'vacation', 'wanderlust',
+  'food', 'foodie', 'foodtok', 'recette', 'recipe', 'restaurant', 'resto',
+  'amazing', 'beautiful', 'aesthetic', 'satisfying', 'explore', 'adventure',
+  'nature', 'beach', 'plage', 'sunset', 'summer', 'ete', 'hiver', 'love',
+  'hiddengem', 'hiddengems', 'traveltok', 'traveltips', 'bonplan', 'bonsplans',
+]);
+function _hashtagCandidates(caption) {
+  return [...caption.matchAll(/#([\p{L}\p{N}_]{4,30})/gu)]
+    .map(m => m[1].toLowerCase())
+    .filter(t => !_TAG_STOP.has(t) && !/^\d+$/.test(t))
+    .slice(0, 3);
+}
+// Géocodage strict (vraies villes / régions / sites uniquement) pour les hashtags.
+async function _geocodeStrict(query) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`
+    );
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!data?.length) return null;
+    if (!['place', 'boundary', 'tourism', 'natural', 'leisure', 'waterway'].includes(data[0].class)) return null;
+    return fetchPlaceData(query).catch(() => null);
+  } catch { return null; }
+}
+
 export async function extractPlaceClient(url) {
   const raw = (url || '').trim();
   if (!raw) return null;
@@ -94,14 +123,19 @@ export async function extractPlaceClient(url) {
       notes: caption ? caption.slice(0, 400) : '',
       source: 'tiktok',
     };
-    if (loc) {
-      const place = await fetchPlaceData(loc).catch(() => null);
-      if (place?.lat != null) {
-        result.address = place.address;
-        result.lat = place.lat;
-        result.lon = place.lon;
-        result.category = _catFromHashtags(caption) || place.category;
+    let place = loc ? await fetchPlaceData(loc).catch(() => null) : null;
+    if (!place?.lat) {
+      // Fallback : hashtags qui géocodent vers un vrai lieu (#lisbonne, #bali…)
+      for (const tag of _hashtagCandidates(caption)) {
+        place = await _geocodeStrict(tag);
+        if (place?.lat != null) break;
       }
+    }
+    if (place?.lat != null) {
+      result.address = place.address;
+      result.lat = place.lat;
+      result.lon = place.lon;
+      result.category = _catFromHashtags(caption) || place.category;
     }
     return result;
   }
