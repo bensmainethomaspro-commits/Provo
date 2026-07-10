@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 const SLIDES = [
   {
-    icon: '🧭',
+    icon: '🧳',
     title: 'Bienvenue sur Provo',
     desc: 'Ton gestionnaire de voyages hors-ligne. Toutes tes données sont sauvegardées sur ton téléphone — pas besoin de compte.',
   },
