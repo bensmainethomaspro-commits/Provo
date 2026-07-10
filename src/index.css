@@ -5286,3 +5286,13 @@ h1, h2, h3,
   border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
   border-radius: 14px; padding: 11px 13px; font-size: 12.5px; color: var(--text); line-height: 1.5;
 }
+
+/* ── Premier lancement : CTA principal dans le hero d'accueil ─────────────── */
+.dashboard__empty-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 18px auto 6px;
+  padding: 13px 24px;
+  font-size: 15px; font-weight: 700;
+  border-radius: 16px;
+  width: auto;
+}
