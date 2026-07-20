@@ -9,8 +9,10 @@ export default function DayDetailModal({
   onReorder, onStartTimeChange, onEdit, onAddActivity,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
+  onNotesChange, onSweep,
 }) {
   const [closing, setClosing] = useState(false);
+  const todoActivities = day.activities.filter(a => a.status === 'todo');
 
   const close = () => {
     setClosing(true);
@@ -118,6 +120,29 @@ export default function DayDetailModal({
           >
             + Ajouter une activité à ce jour
           </button>
+
+          {onSweep && todoActivities.length > 0 && (
+            <button
+              className="btn btn--ghost day-detail__sweep"
+              onClick={() => onSweep(day.id)}
+              title="Déplacer les activités « à faire » vers la Réserve"
+            >
+              🪄 On verra plus tard · {todoActivities.length} → Réserve
+            </button>
+          )}
+
+          {onNotesChange && (
+            <div className="day-detail__notes">
+              <label className="day-detail__notes-label" htmlFor={`modal-notes-${day.id}`}>📝 Notes du jour</label>
+              <textarea
+                id={`modal-notes-${day.id}`}
+                className="day-notes-textarea"
+                placeholder="Hébergement, infos pratiques, adresse…"
+                value={day.notes || ''}
+                onChange={e => onNotesChange(day.id, e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

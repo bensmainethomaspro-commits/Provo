@@ -5370,3 +5370,40 @@ h1, h2, h3,
 .activity-card__check--nogo {
   border-color: var(--border-strong); color: var(--text-light); opacity: 0.55;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TIMELINE — cartes de jour épurées
+   Avant : en-tête en bloc orange plein saturé qui tranchait avec les activités
+   sombres + 3 boutons par jour. Après : carte unifiée, orange en simple accent,
+   actions (notes / « on verra plus tard ») déplacées dans le détail du jour.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tl-day__header {
+  background: color-mix(in srgb, var(--trip-accent, var(--orange)) 9%, var(--surface-raised));
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  align-items: center;
+}
+.tl-day__head-main { min-width: 0; flex: 1; }
+.tl-day__label { color: var(--trip-accent, var(--orange)); opacity: 1; font-size: 11px; }
+.tl-day__date { color: var(--text); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.tl-day__stats {
+  color: var(--text-muted); opacity: 1;
+  flex-wrap: wrap; row-gap: 2px; margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.tl-day__note-flag { font-size: 11px; }
+.tl-day__empty-hint { color: var(--text-light); }
+.tl-day__open {
+  color: var(--text-light);
+  font-size: 22px; font-weight: 700; line-height: 1;
+  flex-shrink: 0; padding-left: 8px;
+}
+
+/* Détail du jour : actions rapatriées depuis la carte (moins de boutons partout) */
+.day-detail__sweep { width: 100%; margin-top: 10px; color: var(--text-muted); }
+.day-detail__notes { margin-top: 18px; }
+.day-detail__notes-label {
+  display: block; font-size: 12px; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 6px;
+}

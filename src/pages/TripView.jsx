@@ -9,7 +9,7 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
-import RefreshButton from '../components/RefreshButton';
+import { forceRefreshApp } from '../components/RefreshButton';
 import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
@@ -632,14 +632,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </div>
         <div className="header__action">
           <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
-          <RefreshButton />
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
-            {darkMode ? '☀️' : '🌙'}
-          </button>
           <div className="trip-header-menu-wrap" ref={tripMenuRef}>
             <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
+                <button className="trip-header-menu__item" onClick={() => { onToggleDark(); setTripMenuOpen(false); }}>
+                  {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { forceRefreshApp(); }}>
+                  🔄 Recharger l'app
+                </button>
+                <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>
@@ -827,8 +830,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
-                onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
-                onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
               />
@@ -1089,6 +1090,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
           onEdit={(activity, location) => { setDetailDay(null); setEditingActivity({ activity, location }); }}
           onAddActivity={(dayId) => { setDetailDay(null); openAddSheet(dayId); }}
+          onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
+          onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
           {...sharedDayProps}
         />
       )}
