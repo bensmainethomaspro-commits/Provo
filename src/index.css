@@ -661,7 +661,7 @@ body {
 
 /* ─── TRIP HEADER BUDGET ─────────────────────────────────── */
 .trip-meta { padding: 0 16px 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.trip-meta__item { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.trip-meta__item { font-size: 11.5px; color: rgba(255,255,255,0.6); font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
 .trip-budget { font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.2); color: white; padding: 3px 10px; border-radius: 20px; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
 /* ─── RESERVE IN PLANNING ───────────────────────────────── */
@@ -5420,3 +5420,33 @@ button.budget-inline {
 }
 button.budget-inline:active { transform: scale(0.98); }
 .budget-inline__chevron { font-size: 9px; opacity: 0.75; margin-left: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VUE PLANNING — respiration & contours
+   Bascule de vue plus nette, espaces resserrés au-dessus des jours, contour
+   des cartes de jour plus affirmé pour mieux les détacher du fond.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.planning-tools { padding: 0 16px 8px; min-height: 0; }
+.tool-btn--view-cycle {
+  padding: 6px 14px 6px 12px;
+  border-radius: 999px;
+  gap: 6px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.30);
+  box-shadow: 0 1px 5px rgba(0,0,0,0.14);
+}
+.tool-btn--view-cycle .tool-btn__chevron { color: rgba(255,255,255,0.85); }
+[data-theme="dark"] .tool-btn--view-cycle {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .tool-btn--view-cycle .tool-btn__label { color: var(--text); }
+[data-theme="dark"] .tool-btn--view-cycle .tool-btn__chevron { color: var(--text-light); }
+
+.timeline-view-wrap { padding-top: 2px; }
+.tl-day {
+  border: 1.5px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.tl-day__header { border-bottom-color: var(--border-strong); }
