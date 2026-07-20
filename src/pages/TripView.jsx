@@ -709,33 +709,40 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
         {isActive && (
           <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
-            🟢 Aujourd'hui
+            <span className="tab-btn__icon">🟢</span>
+            <span className="tab-btn__label">Aujourd'hui</span>
             {todayDay && todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
               <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
             )}
           </button>
         )}
         <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
-          📅 Planning
+          <span className="tab-btn__icon">📅</span>
+          <span className="tab-btn__label">Planning</span>
           {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
-          📦 Réserve
+          <span className="tab-btn__icon">📦</span>
+          <span className="tab-btn__label">Réserve</span>
           {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
-          💸 Dépenses
+          <span className="tab-btn__icon">💸</span>
+          <span className="tab-btn__label">Dépenses</span>
           {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
-          🗺 Carte
+          <span className="tab-btn__icon">🗺️</span>
+          <span className="tab-btn__label">Carte</span>
         </button>
         <button role="tab" aria-selected={tab === 'notes'} className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
-          📝 Notes
+          <span className="tab-btn__icon">📝</span>
+          <span className="tab-btn__label">Notes</span>
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" aria-label="Notes saisies" />}
         </button>
         <button role="tab" aria-selected={tab === 'valise'} className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
-          🎒 Valise
+          <span className="tab-btn__icon">🎒</span>
+          <span className="tab-btn__label">Valise</span>
           {(trip.packingList?.length || 0) > 0 && (
             <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}

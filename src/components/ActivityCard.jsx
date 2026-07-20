@@ -18,7 +18,6 @@ export default function ActivityCard({
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
-  const lastTapRef = useRef(0);
   const SWIPE_MAX = 90;
   const SWIPE_THRESHOLD = 50;
   const [swipeDir, setSwipeDir] = useState(null);
@@ -69,6 +68,12 @@ export default function ActivityCard({
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
   const showPolaroid = isPastTrip && activity.status === 'done';
   const otherDays = days?.filter(d => d.id !== currentDayId) || [];
+  // Pastille de statut : uniquement là où « fait » a du sens (activités d'un jour),
+  // pas dans la réserve (boîte à idées) ni sur les polaroids des voyages passés.
+  const showCheck = !compareMode && context !== 'reserve' && !showPolaroid;
+  const checkLabel = activity.status === 'done' ? 'Marquer comme à faire'
+    : activity.status === 'nogo' ? 'Remettre à faire'
+    : 'Marquer comme fait';
 
   const handleDragStart = (e) => {
     e.dataTransfer.effectAllowed = 'move';
@@ -78,19 +83,22 @@ export default function ActivityCard({
 
   const handleTap = useCallback(() => {
     if (compareMode) return;
-    const now = Date.now();
-    if (now - lastTapRef.current < 320) {
-      // Double-tap: toggle done/todo
-      const newStatus = activity.status === 'done' ? 'todo' : 'done';
-      onStatusChange?.(newStatus);
-      vibrate([15, 10, 30]);
-    } else {
-      // Single-tap: toggle expand/collapse
-      setExpanded(e => !e);
-      vibrate([8]);
-    }
-    lastTapRef.current = now;
-  }, [compareMode, activity.status, onStatusChange]);
+    // Un tap = déplier/replier les détails. Marquer « fait » se fait désormais
+    // via la pastille visible (ou le swipe) — plus de double-tap caché qui
+    // entrait en conflit avec l'ouverture des détails.
+    setExpanded(e => !e);
+    vibrate([8]);
+  }, [compareMode]);
+
+  const toggleDone = useCallback((e) => {
+    e.stopPropagation();
+    // done → à faire · à faire → fait · skippé → remis à faire
+    const next = activity.status === 'done' ? 'todo'
+      : activity.status === 'nogo' ? 'todo'
+      : 'done';
+    onStatusChange?.(next);
+    vibrate(next === 'done' ? [15, 10, 30] : [8]);
+  }, [activity.status, onStatusChange]);
 
   const handleShareActivity = useCallback(() => {
     const parts = [`📌 ${activity.title}`];
@@ -149,16 +157,16 @@ export default function ActivityCard({
           )}
 
           <div className="activity-card__top">
-            {!compareMode && (
-              <div
-                className="activity-card__drag-handle"
-                title="Glisser"
-                onTouchStart={(e) => {
-                  if (!onTouchDragStart) return;
-                  e.preventDefault();
-                  onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.activity-card'));
-                }}
-              >⠿</div>
+            {showCheck && (
+              <button
+                className={`activity-card__check activity-card__check--${activity.status}`}
+                onClick={toggleDone}
+                title={checkLabel}
+                aria-label={checkLabel}
+                aria-pressed={activity.status === 'done'}
+              >
+                {activity.status === 'done' ? '✓' : activity.status === 'nogo' ? '✕' : ''}
+              </button>
             )}
             <div className="activity-card__emoji">{meta.emoji}</div>
             <div className="activity-card__main">
@@ -170,6 +178,17 @@ export default function ActivityCard({
                 {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
               </div>
             </div>
+            {!compareMode && (
+              <div
+                className="activity-card__drag-handle"
+                title="Glisser pour déplacer"
+                onTouchStart={(e) => {
+                  if (!onTouchDragStart) return;
+                  e.preventDefault();
+                  onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.activity-card'));
+                }}
+              >⠿</div>
+            )}
             {!compareMode && (
               <button
                 className="activity-card__dots-btn"

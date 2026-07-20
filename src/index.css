@@ -5296,3 +5296,77 @@ h1, h2, h3,
   border-radius: 16px;
   width: auto;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAV BAS — grille tout-visible (icône au-dessus du label)
+   Avant : barre en scroll horizontal → Notes/Valise/Carte hors écran, invisibles.
+   Après : grille à colonnes égales, chaque section visible d'un coup d'œil.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.trip-view .tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 1px;
+  overflow: visible;
+  align-items: stretch;
+}
+.trip-view .tabs .tab-btn {
+  position: relative;
+  min-width: 0;                 /* autorise le label à rétrécir plutôt qu'à déborder */
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 1px;
+  min-height: 52px;
+  border-radius: 14px;
+}
+.tab-btn__icon { font-size: 19px; line-height: 1; }
+.tab-btn__label {
+  font-size: clamp(8.5px, 2.5vw, 10px);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.02em;
+}
+/* « Aujourd'hui » est le plus long : condensé juste ce qu'il faut pour tenir en entier */
+.tab-btn--today .tab-btn__label { font-size: clamp(8px, 2.3vw, 9px); letter-spacing: -0.03em; }
+/* Badges → pastille compacte en coin haut-droit de l'onglet */
+.trip-view .tabs .tab-btn .tab-badge {
+  position: absolute;
+  top: 3px; right: 5px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  font-size: 9px; line-height: 15px;
+  border-radius: 999px;
+}
+.trip-view .tabs .tab-btn .tab-badge--dot {
+  min-width: 0; width: 7px; height: 7px; padding: 0; top: 5px; right: 11px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARTE ACTIVITÉ — action « fait » visible (pastille à cocher)
+   Avant : marquer fait = double-tap ou swipe, invisibles. Après : une pastille
+   claire à gauche de chaque activité d'un jour, comme dans le mode Aujourd'hui.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.activity-card__check {
+  flex-shrink: 0;
+  width: 27px; height: 27px; margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; line-height: 1;
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, background 0.15s, border-color 0.15s, color 0.15s;
+}
+.activity-card__check:active { transform: scale(0.85); }
+.activity-card__check--done {
+  background: var(--green); border-color: var(--green); color: #fff;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--green) 40%, transparent);
+}
+.activity-card__check--nogo {
+  border-color: var(--border-strong); color: var(--text-light); opacity: 0.55;
+}

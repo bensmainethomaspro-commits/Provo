@@ -13,8 +13,8 @@ const SLIDES = [
   },
   {
     icon: '⚡',
-    title: 'Gestes rapides',
-    desc: 'Double tap → marquer "Fait" · Glisse gauche → options · Appui long → actions rapides · Glisse l\'en-tête du jour pour naviguer.',
+    title: 'Valider en un geste',
+    desc: 'Touche la pastille ✓ d\'une activité pour la marquer « fait ». Glisse-la pour « fait » ou « skip », touche-la pour les détails. Glisse l\'en-tête d\'un jour pour changer de jour.',
   },
   {
     icon: '🤝',
