@@ -5407,3 +5407,16 @@ h1, h2, h3,
   display: block; font-size: 12px; font-weight: 700;
   color: var(--text-muted); margin-bottom: 6px;
 }
+
+/* Budget « dépliant » : une seule pastille cliquable (chiffre clé toujours
+   visible, le détail budget/estimé n'apparaît qu'au tap → moins d'éléments en haut) */
+button.budget-inline {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+button.budget-inline:active { transform: scale(0.98); }
+.budget-inline__chevron { font-size: 9px; opacity: 0.75; margin-left: 1px; }

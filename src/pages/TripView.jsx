@@ -177,6 +177,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     const stored = localStorage.getItem('provo_viewMode');
     return stored === 'agenda' ? 'agenda' : 'timeline'; // 'list' removed → fallback timeline
@@ -615,6 +616,19 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const alreadySpent = doneActivitiesCost + totalExpenses;
   const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
+  // Budget « dépliant » : le chiffre principal (restant / dépassé, sinon estimé)
+  // reste visible ; les autres n'apparaissent qu'une fois déplié.
+  const budgetItems = [];
+  if (initBudget > 0) {
+    budgetItems.push(budgetExceeded
+      ? { key: 'over', cls: 'budget-inline__item--over', txt: `🚨 ${formatPrice(alreadySpent - initBudget)} dépassé` }
+      : { key: 'left', cls: 'budget-inline__item--ok', txt: `💵 ${formatPrice(initBudget - alreadySpent)} restants` });
+    budgetItems.push({ key: 'init', cls: '', txt: `💰 ${formatPrice(initBudget)}` });
+  }
+  if (totalTripCost > 0) {
+    budgetItems.push({ key: 'est', cls: 'budget-inline__item--est', txt: `🧮 ${formatPrice(totalTripCost)} estimé` });
+  }
+
   return (
     <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
       {swUpdateReady && (
@@ -643,6 +657,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   🔄 Recharger l'app
                 </button>
                 <div className="trip-header-menu__divider" />
+                {tab === 'planning' && (
+                  <button className="trip-header-menu__item" onClick={() => { setCompareMode(true); setTripMenuOpen(false); }}>
+                    ⚖️ Comparer des activités
+                  </button>
+                )}
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>
@@ -691,20 +710,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
           </span>
         )}
-        {showBudget && (
-          <div className="budget-inline">
-            {initBudget > 0 && (
-              <span className="budget-inline__item">💰 {formatPrice(initBudget)}</span>
+        {showBudget && budgetItems.length > 0 && (
+          <button
+            type="button"
+            className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
+            onClick={() => budgetItems.length > 1 && setBudgetOpen(o => !o)}
+            aria-expanded={budgetItems.length > 1 ? budgetOpen : undefined}
+            title={budgetItems.length > 1 ? 'Détail du budget' : undefined}
+          >
+            {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
+              <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
+            ))}
+            {budgetItems.length > 1 && (
+              <span className="budget-inline__chevron" aria-hidden="true">{budgetOpen ? '▴' : '▾'}</span>
             )}
-            {totalTripCost > 0 && (
-              <span className="budget-inline__item budget-inline__item--est">🧮 {formatPrice(totalTripCost)} estimé</span>
-            )}
-            {initBudget > 0 && (
-              budgetExceeded
-                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(alreadySpent - initBudget)} dépassé</span>
-                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - alreadySpent)} restants</span>
-            )}
-          </div>
+          </button>
         )}
       </div>
 
@@ -752,35 +772,32 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </button>
       </div>
 
-      {/* Planning tools */}
-      <div className="planning-tools">
-        {compareMode ? (
-          <>
-            <div className="compare-toolbar__state">
-              <span className="compare-toolbar__count">
-                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
-              </span>
-              {compareSelectedIds.size >= 2 && (
-                <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
-              )}
-            </div>
-            <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-              ✕ Quitter
-            </button>
-          </>
-        ) : (
-          <>
-            {tab === 'planning' && (
-              <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
-                <span className="tool-btn__icon">{currentViewMeta.icon}</span>
-                <span className="tool-btn__label">{currentViewMeta.label}</span>
-                <span className="tool-btn__chevron">›</span>
+      {/* Planning tools — visible seulement quand utile (vue Planning ou mode comparaison) */}
+      {(compareMode || tab === 'planning') && (
+        <div className="planning-tools">
+          {compareMode ? (
+            <>
+              <div className="compare-toolbar__state">
+                <span className="compare-toolbar__count">
+                  {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
+                </span>
+                {compareSelectedIds.size >= 2 && (
+                  <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
+                )}
+              </div>
+              <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
+                ✕ Quitter
               </button>
-            )}
-            <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
-          </>
-        )}
-      </div>
+            </>
+          ) : (
+            <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
+              <span className="tool-btn__icon">{currentViewMeta.icon}</span>
+              <span className="tool-btn__label">{currentViewMeta.label}</span>
+              <span className="tool-btn__chevron">›</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Tab content */}
       <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
