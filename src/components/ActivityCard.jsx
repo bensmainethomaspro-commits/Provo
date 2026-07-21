@@ -178,12 +178,11 @@ export default function ActivityCard({
                 {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
               </div>
             </div>
-            {!compareMode && (
+            {!compareMode && onTouchDragStart && (
               <div
                 className="activity-card__drag-handle"
                 title="Glisser pour déplacer"
                 onTouchStart={(e) => {
-                  if (!onTouchDragStart) return;
                   e.preventDefault();
                   onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.activity-card'));
                 }}
