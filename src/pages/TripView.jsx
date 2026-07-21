@@ -700,7 +700,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </div>
       )}
 
-      {/* Trip meta + budget */}
+      {/* Dates du voyage (discrètes) */}
       <div className="trip-meta">
         <span className="trip-meta__item">
           📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
@@ -710,23 +710,49 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
           </span>
         )}
-        {showBudget && budgetItems.length > 0 && (
-          <button
-            type="button"
-            className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
-            onClick={() => budgetItems.length > 1 && setBudgetOpen(o => !o)}
-            aria-expanded={budgetItems.length > 1 ? budgetOpen : undefined}
-            title={budgetItems.length > 1 ? 'Détail du budget' : undefined}
-          >
-            {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
-              <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
-            ))}
-            {budgetItems.length > 1 && (
-              <span className="budget-inline__chevron" aria-hidden="true">{budgetOpen ? '▴' : '▾'}</span>
-            )}
-          </button>
-        )}
       </div>
+
+      {/* Rangée de contrôles alignée : budget à gauche · vue (ou comparaison) à droite */}
+      {(showBudget || compareMode || tab === 'planning') && (
+        <div className="trip-controls">
+          {compareMode ? (
+            <>
+              <span className="compare-toolbar__count">
+                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
+              </span>
+              <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
+                ✕ Quitter
+              </button>
+            </>
+          ) : (
+            <>
+              {showBudget && budgetItems.length > 0 ? (
+                <button
+                  type="button"
+                  className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
+                  onClick={() => budgetItems.length > 1 && setBudgetOpen(o => !o)}
+                  aria-expanded={budgetItems.length > 1 ? budgetOpen : undefined}
+                  title={budgetItems.length > 1 ? 'Détail du budget' : undefined}
+                >
+                  {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
+                    <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
+                  ))}
+                  {budgetItems.length > 1 && (
+                    <span className="budget-inline__chevron" aria-hidden="true">{budgetOpen ? '▴' : '▾'}</span>
+                  )}
+                </button>
+              ) : <span className="trip-controls__spacer" />}
+              {tab === 'planning' ? (
+                <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
+                  <span className="tool-btn__icon">{currentViewMeta.icon}</span>
+                  <span className="tool-btn__label">{currentViewMeta.label}</span>
+                  <span className="tool-btn__chevron">›</span>
+                </button>
+              ) : <span className="trip-controls__spacer" />}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
@@ -771,33 +797,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           )}
         </button>
       </div>
-
-      {/* Planning tools — visible seulement quand utile (vue Planning ou mode comparaison) */}
-      {(compareMode || tab === 'planning') && (
-        <div className="planning-tools">
-          {compareMode ? (
-            <>
-              <div className="compare-toolbar__state">
-                <span className="compare-toolbar__count">
-                  {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
-                </span>
-                {compareSelectedIds.size >= 2 && (
-                  <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
-                )}
-              </div>
-              <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-                ✕ Quitter
-              </button>
-            </>
-          ) : (
-            <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
-              <span className="tool-btn__icon">{currentViewMeta.icon}</span>
-              <span className="tool-btn__label">{currentViewMeta.label}</span>
-              <span className="tool-btn__chevron">›</span>
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Tab content */}
       <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>

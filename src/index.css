@@ -5444,8 +5444,25 @@ button.budget-inline:active { transform: scale(0.98); }
 [data-theme="dark"] .tool-btn--view-cycle .tool-btn__label { color: var(--text); }
 [data-theme="dark"] .tool-btn--view-cycle .tool-btn__chevron { color: var(--text-light); }
 
-.timeline-view-wrap { padding-top: 2px; }
+/* Rangée de contrôles alignée : budget à gauche · vue à droite (fini le brouillon) */
+.trip-meta { padding: 0 16px 4px; }
+.trip-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 0 16px 10px;
+  flex-wrap: wrap; row-gap: 6px;
+}
+.trip-controls__spacer { width: 0; height: 0; }
+.trip-controls .compare-toolbar__count {
+  color: rgba(255,255,255,0.95); font-size: 12px; font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+[data-theme="dark"] .trip-controls .compare-toolbar__count { color: var(--text); text-shadow: none; }
+
+/* Jours plus grands, resserrés sous les contrôles, hauteur naturelle (plus de
+   vide interne dû à l'étirement des colonnes à la même hauteur) */
+.timeline-view-wrap { align-items: flex-start; padding-top: 0; }
 .tl-day {
+  width: min(88vw, 340px);
   border: 1.5px solid var(--border-strong);
   box-shadow: var(--shadow-md);
 }
