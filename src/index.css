@@ -5553,3 +5553,20 @@ button.budget-inline:active { transform: scale(0.98); }
 [data-theme="dark"] .agenda-day {
   border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 22%, var(--border-strong));
 }
+
+/* Mode clair : même intention (détacher les jours du fond), mais dans l'autre
+   sens — la nuit on éclaircit/réchauffe une surface sombre pour la faire
+   ressortir ; le jour, une surface déjà claire ressort en l'approfondissant
+   (contour plus riche, dégradé inversé : appuyé en bas, doux en haut, à
+   l'opposé du mode sombre). */
+[data-theme="light"] .tl-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 28%, var(--border-strong));
+}
+[data-theme="light"] .tl-day__header {
+  background: linear-gradient(0deg,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 18%, var(--surface-raised)) 0%,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 7%, var(--surface-raised)) 100%);
+}
+[data-theme="light"] .agenda-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 24%, var(--border-strong));
+}
