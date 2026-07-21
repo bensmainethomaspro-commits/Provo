@@ -120,7 +120,7 @@ body {
 .header {
   padding: 14px 16px 10px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   flex-shrink: 0;
 }
@@ -129,6 +129,7 @@ body {
   border: none;
   border-radius: 50%;
   width: 36px; height: 36px;
+  margin-top: 1px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   color: white;
@@ -149,8 +150,15 @@ body {
   text-overflow: ellipsis;
   text-shadow: 0 1px 4px rgba(0,0,0,0.25);
 }
-.header__title p { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 1px; }
-.header__action { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+/* Hiérarchie à 3 niveaux, chacun avec sa propre classe (fini le sélecteur
+   générique « p » qui faisait entrer en collision destination et dates) */
+.header__dest {
+  font-size: 12.5px; font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.header__action { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-top: 1px; }
 
 /* ─── DASHBOARD ──────────────────────────────────────────── */
 .dashboard { flex: 1; display: flex; flex-direction: column; min-height: 100dvh; }
@@ -5480,7 +5488,7 @@ button.budget-inline:active { transform: scale(0.98); }
 
 /* En-tête : texte sombre sur fond clair */
 [data-theme="light"] .header__title h1 { color: var(--text); text-shadow: none; }
-[data-theme="light"] .header__title p { color: var(--text-muted); }
+[data-theme="light"] .header__dest { color: var(--text-muted); }
 [data-theme="light"] .header__back { background: rgba(0,0,0,0.05); color: var(--text); text-shadow: none; }
 [data-theme="light"] .header__back:hover { background: rgba(0,0,0,0.09); }
 [data-theme="light"] .header__add-btn { background: var(--accent-grad); color: #fff; box-shadow: 0 3px 10px rgba(241,80,15,0.34); }
@@ -5532,10 +5540,11 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .agenda-reorder-btn:not(:disabled):hover { background: none; color: var(--text-muted); }
 
-/* Dates dans l'en-tête : petite ligne discrète, alignée à gauche (fini le centrage crammé) */
+/* Dates dans l'en-tête : 3e niveau, le plus discret (aligné à gauche, fini le centrage crammé) */
 .header__dates {
+  display: block;
   font-size: 11px; font-weight: 600; margin-top: 2px;
-  color: rgba(255,255,255,0.68);
+  color: rgba(255,255,255,0.6);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
 }

@@ -642,7 +642,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
-          {trip.destination && <p>📍 {trip.destination}</p>}
+          {trip.destination && <p className="header__dest">📍 {trip.destination}</p>}
           <p className="header__dates">
             {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
             {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && ` · UTC${trip.timezoneOffset >= 0 ? '+' : ''}${trip.timezoneOffset}`}
