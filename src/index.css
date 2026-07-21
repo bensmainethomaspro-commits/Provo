@@ -5467,3 +5467,67 @@ button.budget-inline:active { transform: scale(0.98); }
   box-shadow: var(--shadow-md);
 }
 .tl-day__header { border-bottom-color: var(--border-strong); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODE CLAIR 2.0 — clair, aéré, « à la Apple »
+   Fini l'orange plein cadre agressif : fond chaud très clair, texte sombre,
+   orange réservé aux accents (bouton +, onglet actif, libellés, CTA).
+   Tout est scopé [data-theme="light"] → le mode sombre n'est pas touché.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dates du voyage centrées sous le titre */
+.trip-meta { justify-content: center; text-align: center; }
+
+/* En-tête : texte sombre sur fond clair */
+[data-theme="light"] .header__title h1 { color: var(--text); text-shadow: none; }
+[data-theme="light"] .header__title p { color: var(--text-muted); }
+[data-theme="light"] .header__back { background: rgba(0,0,0,0.05); color: var(--text); text-shadow: none; }
+[data-theme="light"] .header__back:hover { background: rgba(0,0,0,0.09); }
+[data-theme="light"] .header__add-btn { background: var(--accent-grad); color: #fff; box-shadow: 0 3px 10px rgba(241,80,15,0.34); }
+[data-theme="light"] .btn--ghost-white {
+  background: var(--surface-raised); color: var(--text); text-shadow: none;
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .btn--ghost-white:hover { background: var(--surface-sunken); }
+
+/* Dates / contrôles */
+[data-theme="light"] .trip-meta__item { color: var(--text-muted); text-shadow: none; }
+[data-theme="light"] .trip-controls .compare-toolbar__count { color: var(--text); text-shadow: none; }
+[data-theme="light"] .tool-btn--view-cycle {
+  background: var(--surface-raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .tool-btn--view-cycle .tool-btn__label { color: var(--text); }
+[data-theme="light"] .tool-btn--view-cycle .tool-btn__chevron { color: var(--text-light); }
+
+/* Budget : pastille claire, texte sombre */
+[data-theme="light"] .budget-inline { background: var(--surface-raised); box-shadow: var(--shadow-sm); }
+[data-theme="light"] .budget-inline__item { background: transparent; border: none; color: var(--text); backdrop-filter: none; }
+[data-theme="light"] .budget-inline__item--ok  { color: #15803d; }
+[data-theme="light"] .budget-inline__item--est { color: var(--text-muted); }
+[data-theme="light"] .budget-inline__item--over { color: var(--red); }
+[data-theme="light"] .budget-inline__chevron { color: var(--text-light); }
+
+/* Dashboard : logo & recherche sur fond clair */
+[data-theme="light"] .dashboard__logo-text { color: var(--text); text-shadow: none; }
+[data-theme="light"] .dashboard__logo-sub { color: var(--text-muted); }
+[data-theme="light"] .dashboard__search-input { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); }
+[data-theme="light"] .dashboard__search-input::placeholder { color: var(--text-light); }
+
+/* La bande orange venait de .dashboard / .trip-view eux-mêmes → fond clair en mode clair */
+[data-theme="light"] .dashboard,
+[data-theme="light"] .trip-view {
+  background: linear-gradient(180deg, #FDF0E4 0%, #F8F1E9 45%, #F5EFE9 100%);
+}
+
+/* Vue Agenda (calendrier) : cartes harmonisées avec la Timeline + flèches discrètes */
+.agenda-day {
+  border: 1.5px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  border-radius: 18px;
+}
+.agenda-day__header { align-items: center; }
+.agenda-reorder-btn {
+  border: none; background: none; color: var(--text-light);
+  font-size: 11px; padding: 0 2px; line-height: 1.1;
+}
+.agenda-reorder-btn:not(:disabled):hover { background: none; color: var(--text-muted); }

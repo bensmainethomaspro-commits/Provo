@@ -3,7 +3,7 @@ import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import AuthScreen from './components/AuthScreen';
-import { decodeTrip, getSkyGradient } from './utils/helpers';
+import { decodeTrip } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -45,17 +45,17 @@ function AppInner() {
   useEffect(() => {
     function applyBackground() {
       if (!darkMode) {
-        document.body.style.background = getSkyGradient();
+        // Jour : fond chaud très clair et aéré (fini le dégradé orange plein cadre).
+        // L'orange devient un accent, pas un mur — inspiration apps Apple/App Store.
+        document.body.style.background = 'linear-gradient(180deg, #FCEEE1 0%, #F9F2EA 42%, #F5EFE9 100%)';
         document.body.style.backgroundAttachment = 'fixed';
       } else {
-        // Warm night — coherent with the sunset brand (no generic navy-blue dark).
+        // Nuit chaude, cohérente avec la marque coucher de soleil (pas de bleu-nuit générique).
         document.body.style.background = 'linear-gradient(165deg, #140d08 0%, #1e130b 45%, #2a1810 100%)';
         document.body.style.backgroundAttachment = 'fixed';
       }
     }
     applyBackground();
-    const timer = setInterval(applyBackground, 60000);
-    return () => clearInterval(timer);
   }, [darkMode]);
 
   useEffect(() => {
