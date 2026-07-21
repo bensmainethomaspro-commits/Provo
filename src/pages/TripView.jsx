@@ -643,6 +643,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
           {trip.destination && <p>📍 {trip.destination}</p>}
+          <p className="header__dates">
+            {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
+            {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && ` · UTC${trip.timezoneOffset >= 0 ? '+' : ''}${trip.timezoneOffset}`}
+          </p>
         </div>
         <div className="header__action">
           <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
@@ -699,18 +703,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <img src={trip.coverPhoto} alt="" className="trip-cover-photo__img" />
         </div>
       )}
-
-      {/* Dates du voyage (discrètes) */}
-      <div className="trip-meta">
-        <span className="trip-meta__item">
-          📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
-        </span>
-        {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
-          <span className="trip-meta__item timezone-tag">
-            🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
-          </span>
-        )}
-      </div>
 
       {/* Rangée de contrôles alignée : budget à gauche · vue (ou comparaison) à droite */}
       {(showBudget || compareMode || tab === 'planning') && (

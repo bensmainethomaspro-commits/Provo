@@ -5531,3 +5531,25 @@ button.budget-inline:active { transform: scale(0.98); }
   font-size: 11px; padding: 0 2px; line-height: 1.1;
 }
 .agenda-reorder-btn:not(:disabled):hover { background: none; color: var(--text-muted); }
+
+/* Dates dans l'en-tête : petite ligne discrète, alignée à gauche (fini le centrage crammé) */
+.header__dates {
+  font-size: 11px; font-weight: 600; margin-top: 2px;
+  color: rgba(255,255,255,0.68);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+[data-theme="light"] .header__dates { color: var(--text-light); }
+
+/* Mode sombre : un peu plus de contraste sur les cartes de jour (à la manière des grandes apps) */
+[data-theme="dark"] .tl-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 26%, var(--border-strong));
+}
+[data-theme="dark"] .tl-day__header {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 26%, var(--surface-raised)) 0%,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 13%, var(--surface-raised)) 100%);
+}
+[data-theme="dark"] .agenda-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 22%, var(--border-strong));
+}
