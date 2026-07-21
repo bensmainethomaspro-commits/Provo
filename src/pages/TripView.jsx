@@ -9,7 +9,7 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
-import RefreshButton from '../components/RefreshButton';
+import { forceRefreshApp } from '../components/RefreshButton';
 import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
@@ -177,6 +177,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
   const [showCompare, setShowCompare] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
   const [viewMode, setViewMode] = useState(() => {
     const stored = localStorage.getItem('provo_viewMode');
     return stored === 'agenda' ? 'agenda' : 'timeline'; // 'list' removed → fallback timeline
@@ -615,6 +616,19 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const alreadySpent = doneActivitiesCost + totalExpenses;
   const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
+  // Budget « dépliant » : le chiffre principal (restant / dépassé, sinon estimé)
+  // reste visible ; les autres n'apparaissent qu'une fois déplié.
+  const budgetItems = [];
+  if (initBudget > 0) {
+    budgetItems.push(budgetExceeded
+      ? { key: 'over', cls: 'budget-inline__item--over', txt: `🚨 ${formatPrice(alreadySpent - initBudget)} dépassé` }
+      : { key: 'left', cls: 'budget-inline__item--ok', txt: `💵 ${formatPrice(initBudget - alreadySpent)} restants` });
+    budgetItems.push({ key: 'init', cls: '', txt: `💰 ${formatPrice(initBudget)}` });
+  }
+  if (totalTripCost > 0) {
+    budgetItems.push({ key: 'est', cls: 'budget-inline__item--est', txt: `🧮 ${formatPrice(totalTripCost)} estimé` });
+  }
+
   return (
     <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
       {swUpdateReady && (
@@ -628,18 +642,30 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
-          {trip.destination && <p>📍 {trip.destination}</p>}
+          {trip.destination && <p className="header__dest">📍 {trip.destination}</p>}
+          <p className="header__dates">
+            {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
+            {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && ` · UTC${trip.timezoneOffset >= 0 ? '+' : ''}${trip.timezoneOffset}`}
+          </p>
         </div>
         <div className="header__action">
           <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
-          <RefreshButton />
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
-            {darkMode ? '☀️' : '🌙'}
-          </button>
           <div className="trip-header-menu-wrap" ref={tripMenuRef}>
             <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
+                <button className="trip-header-menu__item" onClick={() => { onToggleDark(); setTripMenuOpen(false); }}>
+                  {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { forceRefreshApp(); }}>
+                  🔄 Recharger l'app
+                </button>
+                <div className="trip-header-menu__divider" />
+                {tab === 'planning' && (
+                  <button className="trip-header-menu__item" onClick={() => { setCompareMode(true); setTripMenuOpen(false); }}>
+                    ⚖️ Comparer des activités
+                  </button>
+                )}
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>
@@ -678,98 +704,90 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </div>
       )}
 
-      {/* Trip meta + budget */}
-      <div className="trip-meta">
-        <span className="trip-meta__item">
-          📅 {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
-        </span>
-        {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && (
-          <span className="trip-meta__item timezone-tag">
-            🌐 UTC{trip.timezoneOffset >= 0 ? '+' : ''}{trip.timezoneOffset}
-          </span>
-        )}
-        {showBudget && (
-          <div className="budget-inline">
-            {initBudget > 0 && (
-              <span className="budget-inline__item">💰 {formatPrice(initBudget)}</span>
-            )}
-            {totalTripCost > 0 && (
-              <span className="budget-inline__item budget-inline__item--est">🧮 {formatPrice(totalTripCost)} estimé</span>
-            )}
-            {initBudget > 0 && (
-              budgetExceeded
-                ? <span className="budget-inline__item budget-inline__item--over">🚨 {formatPrice(alreadySpent - initBudget)} dépassé</span>
-                : <span className="budget-inline__item budget-inline__item--ok">💵 {formatPrice(initBudget - alreadySpent)} restants</span>
-            )}
-          </div>
-        )}
-      </div>
+      {/* Rangée de contrôles alignée : budget à gauche · vue (ou comparaison) à droite */}
+      {(showBudget || compareMode || tab === 'planning') && (
+        <div className="trip-controls">
+          {compareMode ? (
+            <>
+              <span className="compare-toolbar__count">
+                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
+              </span>
+              <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
+                ✕ Quitter
+              </button>
+            </>
+          ) : (
+            <>
+              {showBudget && budgetItems.length > 0 ? (
+                <button
+                  type="button"
+                  className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
+                  onClick={() => budgetItems.length > 1 && setBudgetOpen(o => !o)}
+                  aria-expanded={budgetItems.length > 1 ? budgetOpen : undefined}
+                  title={budgetItems.length > 1 ? 'Détail du budget' : undefined}
+                >
+                  {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
+                    <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
+                  ))}
+                  {budgetItems.length > 1 && (
+                    <span className="budget-inline__chevron" aria-hidden="true">{budgetOpen ? '▴' : '▾'}</span>
+                  )}
+                </button>
+              ) : <span className="trip-controls__spacer" />}
+              {tab === 'planning' ? (
+                <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
+                  <span className="tool-btn__icon">{currentViewMeta.icon}</span>
+                  <span className="tool-btn__label">{currentViewMeta.label}</span>
+                  <span className="tool-btn__chevron">›</span>
+                </button>
+              ) : <span className="trip-controls__spacer" />}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
         {isActive && (
           <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
-            🟢 Aujourd'hui
+            <span className="tab-btn__icon">🟢</span>
+            <span className="tab-btn__label">Aujourd'hui</span>
             {todayDay && todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
               <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
             )}
           </button>
         )}
         <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
-          📅 Planning
+          <span className="tab-btn__icon">📅</span>
+          <span className="tab-btn__label">Planning</span>
           {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
-          📦 Réserve
+          <span className="tab-btn__icon">📦</span>
+          <span className="tab-btn__label">Réserve</span>
           {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
-          💸 Dépenses
+          <span className="tab-btn__icon">💸</span>
+          <span className="tab-btn__label">Dépenses</span>
           {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
-          🗺 Carte
+          <span className="tab-btn__icon">🗺️</span>
+          <span className="tab-btn__label">Carte</span>
         </button>
         <button role="tab" aria-selected={tab === 'notes'} className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
-          📝 Notes
+          <span className="tab-btn__icon">📝</span>
+          <span className="tab-btn__label">Notes</span>
           {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" aria-label="Notes saisies" />}
         </button>
         <button role="tab" aria-selected={tab === 'valise'} className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
-          🎒 Valise
+          <span className="tab-btn__icon">🎒</span>
+          <span className="tab-btn__label">Valise</span>
           {(trip.packingList?.length || 0) > 0 && (
             <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
           )}
         </button>
-      </div>
-
-      {/* Planning tools */}
-      <div className="planning-tools">
-        {compareMode ? (
-          <>
-            <div className="compare-toolbar__state">
-              <span className="compare-toolbar__count">
-                {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
-              </span>
-              {compareSelectedIds.size >= 2 && (
-                <span className="compare-toolbar__hint">↓ Résultat ci-dessous</span>
-              )}
-            </div>
-            <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-              ✕ Quitter
-            </button>
-          </>
-        ) : (
-          <>
-            {tab === 'planning' && (
-              <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
-                <span className="tool-btn__icon">{currentViewMeta.icon}</span>
-                <span className="tool-btn__label">{currentViewMeta.label}</span>
-                <span className="tool-btn__chevron">›</span>
-              </button>
-            )}
-            <button className="tool-btn" onClick={() => setCompareMode(true)} title="Comparer des activités">⚖️</button>
-          </>
-        )}
       </div>
 
       {/* Tab content */}
@@ -820,8 +838,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
-                onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
-                onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
               />
@@ -1082,6 +1098,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           onStartTimeChange={(dayId, time) => setDayStartTime(tripId, dayId, time)}
           onEdit={(activity, location) => { setDetailDay(null); setEditingActivity({ activity, location }); }}
           onAddActivity={(dayId) => { setDetailDay(null); openAddSheet(dayId); }}
+          onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
+          onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
           {...sharedDayProps}
         />
       )}

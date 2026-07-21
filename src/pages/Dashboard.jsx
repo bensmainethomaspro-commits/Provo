@@ -68,7 +68,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   return (
     <div className="dashboard">
       <div className="dashboard__logo">
-        <span className="dashboard__logo-icon">🧭</span>
+        <span className="dashboard__logo-icon">🧳</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
           <RefreshButton />
@@ -155,6 +155,9 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
                 <div className="dashboard__empty-art">🌍 ✈️ 🗺️</div>
                 <h2 className="dashboard__empty-title">Bienvenue sur Provo !</h2>
                 <p className="dashboard__empty-text">Planifie tes voyages, gère le programme jour par jour, retrouve tout hors-ligne.</p>
+                <button className="btn btn--primary dashboard__empty-cta" onClick={() => setShowNew(true)}>
+                  ✈️ Créer mon premier voyage
+                </button>
                 <p className="dashboard__empty-offline">📵 Fonctionne 100% sans connexion</p>
               </div>
             ) : (

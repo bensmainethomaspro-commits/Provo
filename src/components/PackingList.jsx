@@ -63,7 +63,13 @@ function HamburgerIcon() {
   );
 }
 
-export default function PackingList({ items = [], onAdd, onToggle, onDelete, onReorder, trip, weatherByDate }) {
+export default function PackingList({ items: rawItems = [], onAdd, onToggle, onDelete, onReorder, trip, weatherByDate }) {
+  // Tolerate legacy / shared items that miss `text` or `category` — a single
+  // malformed entry must never crash the whole Valise tab.
+  const items = useMemo(
+    () => (rawItems || []).map(i => ({ ...i, text: i.text ?? i.label ?? '', category: i.category || 'autre' })),
+    [rawItems]
+  );
   const [activeCat, setActiveCat] = useState('tous');
   const [smartOpen, setSmartOpen] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);

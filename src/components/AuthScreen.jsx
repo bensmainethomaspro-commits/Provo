@@ -85,7 +85,7 @@ export default function AuthScreen({ onSignIn, onSignUp, onResetPassword, onSkip
         <RefreshButton />
       </div>
       <div className="auth-card">
-        <div className="auth-logo">🧭</div>
+        <div className="auth-logo">🧳</div>
         <h1 className="auth-app-name">Provo</h1>
         <p className="auth-tagline">Planifiez. Partagez. Voyagez.</p>
 

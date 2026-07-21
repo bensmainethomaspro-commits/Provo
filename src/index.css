@@ -120,7 +120,7 @@ body {
 .header {
   padding: 14px 16px 10px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   flex-shrink: 0;
 }
@@ -129,6 +129,7 @@ body {
   border: none;
   border-radius: 50%;
   width: 36px; height: 36px;
+  margin-top: 1px;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   color: white;
@@ -149,8 +150,15 @@ body {
   text-overflow: ellipsis;
   text-shadow: 0 1px 4px rgba(0,0,0,0.25);
 }
-.header__title p { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 1px; }
-.header__action { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+/* Hiérarchie à 3 niveaux, chacun avec sa propre classe (fini le sélecteur
+   générique « p » qui faisait entrer en collision destination et dates) */
+.header__dest {
+  font-size: 12.5px; font-weight: 600;
+  color: rgba(255,255,255,0.8);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.header__action { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-top: 1px; }
 
 /* ─── DASHBOARD ──────────────────────────────────────────── */
 .dashboard { flex: 1; display: flex; flex-direction: column; min-height: 100dvh; }
@@ -661,7 +669,7 @@ body {
 
 /* ─── TRIP HEADER BUDGET ─────────────────────────────────── */
 .trip-meta { padding: 0 16px 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.trip-meta__item { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.trip-meta__item { font-size: 11.5px; color: rgba(255,255,255,0.6); font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.15); }
 .trip-budget { font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.2); color: white; padding: 3px 10px; border-radius: 20px; text-shadow: 0 1px 3px rgba(0,0,0,0.2); }
 
 /* ─── RESERVE IN PLANNING ───────────────────────────────── */
@@ -1770,7 +1778,10 @@ body {
 }
 
 /* ─── FIXED TIME SLOT ───────────────────────────────────────── */
-.time-slot--fixed { font-weight: 700; color: var(--orange); }
+/* Bug : ceci mettait le texte en var(--orange) alors que .time-slot a déjà un
+   fond orange plein → texte orange sur fond orange, invisible. Le 📌 (déjà
+   dans le libellé) suffit à signaler « fixe » ; on ajoute juste un liseré. */
+.time-slot--fixed { font-weight: 800; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.55); }
 
 /* ─── TIME RANGE ROW (form) ─────────────────────────────────── */
 .time-range-row {
@@ -5285,4 +5296,289 @@ h1, h2, h3,
   background: color-mix(in srgb, var(--yellow) 18%, var(--surface-raised));
   border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
   border-radius: 14px; padding: 11px 13px; font-size: 12.5px; color: var(--text); line-height: 1.5;
+}
+
+/* ── Premier lancement : CTA principal dans le hero d'accueil ─────────────── */
+.dashboard__empty-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 18px auto 6px;
+  padding: 13px 24px;
+  font-size: 15px; font-weight: 700;
+  border-radius: 16px;
+  width: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NAV BAS — grille tout-visible (icône au-dessus du label)
+   Avant : barre en scroll horizontal → Notes/Valise/Carte hors écran, invisibles.
+   Après : grille à colonnes égales, chaque section visible d'un coup d'œil.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.trip-view .tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 1px;
+  overflow: visible;
+  align-items: stretch;
+}
+.trip-view .tabs .tab-btn {
+  position: relative;
+  min-width: 0;                 /* autorise le label à rétrécir plutôt qu'à déborder */
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 1px;
+  min-height: 52px;
+  border-radius: 14px;
+}
+.tab-btn__icon { font-size: 19px; line-height: 1; }
+.tab-btn__label {
+  font-size: clamp(8.5px, 2.5vw, 10px);
+  font-weight: 700;
+  line-height: 1.05;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.02em;
+}
+/* « Aujourd'hui » est le plus long : condensé juste ce qu'il faut pour tenir en entier */
+.tab-btn--today .tab-btn__label { font-size: clamp(8px, 2.3vw, 9px); letter-spacing: -0.03em; }
+/* Badges → pastille compacte en coin haut-droit de l'onglet */
+.trip-view .tabs .tab-btn .tab-badge {
+  position: absolute;
+  top: 3px; right: 5px;
+  min-width: 15px; height: 15px; padding: 0 4px;
+  font-size: 9px; line-height: 15px;
+  border-radius: 999px;
+}
+.trip-view .tabs .tab-btn .tab-badge--dot {
+  min-width: 0; width: 7px; height: 7px; padding: 0; top: 5px; right: 11px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARTE ACTIVITÉ — action « fait » visible (pastille à cocher)
+   Avant : marquer fait = double-tap ou swipe, invisibles. Après : une pastille
+   claire à gauche de chaque activité d'un jour, comme dans le mode Aujourd'hui.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.activity-card__check {
+  flex-shrink: 0;
+  width: 27px; height: 27px; margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-light);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; line-height: 1;
+  cursor: pointer; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, background 0.15s, border-color 0.15s, color 0.15s;
+}
+.activity-card__check:active { transform: scale(0.85); }
+.activity-card__check--done {
+  background: var(--green); border-color: var(--green); color: #fff;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--green) 40%, transparent);
+}
+.activity-card__check--nogo {
+  border-color: var(--border-strong); color: var(--text-light); opacity: 0.55;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TIMELINE — cartes de jour épurées
+   Avant : en-tête en bloc orange plein saturé qui tranchait avec les activités
+   sombres + 3 boutons par jour. Après : carte unifiée, orange en simple accent,
+   actions (notes / « on verra plus tard ») déplacées dans le détail du jour.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.tl-day__header {
+  background: color-mix(in srgb, var(--trip-accent, var(--orange)) 9%, var(--surface-raised));
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 14px;
+  align-items: center;
+}
+.tl-day__head-main { min-width: 0; flex: 1; }
+.tl-day__label { color: var(--trip-accent, var(--orange)); opacity: 1; font-size: 11px; }
+.tl-day__date { color: var(--text); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
+.tl-day__stats {
+  color: var(--text-muted); opacity: 1;
+  flex-wrap: wrap; row-gap: 2px; margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.tl-day__note-flag { font-size: 11px; }
+.tl-day__empty-hint { color: var(--text-light); }
+.tl-day__open {
+  color: var(--text-light);
+  font-size: 22px; font-weight: 700; line-height: 1;
+  flex-shrink: 0; padding-left: 8px;
+}
+
+/* Détail du jour : actions rapatriées depuis la carte (moins de boutons partout) */
+.day-detail__sweep { width: 100%; margin-top: 10px; color: var(--text-muted); }
+.day-detail__notes { margin-top: 18px; }
+.day-detail__notes-label {
+  display: block; font-size: 12px; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 6px;
+}
+
+/* Budget « dépliant » : une seule pastille cliquable (chiffre clé toujours
+   visible, le détail budget/estimé n'apparaît qu'au tap → moins d'éléments en haut) */
+button.budget-inline {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+button.budget-inline:active { transform: scale(0.98); }
+.budget-inline__chevron { font-size: 9px; opacity: 0.75; margin-left: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VUE PLANNING — respiration & contours
+   Bascule de vue plus nette, espaces resserrés au-dessus des jours, contour
+   des cartes de jour plus affirmé pour mieux les détacher du fond.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.planning-tools { padding: 0 16px 8px; min-height: 0; }
+.tool-btn--view-cycle {
+  padding: 6px 14px 6px 12px;
+  border-radius: 999px;
+  gap: 6px;
+  background: rgba(255,255,255,0.16);
+  border: 1px solid rgba(255,255,255,0.30);
+  box-shadow: 0 1px 5px rgba(0,0,0,0.14);
+}
+.tool-btn--view-cycle .tool-btn__chevron { color: rgba(255,255,255,0.85); }
+[data-theme="dark"] .tool-btn--view-cycle {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+[data-theme="dark"] .tool-btn--view-cycle .tool-btn__label { color: var(--text); }
+[data-theme="dark"] .tool-btn--view-cycle .tool-btn__chevron { color: var(--text-light); }
+
+/* Rangée de contrôles alignée : budget à gauche · vue à droite (fini le brouillon) */
+.trip-meta { padding: 0 16px 4px; }
+.trip-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 0 16px 10px;
+  flex-wrap: wrap; row-gap: 6px;
+}
+.trip-controls__spacer { width: 0; height: 0; }
+.trip-controls .compare-toolbar__count {
+  color: rgba(255,255,255,0.95); font-size: 12px; font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+[data-theme="dark"] .trip-controls .compare-toolbar__count { color: var(--text); text-shadow: none; }
+
+/* Jours plus grands, resserrés sous les contrôles, hauteur naturelle (plus de
+   vide interne dû à l'étirement des colonnes à la même hauteur) */
+.timeline-view-wrap { align-items: flex-start; padding-top: 0; }
+.tl-day {
+  width: min(88vw, 340px);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+.tl-day__header { border-bottom-color: var(--border-strong); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MODE CLAIR 2.0 — clair, aéré, « à la Apple »
+   Fini l'orange plein cadre agressif : fond chaud très clair, texte sombre,
+   orange réservé aux accents (bouton +, onglet actif, libellés, CTA).
+   Tout est scopé [data-theme="light"] → le mode sombre n'est pas touché.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Dates du voyage centrées sous le titre */
+.trip-meta { justify-content: center; text-align: center; }
+
+/* En-tête : texte sombre sur fond clair */
+[data-theme="light"] .header__title h1 { color: var(--text); text-shadow: none; }
+[data-theme="light"] .header__dest { color: var(--text-muted); }
+[data-theme="light"] .header__back { background: rgba(0,0,0,0.05); color: var(--text); text-shadow: none; }
+[data-theme="light"] .header__back:hover { background: rgba(0,0,0,0.09); }
+[data-theme="light"] .header__add-btn { background: var(--accent-grad); color: #fff; box-shadow: 0 3px 10px rgba(241,80,15,0.34); }
+[data-theme="light"] .btn--ghost-white {
+  background: var(--surface-raised); color: var(--text); text-shadow: none;
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .btn--ghost-white:hover { background: var(--surface-sunken); }
+
+/* Dates / contrôles */
+[data-theme="light"] .trip-meta__item { color: var(--text-muted); text-shadow: none; }
+[data-theme="light"] .trip-controls .compare-toolbar__count { color: var(--text); text-shadow: none; }
+[data-theme="light"] .tool-btn--view-cycle {
+  background: var(--surface-raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow-sm);
+}
+[data-theme="light"] .tool-btn--view-cycle .tool-btn__label { color: var(--text); }
+[data-theme="light"] .tool-btn--view-cycle .tool-btn__chevron { color: var(--text-light); }
+
+/* Budget : pastille claire, texte sombre */
+[data-theme="light"] .budget-inline { background: var(--surface-raised); box-shadow: var(--shadow-sm); }
+[data-theme="light"] .budget-inline__item { background: transparent; border: none; color: var(--text); backdrop-filter: none; }
+[data-theme="light"] .budget-inline__item--ok  { color: #15803d; }
+[data-theme="light"] .budget-inline__item--est { color: var(--text-muted); }
+[data-theme="light"] .budget-inline__item--over { color: var(--red); }
+[data-theme="light"] .budget-inline__chevron { color: var(--text-light); }
+
+/* Dashboard : logo & recherche sur fond clair */
+[data-theme="light"] .dashboard__logo-text { color: var(--text); text-shadow: none; }
+[data-theme="light"] .dashboard__logo-sub { color: var(--text-muted); }
+[data-theme="light"] .dashboard__search-input { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); }
+[data-theme="light"] .dashboard__search-input::placeholder { color: var(--text-light); }
+
+/* La bande orange venait de .dashboard / .trip-view eux-mêmes → fond clair en mode clair */
+[data-theme="light"] .dashboard,
+[data-theme="light"] .trip-view {
+  background: linear-gradient(180deg, #FDF0E4 0%, #F8F1E9 45%, #F5EFE9 100%);
+}
+
+/* Vue Agenda (calendrier) : cartes harmonisées avec la Timeline + flèches discrètes */
+.agenda-day {
+  border: 1.5px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  border-radius: 18px;
+}
+.agenda-day__header { align-items: center; }
+.agenda-reorder-btn {
+  border: none; background: none; color: var(--text-light);
+  font-size: 11px; padding: 0 2px; line-height: 1.1;
+}
+.agenda-reorder-btn:not(:disabled):hover { background: none; color: var(--text-muted); }
+
+/* Dates dans l'en-tête : 3e niveau, le plus discret (aligné à gauche, fini le centrage crammé) */
+.header__dates {
+  display: block;
+  font-size: 11px; font-weight: 600; margin-top: 2px;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+[data-theme="light"] .header__dates { color: var(--text-light); }
+
+/* Mode sombre : un peu plus de contraste sur les cartes de jour (à la manière des grandes apps) */
+[data-theme="dark"] .tl-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 26%, var(--border-strong));
+}
+[data-theme="dark"] .tl-day__header {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 26%, var(--surface-raised)) 0%,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 13%, var(--surface-raised)) 100%);
+}
+[data-theme="dark"] .agenda-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 22%, var(--border-strong));
+}
+
+/* Mode clair : même intention (détacher les jours du fond), mais dans l'autre
+   sens — la nuit on éclaircit/réchauffe une surface sombre pour la faire
+   ressortir ; le jour, une surface déjà claire ressort en l'approfondissant
+   (contour plus riche, dégradé inversé : appuyé en bas, doux en haut, à
+   l'opposé du mode sombre). */
+[data-theme="light"] .tl-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 28%, var(--border-strong));
+}
+[data-theme="light"] .tl-day__header {
+  background: linear-gradient(0deg,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 18%, var(--surface-raised)) 0%,
+    color-mix(in srgb, var(--trip-accent, var(--orange)) 7%, var(--surface-raised)) 100%);
+}
+[data-theme="light"] .agenda-day {
+  border-color: color-mix(in srgb, var(--trip-accent, var(--orange)) 24%, var(--border-strong));
 }

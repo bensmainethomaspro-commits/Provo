@@ -44,14 +44,12 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart, weather }) {
+function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weather }) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const totalMin = totalMinutes(active);
   const budget = totalBudget(day.activities);
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
-  const todoActivities = day.activities.filter(a => a.status === 'todo');
 
   const handleDragOver = (e) => {
     if (compareMode) return;
@@ -73,52 +71,24 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
       data-drop-zone="true"
       data-zone-type="day"
       data-day-id={day.id}
-      onClick={() => !compareMode && !notesOpen && onOpenDetail(day)}
+      onClick={() => !compareMode && onOpenDetail(day)}
       onDragOver={handleDragOver}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setIsDragOver(false); }}
       onDrop={handleDrop}
     >
       <div className="tl-day__header">
-        <div>
+        <div className="tl-day__head-main">
           <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="tl-day__date">{formatDateShort(day.date)}</div>
           <div className="tl-day__stats">
-            {totalMin > 0 && <span>{formatDuration(totalMin)}</span>}
-            {budget > 0 && <span>{formatPrice(budget)}</span>}
+            {totalMin > 0 && <span>⏱ {formatDuration(totalMin)}</span>}
+            {budget > 0 && <span>💶 {formatPrice(budget)}</span>}
+            {weather && <span>{weather.icon} {weather.max}°/{weather.min}°</span>}
+            {day.notes && <span className="tl-day__note-flag" title="Notes du jour">📝</span>}
             {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
           </div>
-          {weather && (
-            <div className="tl-day__weather">
-              <span>{weather.icon}</span>
-              <span>{weather.max}°/{weather.min}°</span>
-            </div>
-          )}
         </div>
-        <div className="tl-day__actions">
-          {todoActivities.length > 0 && !compareMode && onSweep && (
-            <button
-              className="tl-day__action-btn"
-              onClick={(e) => { e.stopPropagation(); onSweep(day.id); }}
-              title="On verra plus tard — envoyer en réserve"
-            >🪄</button>
-          )}
-          <button
-            className={`tl-day__action-btn${day.notes ? ' tl-day__action-btn--active' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setNotesOpen(o => !o); }}
-            title="Notes du jour"
-          >
-            📝{day.notes && !notesOpen ? ' •' : ''}
-          </button>
-          {!compareMode && (
-            <button
-              className="tl-day__action-btn"
-              onClick={(e) => { e.stopPropagation(); onOpenDetail(day); }}
-              title="Détail du jour"
-            >
-              ↗
-            </button>
-          )}
-        </div>
+        {!compareMode && <span className="tl-day__open" aria-hidden="true">›</span>}
       </div>
       <div className="tl-day__body">
         {day.activities.length === 0 ? (
@@ -137,22 +107,11 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
           ))
         )}
       </div>
-      {notesOpen && (
-        <div className="tl-day__notes-area" onClick={(e) => e.stopPropagation()}>
-          <textarea
-            className="tl-day__notes-input"
-            placeholder="Notes du jour : hébergement, infos pratiques…"
-            value={day.notes || ''}
-            onChange={e => onNotesChange?.(day.id, e.target.value)}
-            autoFocus
-          />
-        </div>
-      )}
     </div>
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onNotesChange, onSweep, onTouchDragStart, weatherByDate }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weatherByDate }) {
   return (
     <div className="timeline-view-wrap">
       {days.map((day, i) => (
@@ -166,8 +125,6 @@ export default function TimelineView({ days, onOpenDetail, onDrop, compareMode, 
           compareMode={compareMode}
           compareSelectedIds={compareSelectedIds}
           onToggleCompare={onToggleCompare}
-          onNotesChange={onNotesChange}
-          onSweep={onSweep}
           onTouchDragStart={onTouchDragStart}
           weather={weatherByDate?.[day.date]}
         />

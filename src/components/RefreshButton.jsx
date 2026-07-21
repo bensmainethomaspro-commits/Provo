@@ -1,7 +1,7 @@
 // Forces the installed/cached app onto the latest Vercel deploy: clears cached
 // assets, pulls the newest service worker, and reloads from the network — without
 // having to re-add the app to the home screen.
-async function forceRefreshApp() {
+export async function forceRefreshApp() {
   try {
     // Clear ALL caches (the app shell + tiles).
     if ('caches' in window) {
