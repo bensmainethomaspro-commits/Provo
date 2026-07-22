@@ -167,6 +167,7 @@ function DonutChart({ byCategory, total }) {
 
 export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDeleteTraveler }) {
   const travelers = trip.tripTravelers || [];
+  const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
   const allActivities = trip.days.flatMap(d => d.activities);
   const activitiesByDay = trip.days.map((d, i) => ({ day: d, dayIdx: i })).filter(({ day }) => day.activities.length > 0);
@@ -199,8 +200,10 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     if (!form.description.trim()) { setError('Décris la dépense.'); return; }
     const amount = parseFloat(form.amount);
     if (!amount || amount <= 0) { setError('Montant invalide.'); return; }
-    if (!form.payerId) { setError('Qui a payé ?'); return; }
-    if (!form.participantIds.length) { setError('Qui participe ?'); return; }
+    if (hasTravelers) {
+      if (!form.payerId) { setError('Qui a payé ?'); return; }
+      if (!form.participantIds.length) { setError('Qui participe ?'); return; }
+    }
     const eurAmount = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
     onAddExpense({
       ...form,
@@ -254,17 +257,13 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     return { ...t, paid, share, balance: paid - share };
   });
 
-  if (!travelers.length) {
-    return (
-      <div className="expenses-empty">
-        <div className="expenses-empty__icon">💸</div>
-        <p className="expenses-empty__text">Ajoute des voyageurs dans <strong>⚙️ Paramètres du voyage</strong> pour gérer les dépenses partagées.</p>
-      </div>
-    );
-  }
-
   return (
     <div className="expenses-tab">
+      {!hasTravelers && expenses.length === 0 && !showForm && (
+        <div className="expenses-hint">
+          💡 Vous êtes plusieurs ? Ajoute des voyageurs dans <strong>⚙️ Paramètres du voyage</strong> pour répartir les dépenses. Sinon, ajoute directement une dépense ci-dessous.
+        </div>
+      )}
       {selectedTraveler && (
         <TravelerBalanceSheet
           traveler={selectedTraveler}
@@ -306,9 +305,11 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               <span className="expenses-summary__per">{formatPrice(tripBudget - totalSpent > 0 ? tripBudget - totalSpent : totalSpent - tripBudget)} {budgetOver ? 'de dépassement' : 'restants'}</span>
             </div>
           )}
-          <div className="expenses-summary__per">
-            soit {formatPrice(totalSpent / travelers.length)} par personne
-          </div>
+          {hasTravelers && (
+            <div className="expenses-summary__per">
+              soit {formatPrice(totalSpent / travelers.length)} par personne
+            </div>
+          )}
         </div>
       )}
 
@@ -369,7 +370,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
         </div>
       )}
-      {expenses.length > 0 && debts.length === 0 && (
+      {hasTravelers && expenses.length > 0 && debts.length === 0 && (
         <div className="debts-card debts-card--settled">✅ Tout est équilibré !</div>
       )}
 
@@ -456,7 +457,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                         {exp.isSettlement
                           ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {exp.participantIds.map(getName).join(', ')}</>
                           : <>
-                              {getName(exp.payerId)} a payé{' '}
+                              {exp.payerId && `${getName(exp.payerId)} a payé `}
                               <strong>
                                 {exp.currency && exp.currency !== 'EUR'
                                   ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
@@ -530,30 +531,34 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
             </div>
           )}
-          <div className="form-group">
-            <label className="form-label">Qui a payé ?</label>
-            <div className="traveler-assign-row">
-              {travelers.map(t => (
-                <button key={t.id} type="button"
-                  className={`traveler-assign-chip${form.payerId === t.id ? ' traveler-assign-chip--on' : ''}`}
-                  onClick={() => set('payerId', t.id)}>
-                  {t.emoji} {t.name}
-                </button>
-              ))}
+          {hasTravelers && (
+            <div className="form-group">
+              <label className="form-label">Qui a payé ?</label>
+              <div className="traveler-assign-row">
+                {travelers.map(t => (
+                  <button key={t.id} type="button"
+                    className={`traveler-assign-chip${form.payerId === t.id ? ' traveler-assign-chip--on' : ''}`}
+                    onClick={() => set('payerId', t.id)}>
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Pour qui ?</label>
-            <div className="traveler-assign-row">
-              {travelers.map(t => (
-                <button key={t.id} type="button"
-                  className={`traveler-assign-chip${form.participantIds.includes(t.id) ? ' traveler-assign-chip--on' : ''}`}
-                  onClick={() => toggleParticipant(t.id)}>
-                  {t.emoji} {t.name}
-                </button>
-              ))}
+          )}
+          {hasTravelers && (
+            <div className="form-group">
+              <label className="form-label">Pour qui ?</label>
+              <div className="traveler-assign-row">
+                {travelers.map(t => (
+                  <button key={t.id} type="button"
+                    className={`traveler-assign-chip${form.participantIds.includes(t.id) ? ' traveler-assign-chip--on' : ''}`}
+                    onClick={() => toggleParticipant(t.id)}>
+                    {t.emoji} {t.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           {activitiesByDay.length > 0 && (
             <div className="form-group">
               <label className="form-label">Lier à une activité <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>— optionnel</span></label>
