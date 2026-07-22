@@ -2461,9 +2461,12 @@ body {
 .suggestion-chip:hover { border-color: var(--orange); background: color-mix(in srgb, var(--orange) 10%, transparent); }
 
 /* ─── EXPENSES TAB ───────────────────────────────────────── */
-.expenses-empty { text-align: center; padding: 40px 20px; }
-.expenses-empty__icon { font-size: 40px; margin-bottom: 12px; }
-.expenses-empty__text { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+/* Indice discret (pas un blocage) : on peut ajouter une dépense seul, sans voyageurs */
+.expenses-hint {
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 12px;
+  font-size: 13px; color: var(--text-muted); line-height: 1.5;
+}
 .expenses-tab { padding: 12px 0; }
 .expenses-summary {
   background: var(--surface-raised); border-radius: var(--radius-md);
