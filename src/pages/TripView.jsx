@@ -643,10 +643,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
           {trip.destination && <p className="header__dest">📍 {trip.destination}</p>}
-          <p className="header__dates">
-            {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
-            {trip.timezoneOffset != null && trip.timezoneOffset !== 0 && ` · UTC${trip.timezoneOffset >= 0 ? '+' : ''}${trip.timezoneOffset}`}
-          </p>
         </div>
         <div className="header__action">
           <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
@@ -659,6 +655,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { forceRefreshApp(); }}>
                   🔄 Recharger l'app
+                </button>
+                <div className="trip-header-menu__divider" />
+                <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
+                  📝 Notes du voyage{trip.tripNotes?.trim() ? ' •' : ''}
+                </button>
+                <button className="trip-header-menu__item" onClick={() => { navigateTab('valise'); setTripMenuOpen(false); }}>
+                  🎒 Valise{(trip.packingList?.length || 0) > 0
+                    ? ` · ${trip.packingList.filter(i => i.checked).length}/${trip.packingList.length}`
+                    : ''}
                 </button>
                 <div className="trip-header-menu__divider" />
                 {tab === 'planning' && (
@@ -776,18 +781,24 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <span className="tab-btn__icon">🗺️</span>
           <span className="tab-btn__label">Carte</span>
         </button>
-        <button role="tab" aria-selected={tab === 'notes'} className={`tab-btn${tab === 'notes' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('notes')}>
-          <span className="tab-btn__icon">📝</span>
-          <span className="tab-btn__label">Notes</span>
-          {trip.tripNotes?.trim() && <span className="tab-badge tab-badge--dot" aria-label="Notes saisies" />}
-        </button>
-        <button role="tab" aria-selected={tab === 'valise'} className={`tab-btn${tab === 'valise' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('valise')}>
-          <span className="tab-btn__icon">🎒</span>
-          <span className="tab-btn__label">Valise</span>
-          {(trip.packingList?.length || 0) > 0 && (
-            <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
-          )}
-        </button>
+        {/* Notes et Valise sont rarement utilisés → sortis de la barre du bas et
+            accessibles depuis le menu ⋯. Ils restent des onglets à part entière :
+            l'onglet actif reste visible ici quand on y navigue depuis le menu. */}
+        {tab === 'notes' && (
+          <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('notes')}>
+            <span className="tab-btn__icon">📝</span>
+            <span className="tab-btn__label">Notes</span>
+          </button>
+        )}
+        {tab === 'valise' && (
+          <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('valise')}>
+            <span className="tab-btn__icon">🎒</span>
+            <span className="tab-btn__label">Valise</span>
+            {(trip.packingList?.length || 0) > 0 && (
+              <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Tab content */}
@@ -843,49 +854,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               />
             )}
 
-            {/* Reserve mini-panel */}
-            <div className="planning-reserve">
-              <button
-                className="planning-reserve__toggle"
-                onClick={() => setReserveExpanded(v => !v)}
-              >
-                <span>📦 Réserve d'idées {trip.reserve.length > 0 && <span className="planning-reserve__count">{trip.reserve.length}</span>}</span>
-                <span>{reserveExpanded ? '▲' : '▼'}</span>
-              </button>
-              {reserveExpanded && (
-                <div className="planning-reserve__body">
-                  {trip.reserve.length === 0
-                    ? <p className="planning-reserve__hint">Aucune idée en réserve pour l'instant.</p>
-                    : (
-                      <>
-                        <p className="planning-reserve__hint">Glisse une carte vers un jour ci-dessus ✨</p>
-                        {trip.reserve.map((activity, i) => (
-                          <div key={activity.id} className="reserve-mini-card">
-                            <ActivityCard
-                              activity={activity}
-                              context="reserve"
-                              isPastTrip={isPast}
-                              onStatusChange={(s) => setActivityStatus(tripId, { type: 'reserve' }, activity.id, s)}
-                              onDelete={() => handleDeleteFromReserve(activity.id)}
-                              onEdit={() => setEditingActivity({ activity, location: { type: 'reserve' } })}
-                              onReorderUp={() => reorderInReserve(tripId, activity.id, 'up')}
-                              onReorderDown={() => reorderInReserve(tripId, activity.id, 'down')}
-                              isFirst={i === 0}
-                              isLast={i === trip.reserve.length - 1}
-                              onDragStart={() => {}}
-                              onDragEnd={() => {}}
-                              compareMode={compareMode}
-                              compareSelected={compareSelectedIds.has(activity.id)}
-                              onToggleCompare={() => toggleCompare(activity.id)}
-                            />
-                          </div>
-                        ))}
-                      </>
-                    )
-                  }
-                </div>
-              )}
-            </div>
           </>
         )}
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { totalMinutes, formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
+import { formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
 
 function TlActivity({ activity, slot, compareMode, compareSelected, onToggleCompare, onTouchDragStart }) {
   const [open, setOpen] = useState(false);
@@ -62,7 +62,6 @@ function TlActivity({ activity, slot, compareMode, compareSelected, onToggleComp
 function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weather }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
-  const totalMin = totalMinutes(active);
   const budget = totalBudget(day.activities);
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
 
@@ -96,7 +95,6 @@ function TlDayCard({ day, dayIndex, totalDays, onOpenDetail, onDrop, compareMode
           <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="tl-day__date">{formatDateShort(day.date)}</div>
           <div className="tl-day__stats">
-            {totalMin > 0 && <span>⏱ {formatDuration(totalMin)}</span>}
             {budget > 0 && <span>💶 {formatPrice(budget)}</span>}
             {weather && <span>{weather.icon} {weather.max}°/{weather.min}°</span>}
             {day.notes && <span className="tl-day__note-flag" title="Notes du jour">📝</span>}

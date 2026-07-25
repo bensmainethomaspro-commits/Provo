@@ -5563,15 +5563,6 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .agenda-reorder-btn:not(:disabled):hover { background: none; color: var(--text-muted); }
 
-/* Dates dans l'en-tête : 3e niveau, le plus discret (aligné à gauche, fini le centrage crammé) */
-.header__dates {
-  display: block;
-  font-size: 11px; font-weight: 600; margin-top: 2px;
-  color: rgba(255,255,255,0.6);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
-}
-[data-theme="light"] .header__dates { color: var(--text-light); }
 
 /* Mode sombre : un peu plus de contraste sur les cartes de jour (à la manière des grandes apps) */
 [data-theme="dark"] .tl-day {
@@ -5644,3 +5635,59 @@ button.budget-inline:active { transform: scale(0.98); }
 /* Budget de l'en-tête et pastilles d'onglets : chiffres plus lisibles */
 .budget-inline { font-size: 12.5px; }
 .trip-view .tabs .tab-btn .tab-badge { font-size: 10px; min-width: 16px; height: 16px; line-height: 16px; }
+
+/* Cartes de jour : occupent toute la hauteur disponible (plus de grand vide
+   sous la carte). La liste d'activités s'étire, la carte reste ancrée en bas. */
+.timeline-view-wrap {
+  align-items: stretch;
+  min-height: calc(100dvh - 290px);
+}
+.tl-day { display: flex; flex-direction: column; }
+.tl-day__body { flex: 1; max-height: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DÉPENSES — remboursements lisibles + ajout guidé
+   « X doit N € à Y » remplace les flèches ambiguës, et l'ajout affiche en
+   direct le partage par personne.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.debt-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  padding: 9px 0; margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+.debt-row:last-child { border-bottom: none; }
+.debt-row__text {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  font-size: 14px; min-width: 0;
+}
+.debt-from, .debt-to { font-weight: 800; color: var(--text); }
+.debt-verb { color: var(--text-muted); font-weight: 500; }
+.debt-amount {
+  font-weight: 800; color: var(--red);
+  font-variant-numeric: tabular-nums; font-size: 15px;
+}
+.debt-settle-btn {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  border-radius: 999px;
+  font-size: 12px; font-weight: 800;
+  padding: 6px 12px; margin-left: auto;
+  opacity: 1; cursor: pointer; white-space: nowrap;
+}
+.debt-settle-btn:active { transform: scale(0.95); }
+
+/* Ajout d'une dépense : raccourci « tout le monde » + aperçu du partage */
+.expense-form__all-btn {
+  margin-left: auto;
+  background: none; border: none; cursor: pointer;
+  color: var(--accent-deep); font-size: 11.5px; font-weight: 800;
+  text-transform: none; letter-spacing: 0;
+}
+[data-theme="dark"] .expense-form__all-btn { color: var(--accent-light); }
+.expense-form .form-label { display: flex; align-items: center; gap: 8px; }
+.expense-form__preview {
+  margin-top: 8px; font-size: 13px; font-weight: 700;
+  color: var(--text-muted); font-variant-numeric: tabular-nums;
+}

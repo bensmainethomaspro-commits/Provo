@@ -178,6 +178,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const [selectedTraveler, setSelectedTraveler] = useState(null);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [showDebtDetail, setShowDebtDetail] = useState(false);
+  const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -194,7 +195,25 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
     setError('');
     setShowForm(true);
+    // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
+    // voit rien se passer au clic sur « Ajouter une dépense ».
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
   };
+
+  // Aperçu du partage pendant la saisie : « 60 € ÷ 2 = 30 € par personne »
+  const splitPreview = (() => {
+    const amt = parseFloat(form.amount);
+    const n = form.participantIds.length;
+    if (!amt || amt <= 0 || n === 0) return null;
+    const eur = form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
+    if (n === 1) {
+      const only = travelers.find(t => t.id === form.participantIds[0]);
+      return `${formatPrice(eur)} pour ${only ? only.name : '1 personne'} seul·e`;
+    }
+    return `${formatPrice(eur)} ÷ ${n} = ${formatPrice(eur / n)} par personne`;
+  })();
 
   const handleAdd = () => {
     if (!form.description.trim()) { setError('Décris la dépense.'); return; }
@@ -339,16 +358,22 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               {showDebtDetail ? '▲ Masquer' : '▼ Détail'}
             </button>
           </div>
+          {/* Phrase explicite : « X doit N € à Y ». Les flèches seules ne disaient
+              pas dans quel sens allait l'argent. */}
           {debts.map((d, i) => (
             <div key={i} className="debt-row">
-              <span className="debt-emoji">{getEmoji(d.from)}</span>
-              <span className="debt-from">{getName(d.from)}</span>
-              <span className="debt-arrow">→</span>
-              <span className="debt-amount">{formatPrice(d.amount)}</span>
-              <span className="debt-arrow">→</span>
-              <span className="debt-emoji">{getEmoji(d.to)}</span>
-              <span className="debt-to">{getName(d.to)}</span>
-              <button className="debt-settle-btn" onClick={() => handleSettleDebt(d)} title="Marquer comme remboursé">✅</button>
+              <div className="debt-row__text">
+                <span className="debt-emoji">{getEmoji(d.from)}</span>
+                <span className="debt-from">{getName(d.from)}</span>
+                <span className="debt-verb">doit</span>
+                <span className="debt-amount">{formatPrice(d.amount)}</span>
+                <span className="debt-verb">à</span>
+                <span className="debt-emoji">{getEmoji(d.to)}</span>
+                <span className="debt-to">{getName(d.to)}</span>
+              </div>
+              <button className="debt-settle-btn" onClick={() => handleSettleDebt(d)}>
+                ✓ Remboursé
+              </button>
             </div>
           ))}
           {showDebtDetail && (
@@ -365,7 +390,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                   </div>
                 );
               })}
-              <div className="debt-detail__note">Positif = à recevoir · Négatif = à rembourser</div>
+              <div className="debt-detail__note">Positif = on te doit de l'argent · Négatif = tu dois de l'argent</div>
             </div>
           )}
         </div>
@@ -493,7 +518,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
 
       {/* Add form */}
       {showForm ? (
-        <div className="expense-form">
+        <div className="expense-form" ref={formRef}>
           <div className="form-group">
             <label className="form-label">Description</label>
             <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}
@@ -547,7 +572,17 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
           {hasTravelers && (
             <div className="form-group">
-              <label className="form-label">Pour qui ?</label>
+              <label className="form-label">
+                Partagé entre
+                <button
+                  type="button"
+                  className="expense-form__all-btn"
+                  onClick={() => set('participantIds',
+                    form.participantIds.length === travelers.length ? [] : travelers.map(t => t.id))}
+                >
+                  {form.participantIds.length === travelers.length ? 'Tout décocher' : 'Tout le monde'}
+                </button>
+              </label>
               <div className="traveler-assign-row">
                 {travelers.map(t => (
                   <button key={t.id} type="button"
@@ -557,6 +592,8 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                   </button>
                 ))}
               </div>
+              {/* Aperçu en direct : on voit tout de suite ce que ça donne par personne */}
+              {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
             </div>
           )}
           {activitiesByDay.length > 0 && (
