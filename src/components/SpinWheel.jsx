@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 
 const WHEEL_COLORS = [
-  '#FF6B35', '#3b82f6', '#8b5cf6', '#22c55e',
-  '#f59e0b', '#06b6d4', '#ec4899', '#ef4444',
+  '#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e',
+  '#14b8a6', '#06b6d4', '#ec4899', '#ef4444',
 ];
 
 const SIZE = 280;

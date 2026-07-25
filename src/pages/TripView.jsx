@@ -559,8 +559,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       h1{font-size:22px;margin:0 0 2px}
       .meta{color:#5a5a7a;margin-bottom:20px}
       .day{margin-bottom:18px;page-break-inside:avoid}
-      .dh{background:#FF6B35;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:14px}
-      .act{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 12px;border-left:3px solid #FF6B35;margin:4px 0}
+      .dh{background:#35A7DD;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:14px}
+      .act{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 12px;border-left:3px solid #35A7DD;margin:4px 0}
       .act.done{opacity:.7}.act.nogo{opacity:.4;text-decoration:line-through}
       .s{flex-shrink:0}.t{font-weight:600;flex:1}.d,.p{color:#5a5a7a;font-size:12px}
       .addr{width:100%;font-size:11px;color:#9090b0;padding-left:18px}
@@ -603,7 +603,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     onToggleCompare: toggleCompare,
   };
 
-  const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#FF6B35';
+  const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#35A7DD';
   const expenses = trip.expenses || [];
   // Settlements (remboursements entre voyageurs) are transfers, not spending.
   const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);

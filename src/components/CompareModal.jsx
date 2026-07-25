@@ -35,7 +35,7 @@ export default function CompareModal({ activities, onClose, onChoose }) {
             const meta = getCategoryMeta(a.category);
             const dur = (a.durationHours || 0) * 60 + (a.durationMinutes || 0);
             const price = parseFloat(a.price) || 0;
-            const color = CATEGORY_COLORS[a.category] || '#FF6B35';
+            const color = CATEGORY_COLORS[a.category] || '#35A7DD';
             const badge = getBestBadge(a, idx);
             const distKm = (idx > 0 && base.lat && base.lon && a.lat && a.lon)
               ? haversineKm(base.lat, base.lon, a.lat, a.lon).toFixed(1) : null;

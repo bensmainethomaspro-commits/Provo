@@ -275,14 +275,14 @@ export function getTimeSlots(activities, startTime = '09:00') {
 
 // ─── Category colors ──────────────────────────────────────
 export const CATEGORY_COLORS = {
-  resto:  '#d4704a',
-  visite: '#8b6914',
-  balade: '#4a7c59',
-  plage:  '#2e86c1',
-  sport:  '#c0392b',
-  repos:  '#6b5b8a',
-  trajet: '#7f8c8d',
-  fun:    '#d4ac0d',
+  resto:  '#C2456E',
+  visite: '#7E57C2',
+  balade: '#2E9E6B',
+  plage:  '#2E86C1',
+  sport:  '#D6455F',
+  repos:  '#6B5B8A',
+  trajet: '#64748B',
+  fun:    '#00A6A6',
 };
 
 export function deduceTitle(category, address, notes) {
@@ -705,15 +705,6 @@ export function haversineKm(lat1, lon1, lat2, lon2) {
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-// ─── Dynamic sky ──────────────────────────────────────────
-export function getSkyGradient() {
-  const h = new Date().getHours();
-  if (h >= 6  && h < 11) return 'linear-gradient(160deg, #7EC8E3 0%, #FFD09B 50%, #FFB4A2 100%)';
-  if (h >= 11 && h < 18) return 'linear-gradient(160deg, #FF6B35 0%, #FF8C42 30%, #FFB347 60%, #FFCF56 100%)';
-  if (h >= 18 && h < 22) return 'linear-gradient(160deg, #C94B4B 0%, #FF6B35 30%, #FFA07A 60%, #845EC2 100%)';
-  return 'linear-gradient(160deg, #0a0a2e 0%, #162447 40%, #1f4068 70%, #1b262c 100%)';
 }
 
 // ─── Logic alerts ─────────────────────────────────────────

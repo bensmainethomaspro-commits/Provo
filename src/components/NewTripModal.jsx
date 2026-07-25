@@ -27,13 +27,13 @@ function compressCoverPhoto(file) {
   });
 }
 
-const TRIP_COLORS = ['#FF6B35','#3b82f6','#8b5cf6','#22c55e','#ef4444','#06b6d4','#f59e0b','#ec4899'];
+const TRIP_COLORS = ['#35A7DD','#3b82f6','#8b5cf6','#22c55e','#ef4444','#06b6d4','#14b8a6','#ec4899'];
 
 export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
-    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#FF6B35' }
-    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#FF6B35' }
+    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#35A7DD' }
+    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
   );
   const [error, setError] = useState('');
 
