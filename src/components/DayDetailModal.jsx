@@ -9,7 +9,7 @@ export default function DayDetailModal({
   onReorder, onStartTimeChange, onEdit, onAddActivity,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
-  onNotesChange, onSweep,
+  onNotesChange, onSweep, routeGain, onOptimizeRoute,
 }) {
   const [closing, setClosing] = useState(false);
   const todoActivities = day.activities.filter(a => a.status === 'todo');
@@ -72,6 +72,20 @@ export default function DayDetailModal({
           )}
 
           <LogicAlerts activities={day.activities} />
+
+          {/* Suggestion d'itinéraire : proposée, jamais appliquée d'office */}
+          {routeGain && onOptimizeRoute && (
+            <button className="route-suggest" onClick={onOptimizeRoute}>
+              <span className="route-suggest__icon">🗺</span>
+              <span className="route-suggest__text">
+                <strong>Itinéraire plus court possible</strong>
+                <small>Environ {routeGain.saved < 1
+                  ? `${Math.round(routeGain.saved * 1000)} m`
+                  : `${routeGain.saved.toFixed(1)} km`} de trajet en moins</small>
+              </span>
+              <span className="route-suggest__cta">Voir</span>
+            </button>
+          )}
 
           <div className="day-section__body" style={{ marginTop: 8 }}>
             {sorted.length === 0

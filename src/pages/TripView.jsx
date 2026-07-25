@@ -17,7 +17,7 @@ import { useWeather } from '../hooks/useWeather';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { formatDateShort, budgetStats, formatPrice, formatDate, formatDuration, CATEGORIES, detectCountryTheme } from '../utils/helpers';
+import { budgetStats, formatPrice, formatDate, CATEGORIES, detectCountryTheme, haversineKm } from '../utils/helpers';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
@@ -152,7 +152,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setPackingOrder, sweepDayToReserve,
     restoreTrip, setDayActivitiesOrder,
     reorderDay, addToAllDays,
-    addExpense, deleteExpense,
+    addExpense, updateExpense, deleteExpense,
     addDailyTemplate, removeDailyTemplate,
     enableCollaboration, userId,
     fetchTripMembers, removeTripMember,
@@ -172,7 +172,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
   const [detailDay, setDetailDay] = useState(null);
-  const [reserveExpanded, setReserveExpanded] = useState(false);
+  const [showOptimConfirm, setShowOptimConfirm] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [compareSelectedIds, setCompareSelectedIds] = useState(new Set());
@@ -185,7 +185,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [reserveFilter, setReserveFilter] = useState('all');
   const [reserveSearch, setReserveSearch] = useState('');
   const [reserveSort, setReserveSort] = useState('default');
-  const [copyDone, setCopyDone] = useState(false);
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
@@ -345,6 +344,56 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     return { isActive: true, todayDay: idx >= 0 ? trip.days[idx] : null, todayDayIndex: idx };
   })();
 
+  // Compte à rebours avant le départ, et brief de la veille pour la journée
+  // de demain (activités, heure de départ, pluie éventuelle).
+  const { daysUntil, tomorrow } = (() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const start = new Date(trip.startDate + 'T00:00:00');
+    const diff = Math.round((start - now) / 86400000);
+    const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
+    const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
+    const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
+    return { daysUntil: isPast ? -1 : diff, tomorrow: day };
+  })();
+
+  // ─── Itinéraire optimisé ──────────────────────────────────────────────────
+  // On ne réorganise JAMAIS tout seul : on calcule un ordre plus court (plus
+  // proche voisin, en gardant les activités à heure fixe à leur place) et on
+  // le propose. L'utilisateur accepte ou ignore.
+  const routeGain = (() => {
+    if (!detailDay) return null;
+    const day = trip.days.find(d => d.id === detailDay.id);
+    if (!day) return null;
+    const movable = day.activities.filter(a => a.status !== 'nogo' && a.lat && a.lon && !a.fixedStart);
+    if (movable.length < 3) return null;
+
+    const dist = (a, b) => haversineKm(a.lat, a.lon, b.lat, b.lon);
+    const total = (list) => list.reduce((s, a, i) => i === 0 ? 0 : s + dist(list[i - 1], a), 0);
+
+    // Plus proche voisin depuis le premier lieu (on garde le point de départ).
+    const remaining = movable.slice(1);
+    const ordered = [movable[0]];
+    while (remaining.length) {
+      const last = ordered[ordered.length - 1];
+      let best = 0;
+      for (let i = 1; i < remaining.length; i++) {
+        if (dist(last, remaining[i]) < dist(last, remaining[best])) best = i;
+      }
+      ordered.push(remaining.splice(best, 1)[0]);
+    }
+
+    const before = total(movable);
+    const after = total(ordered);
+    if (before - after < 0.5) return null; // gain négligeable : on ne propose rien
+
+    // On réinjecte l'ordre optimisé aux emplacements des activités déplaçables,
+    // les autres (heure fixe, annulées, sans coordonnées) ne bougent pas.
+    const movableIds = new Set(movable.map(a => a.id));
+    let k = 0;
+    const newOrder = day.activities.map(a => movableIds.has(a.id) ? ordered[k++] : a);
+    return { dayId: day.id, saved: before - after, newOrder };
+  })();
+
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
   const stats = budgetStats(allActivities);
 
@@ -447,135 +496,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
-  const handleWhatsAppShare = () => {
-    const lines = [];
-    lines.push(`${trip.emoji || '✈️'} *${trip.name}*`);
-    if (trip.destination) lines.push(`📍 ${trip.destination}`);
-    lines.push(`📅 ${formatDateShort(trip.startDate)} → ${formatDateShort(trip.endDate)}`);
-    lines.push('');
-    trip.days.forEach((day, i) => {
-      lines.push(`*── Jour ${i + 1} · ${formatDate(day.date)} ──*`);
-      if (day.activities.length === 0) {
-        lines.push('  (aucune activité planifiée)');
-      } else {
-        let cur = day.startTime || '09:00';
-        day.activities.forEach(a => {
-          if (a.status === 'nogo') return;
-          const icon = a.status === 'done' ? '✅' : '•';
-          lines.push(`  ${icon} ${cur} ${a.title}${a.address ? ` — 📍 ${a.address}` : ''}`);
-          const mins = (parseInt(a.durationHours) || 0) * 60 + (parseInt(a.durationMinutes) || 0);
-          const [h, m] = cur.split(':').map(Number);
-          const next = h * 60 + m + mins;
-          cur = `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
-        });
-      }
-      lines.push('');
-    });
-    const text = lines.join('\n');
-    const waUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    if (navigator.share) {
-      navigator.share({ title: trip.name, text }).catch(() => window.open(waUrl, '_blank'));
-    } else {
-      window.open(waUrl, '_blank');
-    }
-  };
-
-  const handleAutoBackup = () => {
-    const json = JSON.stringify(trip, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${trip.name.replace(/[^a-z0-9]/gi, '_')}_backup.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const copyItinerary = async () => {
-    const lines = [];
-    lines.push(`${trip.emoji || '✈️'} ${trip.name}`);
-    if (trip.destination) lines.push(`📍 ${trip.destination}`);
-    lines.push(`${formatDateShort(trip.startDate)} → ${formatDateShort(trip.endDate)} · ${trip.days.length} jour${trip.days.length > 1 ? 's' : ''}`);
-    lines.push('');
-    trip.days.forEach((day, i) => {
-      lines.push(`── Jour ${i + 1} · ${formatDate(day.date)} ──`);
-      if (day.activities.length === 0) {
-        lines.push('  (aucune activité planifiée)');
-      } else {
-        const slots = {};
-        let cur = day.startTime || '09:00';
-        day.activities.forEach(a => {
-          slots[a.id] = cur;
-          const mins = (parseInt(a.durationHours) || 0) * 60 + (parseInt(a.durationMinutes) || 0);
-          const [h, m] = cur.split(':').map(Number);
-          const next = h * 60 + m + mins;
-          cur = `${String(Math.floor(next / 60) % 24).padStart(2, '0')}:${String(next % 60).padStart(2, '0')}`;
-        });
-        day.activities.forEach(a => {
-          const icon = a.status === 'done' ? '✅' : a.status === 'nogo' ? '❌' : '•';
-          const dur = (a.durationHours || 0) * 60 + (a.durationMinutes || 0);
-          const durStr = dur > 0 ? ` (${formatDuration(dur)})` : '';
-          const priceStr = (parseFloat(a.price) || 0) > 0 ? ` · ${formatPrice(a.price)}` : '';
-          lines.push(`  ${icon} ${slots[a.id]} ${a.title}${durStr}${priceStr}`);
-          if (a.address) lines.push(`       📍 ${a.address}`);
-        });
-      }
-      if (day.notes) lines.push(`  📝 ${day.notes}`);
-      lines.push('');
-    });
-    if (trip.reserve.length > 0) {
-      lines.push(`── 📦 Réserve (${trip.reserve.length} idée${trip.reserve.length > 1 ? 's' : ''}) ──`);
-      trip.reserve.forEach(a => lines.push(`  • ${a.title}`));
-      lines.push('');
-    }
-    if (trip.tripNotes?.trim()) {
-      lines.push('── 📝 Notes ──');
-      lines.push(trip.tripNotes.trim());
-    }
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'));
-      setCopyDone(true);
-      setTimeout(() => setCopyDone(false), 2000);
-    } catch {}
-  };
-
-  const handleExportPDF = () => {
-    const w = window.open('', '_blank');
-    if (!w) { alert("Autoriser les pop-ups pour exporter."); return; }
-    const fmtDur = (h, m) => { const t = h * 60 + m; if (!t) return ''; const hh = Math.floor(t/60), mm = t%60; return mm ? `${hh}h${String(mm).padStart(2,'0')}` : `${hh}h`; };
-    const fmtDate = (s) => new Date(s + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-    const daysHtml = trip.days.map((day, i) => {
-      const acts = day.activities.map(a => {
-        const icon = a.status === 'done' ? '✅' : a.status === 'nogo' ? '❌' : '·';
-        const dur = fmtDur(a.durationHours||0, a.durationMinutes||0);
-        const price = parseFloat(a.price) > 0 ? ` — ${parseFloat(a.price).toFixed(2)} €` : '';
-        return `<div class="act ${a.status}"><span class="s">${icon}</span><span class="t">${a.title}</span>${dur ? `<span class="d">${dur}</span>` : ''}${price ? `<span class="p">${price}</span>` : ''}${a.address ? `<div class="addr">📍 ${a.address}</div>` : ''}</div>`;
-      }).join('');
-      const notes = day.notes ? `<div class="notes">📝 ${day.notes}</div>` : '';
-      return `<div class="day"><div class="dh">Jour ${i+1} — ${fmtDate(day.date)}</div>${acts || '<div class="empty">Aucune activité planifiée</div>'}${notes}</div>`;
-    }).join('');
-    w.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>${trip.name}</title><style>
-      body{font-family:-apple-system,sans-serif;max-width:680px;margin:0 auto;padding:20px;color:#1a1a2e;font-size:13px}
-      h1{font-size:22px;margin:0 0 2px}
-      .meta{color:#5a5a7a;margin-bottom:20px}
-      .day{margin-bottom:18px;page-break-inside:avoid}
-      .dh{background:#35A7DD;color:#fff;padding:7px 12px;border-radius:8px 8px 0 0;font-weight:700;font-size:14px}
-      .act{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:5px 12px;border-left:3px solid #35A7DD;margin:4px 0}
-      .act.done{opacity:.7}.act.nogo{opacity:.4;text-decoration:line-through}
-      .s{flex-shrink:0}.t{font-weight:600;flex:1}.d,.p{color:#5a5a7a;font-size:12px}
-      .addr{width:100%;font-size:11px;color:#9090b0;padding-left:18px}
-      .notes{padding:5px 12px;font-size:12px;color:#5a5a7a;border-left:3px solid #FFCF56;margin:4px 0}
-      .empty{padding:5px 12px;color:#9090b0;font-style:italic}
-    </style></head><body>
-    <h1>${trip.emoji || '✈️'} ${trip.name}</h1>
-    ${trip.destination ? `<div class="meta">📍 ${trip.destination}</div>` : ''}
-    <div class="meta">${trip.days.length} jours · ${trip.days.reduce((s,d)=>s+d.activities.length,0)} activités${trip.reserve.length ? ` · ${trip.reserve.length} en réserve` : ''}</div>
-    ${daysHtml}
-    </body></html>`);
-    w.document.close();
-    setTimeout(() => w.print(), 400);
-  };
-
   // ─── Drag & Drop ─────────────────────────────────────
   const handleDropOnDay = (targetDayId, activityId) => {
     if (!activityId) return;
@@ -674,20 +594,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>
-                <button className="trip-header-menu__item" onClick={() => { handleExportPDF(); setTripMenuOpen(false); }}>
-                  📄 Exporter en PDF
-                </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowRecap(true); setTripMenuOpen(false); }}>
                   📊 Bilan du voyage
-                </button>
-                <button className="trip-header-menu__item" onClick={() => { copyItinerary(); setTripMenuOpen(false); }}>
-                  {copyDone ? '✅ Copié !' : '📋 Copier l\'itinéraire'}
-                </button>
-                <button className="trip-header-menu__item" onClick={() => { handleAutoBackup(); setTripMenuOpen(false); }}>
-                  💾 Sauvegarde (fichier)
-                </button>
-                <button className="trip-header-menu__item" onClick={() => { handleWhatsAppShare(); setTripMenuOpen(false); }}>
-                  💬 Partager WhatsApp
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
                   ⚙️ Paramètres du voyage
@@ -823,6 +731,33 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
+            {/* Avant le départ : compte à rebours */}
+            {daysUntil > 0 && (
+              <div className="countdown-banner">
+                <span className="countdown-banner__num">J−{daysUntil}</span>
+                <span className="countdown-banner__text">
+                  {daysUntil === 1 ? 'Départ demain !' : `Plus que ${daysUntil} jours avant le départ`}
+                </span>
+              </div>
+            )}
+            {/* La veille : brief de la journée de demain */}
+            {tomorrow && (() => {
+              const todo = tomorrow.activities.filter(a => a.status !== 'nogo');
+              const w = weather?.byDate?.[tomorrow.date];
+              const rainy = w && ((w.code >= 51 && w.code <= 67) || (w.code >= 80 && w.code <= 82) || (w.code >= 95 && w.code <= 99));
+              return (
+                <div className="tomorrow-banner">
+                  <div className="tomorrow-banner__title">🌙 Demain</div>
+                  <div className="tomorrow-banner__body">
+                    {todo.length === 0
+                      ? 'Rien de planifié — journée libre.'
+                      : `${todo.length} activité${todo.length > 1 ? 's' : ''} · départ à ${tomorrow.startTime || '09:00'}`}
+                    {w && ` · ${w.icon} ${w.max}°/${w.min}°`}
+                    {rainy && ' · pense au parapluie ☔'}
+                  </div>
+                </div>
+              );
+            })()}
             {isPast && trip.days.some(d => d.activities.length > 0) && (
               <button className="recap-banner" onClick={() => setShowRecap(true)}>
                 <span className="recap-banner__emoji">🎉</span>
@@ -994,6 +929,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <ExpensesTab
             trip={trip}
             onAddExpense={(exp) => addExpense(tripId, exp)}
+            onUpdateExpense={(expId, patch) => updateExpense(tripId, expId, patch)}
+            currentUserId={userId}
             onDeleteExpense={(expId) => deleteExpense(tripId, expId)}
             onDeleteTraveler={(id) => updateTrip(tripId, { tripTravelers: (trip.tripTravelers || []).filter(t => t.id !== id) })}
           />
@@ -1068,7 +1005,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           onAddActivity={(dayId) => { setDetailDay(null); openAddSheet(dayId); }}
           onNotesChange={(dayId, notes) => setDayNotes(tripId, dayId, notes)}
           onSweep={(dayId) => sweepDayToReserve(tripId, dayId)}
+          routeGain={routeGain}
+          onOptimizeRoute={() => setShowOptimConfirm(true)}
           {...sharedDayProps}
+        />
+      )}
+
+      {showOptimConfirm && routeGain && (
+        <ConfirmDialog
+          icon="🗺"
+          title="Réorganiser cette journée ?"
+          message={`En changeant l'ordre des activités, tu économises environ ${
+            routeGain.saved < 1 ? `${Math.round(routeGain.saved * 1000)} m` : `${routeGain.saved.toFixed(1)} km`
+          } de trajet. Les activités à heure fixe ne bougent pas.`}
+          confirmLabel="Réorganiser"
+          cancelLabel="Laisser comme ça"
+          onConfirm={() => {
+            setDayActivitiesOrder(tripId, routeGain.dayId, routeGain.newOrder);
+            setShowOptimConfirm(false);
+          }}
+          onCancel={() => setShowOptimConfirm(false)}
         />
       )}
 

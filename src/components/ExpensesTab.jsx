@@ -165,7 +165,7 @@ function DonutChart({ byCategory, total }) {
   );
 }
 
-export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDeleteTraveler }) {
+export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId }) {
   const travelers = trip.tripTravelers || [];
   const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
@@ -178,6 +178,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const [selectedTraveler, setSelectedTraveler] = useState(null);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [showDebtDetail, setShowDebtDetail] = useState(false);
+  const [editingId, setEditingId] = useState(null); // dépense en cours de modification
   const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
@@ -191,16 +192,41 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     set('participantIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
 
-  const openForm = () => {
-    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
-    setError('');
-    setShowForm(true);
-    // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
-    // voit rien se passer au clic sur « Ajouter une dépense ».
+  const scrollToForm = () => {
     requestAnimationFrame(() => {
       formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   };
+
+  const openEditForm = (exp) => {
+    setForm({
+      description: exp.description || '',
+      amount: String(exp.amount ?? ''),
+      payerId: exp.payerId || '',
+      participantIds: exp.participantIds || [],
+      activityId: exp.activityId || '',
+      currency: exp.currency || 'EUR',
+      expenseCategory: exp.expenseCategory || 'autre',
+    });
+    setEditingId(exp.id);
+    setError('');
+    setShowForm(true);
+    scrollToForm();
+  };
+
+  const openForm = () => {
+    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
+    setEditingId(null);
+    setError('');
+    setShowForm(true);
+    // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
+    // voit rien se passer au clic sur « Ajouter une dépense ».
+    scrollToForm();
+  };
+
+  // « Qui suis-je ? » — le voyageur lié au compte connecté. Chaque participant
+  // voit donc SON propre solde, pas celui du propriétaire du voyage.
+  const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
 
   // Aperçu du partage pendant la saisie : « 60 € ÷ 2 = 30 € par personne »
   const splitPreview = (() => {
@@ -224,12 +250,15 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
       if (!form.participantIds.length) { setError('Qui participe ?'); return; }
     }
     const eurAmount = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
-    onAddExpense({
+    const payload = {
       ...form,
       amount,
       eurAmount: Math.round(eurAmount * 100) / 100,
       description: form.description.trim(),
-    });
+    };
+    if (editingId) onUpdateExpense?.(editingId, payload);
+    else onAddExpense(payload);
+    setEditingId(null);
     setShowForm(false);
   };
 
@@ -348,6 +377,28 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
         </div>
       )}
+
+      {/* Solde personnel du participant connecté — répond à « et moi, je dois quoi ? » */}
+      {me && debts.length > 0 && (() => {
+        const iOwe = debts.filter(d => d.from === me.id);
+        const owedToMe = debts.filter(d => d.to === me.id);
+        if (iOwe.length === 0 && owedToMe.length === 0) return null;
+        return (
+          <div className="my-balance">
+            <div className="my-balance__title">{me.emoji} Pour toi, {me.name}</div>
+            {iOwe.map((d, i) => (
+              <div key={`o${i}`} className="my-balance__line my-balance__line--owe">
+                Tu dois <strong>{formatPrice(d.amount)}</strong> à {getEmoji(d.to)} {getName(d.to)}
+              </div>
+            ))}
+            {owedToMe.map((d, i) => (
+              <div key={`r${i}`} className="my-balance__line my-balance__line--get">
+                {getEmoji(d.from)} {getName(d.from)} te doit <strong>{formatPrice(d.amount)}</strong>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Debt settlement */}
       {debts.length > 0 && (
@@ -503,6 +554,15 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                         </div>
                       )}
                     </div>
+                  {/* Les remboursements ne se modifient pas : ils découlent des dépenses */}
+                  {!exp.isSettlement && onUpdateExpense && (
+                    <button
+                      className="expense-item__edit"
+                      onClick={e => { e.stopPropagation(); openEditForm(exp); }}
+                      title="Modifier"
+                      aria-label={`Modifier ${exp.description}`}
+                    >✏️</button>
+                  )}
                   <button
                     className="expense-item__delete"
                     onClick={e => { e.stopPropagation(); onDeleteExpense(exp.id); }}
@@ -613,8 +673,10 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
           {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="btn btn--secondary btn--full" onClick={() => setShowForm(false)}>Annuler</button>
-            <button className="btn btn--primary btn--full" onClick={handleAdd}>✅ Ajouter</button>
+            <button className="btn btn--secondary btn--full" onClick={() => { setShowForm(false); setEditingId(null); }}>Annuler</button>
+            <button className="btn btn--primary btn--full" onClick={handleAdd}>
+              {editingId ? '✅ Enregistrer' : '✅ Ajouter'}
+            </button>
           </div>
         </div>
       ) : (

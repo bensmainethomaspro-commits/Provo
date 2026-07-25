@@ -5691,3 +5691,66 @@ button.budget-inline:active { transform: scale(0.98); }
   margin-top: 8px; font-size: 13px; font-weight: 700;
   color: var(--text-muted); font-variant-numeric: tabular-nums;
 }
+
+/* Solde personnel (participant connecté) + bouton de modification d'une dépense */
+.my-balance {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-md);
+  padding: 12px 14px; margin-bottom: 12px;
+}
+.my-balance__title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 7px;
+}
+.my-balance__line { font-size: 14.5px; color: var(--text); padding: 3px 0; }
+.my-balance__line strong { font-variant-numeric: tabular-nums; }
+.my-balance__line--owe strong { color: var(--red); }
+.my-balance__line--get strong { color: var(--green); }
+.expense-item__edit {
+  background: none; border: none; cursor: pointer;
+  font-size: 15px; padding: 2px 4px; opacity: 0.75;
+}
+.expense-item__edit:hover { opacity: 1; }
+
+/* Compte à rebours avant le départ + brief de la veille */
+.countdown-banner {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--accent-grad); color: #fff;
+  border-radius: var(--radius-md); padding: 12px 15px; margin-bottom: 12px;
+  box-shadow: 0 4px 16px rgba(27,125,182,0.30);
+}
+.countdown-banner__num {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.countdown-banner__text { font-size: 14px; font-weight: 650; opacity: 0.95; }
+.tomorrow-banner {
+  background: var(--surface-raised); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); padding: 11px 14px; margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.tomorrow-banner__title {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 3px;
+}
+.tomorrow-banner__body { font-size: 14px; color: var(--text); font-weight: 600; }
+
+/* Suggestion d'itinéraire plus court (proposition, jamais automatique) */
+.route-suggest {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: var(--radius-md); padding: 11px 13px; margin-top: 10px;
+  cursor: pointer; text-align: left; color: var(--text);
+}
+.route-suggest:active { transform: scale(0.99); }
+.route-suggest__icon { font-size: 20px; flex-shrink: 0; }
+.route-suggest__text { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.route-suggest__text strong { font-size: 13.5px; font-weight: 800; }
+.route-suggest__text small { font-size: 11.5px; color: var(--text-muted); }
+.route-suggest__cta {
+  font-size: 12px; font-weight: 800; white-space: nowrap;
+  background: var(--accent-grad); color: #fff;
+  border-radius: 999px; padding: 5px 12px;
+}

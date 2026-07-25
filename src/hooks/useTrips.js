@@ -642,6 +642,12 @@ export function useTrips() {
     }));
   }, []);
 
+  const updateExpense = useCallback((tripId, expenseId, patch) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, expenses: (t.expenses || []).map(e => e.id === expenseId ? { ...e, ...patch } : e)
+    }));
+  }, []);
+
   const deleteExpense = useCallback((tripId, expenseId) => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, expenses: (t.expenses || []).filter(e => e.id !== expenseId)
@@ -763,7 +769,7 @@ export function useTrips() {
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     enableSharing, loadSharedTrip,
     reorderDay, addToAllDays,
-    addExpense, deleteExpense,
+    addExpense, updateExpense, deleteExpense,
     copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
     fetchTripMembers, removeTripMember,
