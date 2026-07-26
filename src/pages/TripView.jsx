@@ -18,6 +18,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
 import { budgetStats, formatPrice, formatDate, CATEGORIES, detectCountryTheme, haversineKm } from '../utils/helpers';
+import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
@@ -496,6 +497,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
+  // Complète en arrière-plan les informations qu'on n'a pas saisies (adresse,
+  // horaires, prix, coordonnées). L'activité est déjà enregistrée : on
+  // n'attend pas le réseau, et un échec ne casse rien.
+  const autoEnrich = async (activity, activityId, location) => {
+    if (!activityId || activity.isMeal) return;
+    const complete = activity.address && activity.openingHours && activity.lat;
+    if (complete) return;
+    const found = await lookupPlace(activity.title, trip.destination);
+    const patch = missingFieldsFrom(activity, found);
+    if (patch) updateActivity(tripId, location, activityId, patch);
+  };
+
   // ─── Drag & Drop ─────────────────────────────────────
   const handleDropOnDay = (targetDayId, activityId) => {
     if (!activityId) return;
@@ -966,8 +979,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onClose={() => { setSheetOpen(false); setSheetDefaultDayId(null); }}
         days={trip.days}
         defaultDayId={sheetDefaultDayId}
-        onAddToReserve={(a) => addToReserve(tripId, a)}
-        onAddToDay={(dayId, a) => addToDay(tripId, dayId, a)}
+        onAddToReserve={(a) => { const id = addToReserve(tripId, a); autoEnrich(a, id, { type: 'reserve' }); }}
+        onAddToDay={(dayId, a) => { const id = addToDay(tripId, dayId, a); autoEnrich(a, id, { type: 'day', dayId }); }}
         reserveActivities={trip.reserve}
         onMoveFromReserve={(actId) => { if (sheetDefaultDayId) moveFromReserveToDay(tripId, sheetDefaultDayId, actId); }}
         tripTravelers={trip.tripTravelers || []}
