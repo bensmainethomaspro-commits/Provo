@@ -41,3 +41,27 @@ Conséquences directes sur la conception :
 - Barre du bas : 5 onglets maximum. Le secondaire va dans le menu ⋯.
 - Vérifier visuellement (rendu Playwright, thèmes clair **et** sombre) avant
   de livrer une modification d'interface.
+
+## Amélioration continue
+
+`.claude/ux-playbook.md` est la **mémoire UX/UI partagée entre tous mes
+projets** : les règles que j'ai apprises des retours utilisateur, généralisées
+pour s'appliquer à n'importe quelle application. Le fichier est identique dans
+chaque dépôt.
+
+**S'y conformer par défaut** avant de dessiner ou de modifier un écran — sans
+attendre qu'on le demande. Il prime sur les habitudes ; le principe produit
+ci-dessus prime sur lui.
+
+`.claude/project-notes.md` dit ce qui est déjà appliqué **ici**, et ce qui a
+été écarté sciemment : ne jamais reproposer ces derniers.
+
+Deux compétences entretiennent la boucle :
+
+- `/audit` — audite l'app contre le playbook et propose des améliorations
+  classées, sans toucher au code.
+- `/lecon` — transforme un retour en règle durable, généralisée pour les
+  autres projets.
+
+Après un retour qui révèle une erreur de conception ou de méthode, proposer
+`/lecon` : c'est ce qui empêche de refaire la même faute dans le projet suivant.
