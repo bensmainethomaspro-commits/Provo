@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 const WHEEL_COLORS = [
   '#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e',
@@ -143,7 +144,12 @@ export default function SpinWheel({ travelers, onClose }) {
 
   useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
 
-  return (
+  // Rendu dans document.body : la roue est appelée depuis l'onglet Dépenses, or
+  // son conteneur porte des animations (transform). Un ancêtre transformé
+  // devient le référentiel des positions « fixed » : l'overlay se calait alors
+  // sur la hauteur du contenu défilant (784 px) au lieu de l'écran (667 px), et
+  // le bouton « Lancer la roue » se retrouvait sous la ligne de flottaison.
+  return createPortal(
     <div className="spinwheel-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="spinwheel-modal">
         <div className="spinwheel-modal__header">
@@ -183,6 +189,7 @@ export default function SpinWheel({ travelers, onClose }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
