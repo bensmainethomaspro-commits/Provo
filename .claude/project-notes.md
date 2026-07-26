@@ -53,6 +53,10 @@ trace de ce qu'on a sciemment écarté.
 
 ## Points ouverts
 
+- Ce dépôt est la **source de référence** du playbook : les autres projets y
+  copient `.claude/`. Toute règle ajoutée ici doit atterrir sur `main`, sinon
+  elle est invisible pour eux (F2).
+
 - Qualité réelle de la complétion automatique sur les petits commerces
   (couverture OpenStreetMap) — à valider à l'usage.
 - Vercel Deployment Protection à passer sur « Only Preview Deployments » pour

@@ -171,10 +171,16 @@ rafraîchit rien.
 *Origine : « chaque fois que je rafraîchisse, ce soit mis à jour, sinon je dois
 recréer un lien sur l'écran d'accueil à chaque fois ».*
 
-**F2. Vérifier qu'une preview est publiquement accessible avant de partager le
-lien.** Les protections d'hébergeur exigent souvent un compte.
-*Origine : « quand je lui donne ce lien il doit se connecter à Vercel, je ne
-veux pas ».*
+**F2. Vérifier depuis là où ce sera consommé, pas depuis là où on l'a produit.**
+« Poussé » n'est pas « livré ». Ouvrir le lien sans être connecté ; lire le
+fichier depuis le dépôt tel qu'un autre le verra ; installer ce qu'on vient de
+publier. **Corollaire :** ce qui est destiné à être partagé entre projets vit
+sur la **branche par défaut** — une branche de travail ou une PR en brouillon
+n'existe pour personne d'autre.
+*Origines : (1) « quand je lui donne ce lien il doit se connecter à Vercel, je
+ne veux pas » ; (2) une mémoire écrite pour tous les projets, laissée sur une
+branche non fusionnée — une autre session n'a rien trouvé et a dû demander où
+chercher.*
 
 **F3. Aucune API payante, ni compte de facturation, sans accord explicite.**
 Vérifier aussi les conditions d'utilisation, pas seulement le prix.
@@ -206,6 +212,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-07 | « il faut que ce soit mis à jour quand je rafraîchis » | F1 |
 | 2026-07 | « il doit se connecter à Vercel, je ne veux pas » | F2 |
 | 2026-07 | « je ne veux rien dépenser » | F3 |
+| 2026-07 | mémoire partagée introuvable depuis un autre projet | F2 (affinée) |
 
 ### Récidives repérées
 
@@ -215,3 +222,8 @@ revient trois fois est un problème structurel, pas un détail.
   dans chaque audit.
 - **Un correctif superficiel a été livré deux fois** avant la vraie cause (roue,
   puis dépôt sur la timeline). → E2 est la règle la plus rentable du lot.
+- **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
+  une version périmée, preview inaccessible sans compte, mémoire partagée
+  laissée sur une branche. À chaque fois le travail était fait *et* hors de
+  portée de son destinataire. → vérifier depuis le poste du destinataire fait
+  partie de la livraison, pas de l'après (F2).
