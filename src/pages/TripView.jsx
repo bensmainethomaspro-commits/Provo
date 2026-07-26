@@ -1072,6 +1072,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onAddToAllDays={(a) => addToAllDays(tripId, a)}
         tripLat={weather?.lat}
         tripLon={weather?.lon}
+        tripDestination={trip.destination}
       />
 
       {editingActivity && (

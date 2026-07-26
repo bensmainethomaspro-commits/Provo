@@ -59,6 +59,12 @@ export function useWeather(trip) {
 
       if (!lat || !lon || cancelled) return;
 
+      // Les coordonnées du voyage servent ailleurs que pour la météo : biais de
+      // la recherche d'adresse, suggestions « à proximité », distances. On les
+      // publie dès qu'on les a, sans attendre le bulletin — sinon une météo
+      // indisponible prive l'app de tout repère géographique.
+      setWeather(w => ({ ...(w || {}), lat, lon }));
+
       // 2. Pick archive vs forecast
       const tripEnd = new Date(trip.endDate + 'T00:00:00');
       const twoWeeksAgo = new Date(); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);

@@ -632,6 +632,83 @@ export async function resolveShortUrl(url) {
   return finalUrl || cleaned;
 }
 
+// ── Mise en forme d'un résultat Nominatim ─────────────────────────────────
+// Partagée par la recherche à un résultat et par la recherche par adresse, qui
+// doivent classer et formater exactement de la même manière.
+const _PLACE_CAT_RULES = [
+  [/restaurant|cafe|coffee|brasserie|bar|pub|fast_food|food_court|bistro|snack|tabac_presse/, 'resto'],
+  [/beach|plage|coast|swimming_area|baignade/, 'plage'],
+  [/sport|fitness|gym|swimming_pool|stadium|climbing|tennis|golf|ski|surf/, 'sport'],
+  [/hotel|hostel|motel|lodge|inn|guesthouse|resort|chalet|accommodation/, 'repos'],
+  [/airport|train_station|bus_station|ferry_terminal|metro|subway|tram/, 'trajet'],
+  [/park|forest|trail|hiking|viewpoint|peak|waterfall|garden|nature_reserve|bay|lake|river|wood/, 'balade'],
+  [/nightclub|casino|cinema|theatre|amusement|theme_park|arcade|entertainment|concert/, 'fun'],
+];
+
+function _placeAddress(p) {
+  const a = p.address || {};
+  const road = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
+  const city = a.city || a.town || a.village || a.municipality;
+  return [road || a.suburb || a.neighbourhood, city, a.country]
+    .filter(Boolean).join(', ')
+    || String(p.display_name).split(',').slice(0, 4).join(',').trim();
+}
+
+function _placeCategory(p) {
+  const ex = p.extratags || {};
+  const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop, ex.sport]
+    .filter(Boolean).join(' ').toLowerCase();
+  for (const [re, cat] of _PLACE_CAT_RULES) if (re.test(typeText)) return cat;
+  return 'visite';
+}
+
+function _placePrice(p) {
+  const ex = p.extratags || {};
+  const m = (ex.charge || ex.fee_amount || '').match(/[\d.,]+/);
+  return m ? parseFloat(m[0].replace(',', '.')) || null : null;
+}
+
+/**
+ * Cherche un lieu à partir d'une adresse ou d'un nom, et renvoie plusieurs
+ * candidats — « 12 rue de la Paix » existe dans des dizaines de villes, il faut
+ * pouvoir choisir plutôt que subir le premier résultat.
+ *
+ * @param {string} query        adresse ou nom du lieu
+ * @param {object} opts         {limit, lat, lon} — lat/lon = centre du voyage
+ * @returns {Promise<Array>}    candidats, du plus pertinent au moins pertinent
+ */
+export async function searchPlaces(query, { limit = 5, lat = null, lon = null } = {}) {
+  const q = (query || '').trim();
+  if (q.length < 3) return [];
+  let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
+    + `&format=json&addressdetails=1&extratags=1&limit=${limit}`;
+  // Biais géographique autour de la destination : une adresse tapée pendant un
+  // voyage à Biarritz désigne presque toujours une rue de Biarritz.
+  if (lat != null && lon != null) {
+    const d = 0.7; // ≈ 75 km
+    url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
+  }
+  try {
+    const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map(p => ({
+      id: `${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
+      title: String(p.name || String(p.display_name).split(',')[0]).trim(),
+      address: _placeAddress(p),
+      displayName: String(p.display_name || ''),
+      category: _placeCategory(p),
+      openingHours: (p.extratags || {}).opening_hours || '',
+      lat: parseFloat(p.lat),
+      lon: parseFloat(p.lon),
+      ...(_placePrice(p) ? { price: _placePrice(p) } : {}),
+    })).filter(r => Number.isFinite(r.lat));
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchPlaceData(query) {
   const res = await fetch(
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`
@@ -639,35 +716,11 @@ export async function fetchPlaceData(query) {
   const data = await res.json();
   if (!data?.length) return null;
   const p = data[0];
-  const a = p.address || {};
   const ex = p.extratags || {};
 
-  // Richer address: number + road, city, country — fallback to display_name excerpt
-  const road = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
-  const city = a.city || a.town || a.village || a.municipality;
-  const address = [road || a.suburb || a.neighbourhood, city, a.country]
-    .filter(Boolean).join(', ')
-    || p.display_name.split(',').slice(0, 4).join(',').trim();
-
-  // Category from ALL available tags (class + type + extratags)
-  const typeText = [p.type, p.class, ex.amenity, ex.tourism, ex.leisure, ex.natural, ex.shop, ex.sport]
-    .filter(Boolean).join(' ').toLowerCase();
-  const catRules = [
-    [/restaurant|cafe|coffee|brasserie|bar|pub|fast_food|food_court|bistro|snack|tabac_presse/, 'resto'],
-    [/beach|plage|coast|swimming_area|baignade/, 'plage'],
-    [/sport|fitness|gym|swimming_pool|stadium|climbing|tennis|golf|ski|surf/, 'sport'],
-    [/hotel|hostel|motel|lodge|inn|guesthouse|resort|chalet|accommodation/, 'repos'],
-    [/airport|train_station|bus_station|ferry_terminal|metro|subway|tram/, 'trajet'],
-    [/park|forest|trail|hiking|viewpoint|peak|waterfall|garden|nature_reserve|bay|lake|river|wood/, 'balade'],
-    [/nightclub|casino|cinema|theatre|amusement|theme_park|arcade|entertainment|concert/, 'fun'],
-  ];
-  let category = 'visite';
-  for (const [re, cat] of catRules) {
-    if (re.test(typeText)) { category = cat; break; }
-  }
-
-  const chargeMatch = (ex.charge || ex.fee_amount || '').match(/[\d.,]+/);
-  const price = chargeMatch ? parseFloat(chargeMatch[0].replace(',', '.')) || null : null;
+  const address = _placeAddress(p);
+  const category = _placeCategory(p);
+  const price = _placePrice(p);
 
   // Wikipedia thumbnail (preserve the language code)
   let photoUrl = null;

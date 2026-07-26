@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
@@ -35,7 +35,7 @@ function isDefaultDuration(f) {
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve,
-  tripTravelers, onAddToAllDays, tripLat, tripLon }) {
+  tripTravelers, onAddToAllDays, tripLat, tripLon, tripDestination }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
   const { suggestions } = usePlaceSuggestions(tripLat, tripLon, isOpen && !isEdit);
@@ -45,6 +45,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const [error, setError] = useState('');
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  // Le retour de la recherche s'affiche sous le champ qui l'a déclenchée, en
+  // haut de la feuille — `error` reste réservé à la validation, près du bouton.
+  const [importMsg, setImportMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [recurring, setRecurring] = useState(false);
 
@@ -53,6 +57,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setClosing(false);
       setError('');
       setImportUrl('');
+      setCandidates([]);
+      setImportMsg('');
       if (isEdit) {
         setForm({
           title: editActivity.title || '',
@@ -111,14 +117,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       };
     });
     setImportUrl('');
+    setCandidates([]);
+    setImportMsg('');
   };
 
   const handleImport = async () => {
     const raw = importUrl.trim();
     setImporting(true);
     setError('');
+    setImportMsg('');
+    setCandidates([]);
     try {
-      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl') || raw.includes('maps.app') || raw.includes('tiktok.com');
+      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl')
+        || raw.includes('maps.app') || raw.includes('share.google') || raw.includes('tiktok.com');
 
       if (isUrl) {
         const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
@@ -130,19 +141,31 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         if (result && (result.title || result.lat != null)) {
           applyResult({ ...result, link: result.link || raw }, raw);
           if (result.source === 'tiktok' && result.lat == null) {
-            setError('Vidéo importée ✓ — vérifie le titre et ajoute un lieu si besoin.');
+            setImportMsg('Vidéo importée ✓ — vérifie le titre et ajoute un lieu si besoin.');
           }
           return;
         }
-        setError('Lien non reconnu. Colle l\'URL complète ou tape directement le nom du lieu.');
-      } else {
-        // Plain text: search Nominatim directly
-        const placeData = await fetchPlaceData(raw);
-        if (placeData) { applyResult(placeData, raw); return; }
-        setError('Lieu introuvable. Essaie un nom plus précis (ex: "Plage de Biarritz, France").');
+        // Le lien n'a rien donné. On le garde quand même dans la fiche — il
+        // reste utile — et on dit quoi faire, plutôt qu'un « non reconnu » sec.
+        set('link', normalized);
+        setImportMsg("Ce lien n'a pas pu être lu — les liens courts Google sont souvent protégés. "
+          + "Ouvre-le, copie le nom ou l'adresse du lieu et colle-les ici : le lien, lui, est déjà enregistré.");
+        return;
       }
+
+      // Texte libre : adresse ou nom de lieu. On propose les correspondances au
+      // lieu d'imposer la première — « 12 rue de la Paix » existe partout.
+      let found = await searchPlaces(raw, { lat: tripLat, lon: tripLon });
+      // Rien trouvé et aucune ville dans la saisie : on retente en ajoutant la
+      // destination. « 5 rue Victor Hugo » seul ne dit rien à un géocodeur.
+      if (!found.length && tripDestination && !raw.includes(',')) {
+        found = await searchPlaces(`${raw}, ${tripDestination}`, { lat: tripLat, lon: tripLon });
+      }
+      if (found.length === 1) { applyResult(found[0], raw); return; }
+      if (found.length > 1) { setCandidates(found); return; }
+      setImportMsg('Aucun lieu trouvé. Ajoute la ville — ex. « 5 rue Victor Hugo, Biarritz ».');
     } catch {
-      setError('Erreur réseau. Vérifie ta connexion et réessaie.');
+      setImportMsg('Erreur réseau. Vérifie ta connexion et réessaie.');
     } finally {
       setImporting(false);
     }
@@ -321,13 +344,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             </div>
           )}
 
-          {/* Google Maps import / place search */}
+          {/* Adresse, nom de lieu, ou lien à importer */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Lien Google Maps / TikTok ou nom du lieu</label>
+            <label className="form-label">📍 Adresse, nom du lieu, ou lien</label>
             <div className="import-row">
               <input
                 className="form-input"
-                placeholder="Colle un lien Maps, TikTok… ou tape un nom de lieu"
+                placeholder="5 rue Victor Hugo, Biarritz — ou colle un lien"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}
@@ -337,10 +360,35 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 className="btn btn--primary btn--sm"
                 onClick={handleImport}
                 disabled={!importUrl.trim() || importing}
+                aria-label="Chercher ce lieu"
               >
                 {importing ? '…' : '⬇️'}
               </button>
             </div>
+            {importMsg && <p className="import-msg">{importMsg}</p>}
+            {/* Plusieurs correspondances : on laisse choisir plutôt que de
+                deviner. Le tap remplit adresse, coordonnées et catégorie. */}
+            {candidates.length > 0 && (
+              <div className="place-results">
+                <div className="place-results__title">
+                  {candidates.length} lieux trouvés — lequel ?
+                </div>
+                {candidates.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="place-result"
+                    onClick={() => applyResult(c, c.title)}
+                  >
+                    <span className="place-result__emoji">{getCategoryMeta(c.category).emoji}</span>
+                    <span className="place-result__text">
+                      <span className="place-result__title">{c.title}</span>
+                      <span className="place-result__addr">{c.displayName || c.address}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Nearby place suggestions */}
@@ -608,7 +656,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             </div>
           )}
 
-          {error && <p style={{ color: 'var(--red)', fontSize: '13px' }}>{error}</p>}
+          {error && <p className="form-error">{error}</p>}
         </div>
 
         <div className="sheet__footer">

@@ -211,6 +211,35 @@ function extractMapsName(s: string): string | null {
   return null;
 }
 
+// Un lien share.google ne mène pas forcément à Maps : partagé depuis
+// l'application Google, il atterrit sur une page de *recherche* avec un panneau
+// de connaissances. Aucun /maps/place/, aucun @lat,lon — d'où l'échec. On y
+// récupère quand même le nom du lieu, que Nominatim géocode ensuite.
+function extractGoogleSearchName(finalUrl: string, html: string): string | null {
+  try {
+    const u = new URL(finalUrl);
+    if (/\/search/.test(u.pathname)) {
+      const q = u.searchParams.get("q");
+      if (q && !/^-?\d+\.\d+,/.test(q)) return decodeURIComponent(q.replace(/\+/g, " ")).trim();
+    }
+  } catch { /* ignore */ }
+
+  // <title>Nom du lieu - Recherche Google</title>
+  const raw = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+  if (raw) {
+    const t = decodeEntities(raw)
+      .replace(/\s*[-–—]\s*(?:Recherche Google|Google Search|Google Maps|Google)\s*$/i, "")
+      .trim();
+    if (t && !/^google/i.test(t) && t.length > 2) return t;
+  }
+
+  // Panneau de connaissances : le nom apparaît en JSON-LD sur la page.
+  const ld = html.match(/"@type"\s*:\s*"(?:LocalBusiness|Restaurant|TouristAttraction|Place|Hotel|Museum)"[\s\S]{0,400}?"name"\s*:\s*"([^"]{2,80})"/);
+  if (ld?.[1]) return decodeEntities(ld[1]).trim();
+
+  return null;
+}
+
 async function handleGoogleMaps(rawUrl: string) {
   const { finalUrl, html } = await resolve(rawUrl);
   const haystack = finalUrl + "\n" + html.slice(0, 200_000);
@@ -218,14 +247,16 @@ async function handleGoogleMaps(rawUrl: string) {
   let name = extractMapsName(finalUrl);
   if (!name) {
     const ogTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
-    if (ogTitle && !/^google maps$/i.test(ogTitle)) {
-      name = ogTitle.replace(/\s*[-–—]\s*Google Maps\s*$/i, "").trim();
+    if (ogTitle && !/^google( maps)?$/i.test(ogTitle)) {
+      name = ogTitle.replace(/\s*[-–—]\s*(?:Google Maps|Recherche Google|Google)\s*$/i, "").trim();
     }
   }
   if (!name) {
     const inHtml = haystack.match(/\/maps\/place\/([^/@?&"'\\]+)/);
     if (inHtml) name = decodeURIComponent(inHtml[1].replace(/\+/g, " ")).replace(/_/g, " ").trim();
   }
+  // Dernier recours : page de recherche Google plutôt que page Maps.
+  if (!name) name = extractGoogleSearchName(finalUrl, html);
 
   const coords = extractMapsCoords(haystack);
 
