@@ -504,7 +504,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     if (!activityId || activity.isMeal) return;
     const complete = activity.address && activity.openingHours && activity.lat;
     if (complete) return;
-    const found = await lookupPlace(activity.title, trip.destination);
+    const found = await lookupPlace(activity.title, trip.destination,
+      { lat: weather?.lat, lon: weather?.lon });
     const patch = missingFieldsFrom(activity, found);
     if (patch) updateActivity(tripId, location, activityId, patch);
   };
