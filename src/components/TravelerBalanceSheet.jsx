@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { formatPrice } from '../utils/helpers';
 
 export default function TravelerBalanceSheet({ traveler, travelers, expenses, debts, onClose, onDelete }) {
@@ -24,7 +25,9 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
     e => e.payerId === traveler.id || e.participantIds.includes(traveler.id)
   );
 
-  return (
+  // Même raison que la roue : rendu dans document.body pour échapper aux
+  // ancêtres animés (transform), qui fausseraient le positionnement « fixed ».
+  return createPortal(
     <div className="sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="sheet tbs">
         <div className="sheet__handle" />
@@ -129,6 +132,7 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

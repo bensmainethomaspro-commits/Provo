@@ -107,7 +107,7 @@ const EXPENSE_CATEGORIES = [
 
 const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
-const CAT_COLORS = ['#FF6B35', '#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#06b6d4'];
+const CAT_COLORS = ['#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e', '#14b8a6', '#06b6d4'];
 
 function DonutChart({ byCategory, total }) {
   if (!byCategory.length || total === 0) return null;
@@ -165,7 +165,7 @@ function DonutChart({ byCategory, total }) {
   );
 }
 
-export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDeleteTraveler }) {
+export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId }) {
   const travelers = trip.tripTravelers || [];
   const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
@@ -178,6 +178,8 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
   const [selectedTraveler, setSelectedTraveler] = useState(null);
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [showDebtDetail, setShowDebtDetail] = useState(false);
+  const [editingId, setEditingId] = useState(null); // dépense en cours de modification
+  const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -190,11 +192,54 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
     set('participantIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
 
-  const openForm = () => {
-    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
+  const scrollToForm = () => {
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const openEditForm = (exp) => {
+    setForm({
+      description: exp.description || '',
+      amount: String(exp.amount ?? ''),
+      payerId: exp.payerId || '',
+      participantIds: exp.participantIds || [],
+      activityId: exp.activityId || '',
+      currency: exp.currency || 'EUR',
+      expenseCategory: exp.expenseCategory || 'autre',
+    });
+    setEditingId(exp.id);
     setError('');
     setShowForm(true);
+    scrollToForm();
   };
+
+  const openForm = () => {
+    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
+    setEditingId(null);
+    setError('');
+    setShowForm(true);
+    // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
+    // voit rien se passer au clic sur « Ajouter une dépense ».
+    scrollToForm();
+  };
+
+  // « Qui suis-je ? » — le voyageur lié au compte connecté. Chaque participant
+  // voit donc SON propre solde, pas celui du propriétaire du voyage.
+  const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
+
+  // Aperçu du partage pendant la saisie : « 60 € ÷ 2 = 30 € par personne »
+  const splitPreview = (() => {
+    const amt = parseFloat(form.amount);
+    const n = form.participantIds.length;
+    if (!amt || amt <= 0 || n === 0) return null;
+    const eur = form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
+    if (n === 1) {
+      const only = travelers.find(t => t.id === form.participantIds[0]);
+      return `${formatPrice(eur)} pour ${only ? only.name : '1 personne'} seul·e`;
+    }
+    return `${formatPrice(eur)} ÷ ${n} = ${formatPrice(eur / n)} par personne`;
+  })();
 
   const handleAdd = () => {
     if (!form.description.trim()) { setError('Décris la dépense.'); return; }
@@ -205,12 +250,15 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
       if (!form.participantIds.length) { setError('Qui participe ?'); return; }
     }
     const eurAmount = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
-    onAddExpense({
+    const payload = {
       ...form,
       amount,
       eurAmount: Math.round(eurAmount * 100) / 100,
       description: form.description.trim(),
-    });
+    };
+    if (editingId) onUpdateExpense?.(editingId, payload);
+    else onAddExpense(payload);
+    setEditingId(null);
     setShowForm(false);
   };
 
@@ -330,6 +378,28 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
         </div>
       )}
 
+      {/* Solde personnel du participant connecté — répond à « et moi, je dois quoi ? » */}
+      {me && debts.length > 0 && (() => {
+        const iOwe = debts.filter(d => d.from === me.id);
+        const owedToMe = debts.filter(d => d.to === me.id);
+        if (iOwe.length === 0 && owedToMe.length === 0) return null;
+        return (
+          <div className="my-balance">
+            <div className="my-balance__title">{me.emoji} Pour toi, {me.name}</div>
+            {iOwe.map((d, i) => (
+              <div key={`o${i}`} className="my-balance__line my-balance__line--owe">
+                Tu dois <strong>{formatPrice(d.amount)}</strong> à {getEmoji(d.to)} {getName(d.to)}
+              </div>
+            ))}
+            {owedToMe.map((d, i) => (
+              <div key={`r${i}`} className="my-balance__line my-balance__line--get">
+                {getEmoji(d.from)} {getName(d.from)} te doit <strong>{formatPrice(d.amount)}</strong>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Debt settlement */}
       {debts.length > 0 && (
         <div className="debts-card">
@@ -339,16 +409,22 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
               {showDebtDetail ? '▲ Masquer' : '▼ Détail'}
             </button>
           </div>
+          {/* Phrase explicite : « X doit N € à Y ». Les flèches seules ne disaient
+              pas dans quel sens allait l'argent. */}
           {debts.map((d, i) => (
             <div key={i} className="debt-row">
-              <span className="debt-emoji">{getEmoji(d.from)}</span>
-              <span className="debt-from">{getName(d.from)}</span>
-              <span className="debt-arrow">→</span>
-              <span className="debt-amount">{formatPrice(d.amount)}</span>
-              <span className="debt-arrow">→</span>
-              <span className="debt-emoji">{getEmoji(d.to)}</span>
-              <span className="debt-to">{getName(d.to)}</span>
-              <button className="debt-settle-btn" onClick={() => handleSettleDebt(d)} title="Marquer comme remboursé">✅</button>
+              <div className="debt-row__text">
+                <span className="debt-emoji">{getEmoji(d.from)}</span>
+                <span className="debt-from">{getName(d.from)}</span>
+                <span className="debt-verb">doit</span>
+                <span className="debt-amount">{formatPrice(d.amount)}</span>
+                <span className="debt-verb">à</span>
+                <span className="debt-emoji">{getEmoji(d.to)}</span>
+                <span className="debt-to">{getName(d.to)}</span>
+              </div>
+              <button className="debt-settle-btn" onClick={() => handleSettleDebt(d)}>
+                ✓ Remboursé
+              </button>
             </div>
           ))}
           {showDebtDetail && (
@@ -365,7 +441,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                   </div>
                 );
               })}
-              <div className="debt-detail__note">Positif = à recevoir · Négatif = à rembourser</div>
+              <div className="debt-detail__note">Positif = on te doit de l'argent · Négatif = tu dois de l'argent</div>
             </div>
           )}
         </div>
@@ -478,6 +554,15 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                         </div>
                       )}
                     </div>
+                  {/* Les remboursements ne se modifient pas : ils découlent des dépenses */}
+                  {!exp.isSettlement && onUpdateExpense && (
+                    <button
+                      className="expense-item__edit"
+                      onClick={e => { e.stopPropagation(); openEditForm(exp); }}
+                      title="Modifier"
+                      aria-label={`Modifier ${exp.description}`}
+                    >✏️</button>
+                  )}
                   <button
                     className="expense-item__delete"
                     onClick={e => { e.stopPropagation(); onDeleteExpense(exp.id); }}
@@ -493,7 +578,7 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
 
       {/* Add form */}
       {showForm ? (
-        <div className="expense-form">
+        <div className="expense-form" ref={formRef}>
           <div className="form-group">
             <label className="form-label">Description</label>
             <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}
@@ -547,7 +632,17 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
           {hasTravelers && (
             <div className="form-group">
-              <label className="form-label">Pour qui ?</label>
+              <label className="form-label">
+                Partagé entre
+                <button
+                  type="button"
+                  className="expense-form__all-btn"
+                  onClick={() => set('participantIds',
+                    form.participantIds.length === travelers.length ? [] : travelers.map(t => t.id))}
+                >
+                  {form.participantIds.length === travelers.length ? 'Tout décocher' : 'Tout le monde'}
+                </button>
+              </label>
               <div className="traveler-assign-row">
                 {travelers.map(t => (
                   <button key={t.id} type="button"
@@ -557,6 +652,8 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
                   </button>
                 ))}
               </div>
+              {/* Aperçu en direct : on voit tout de suite ce que ça donne par personne */}
+              {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
             </div>
           )}
           {activitiesByDay.length > 0 && (
@@ -576,8 +673,10 @@ export default function ExpensesTab({ trip, onAddExpense, onDeleteExpense, onDel
           )}
           {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="btn btn--secondary btn--full" onClick={() => setShowForm(false)}>Annuler</button>
-            <button className="btn btn--primary btn--full" onClick={handleAdd}>✅ Ajouter</button>
+            <button className="btn btn--secondary btn--full" onClick={() => { setShowForm(false); setEditingId(null); }}>Annuler</button>
+            <button className="btn btn--primary btn--full" onClick={handleAdd}>
+              {editingId ? '✅ Enregistrer' : '✅ Ajouter'}
+            </button>
           </div>
         </div>
       ) : (

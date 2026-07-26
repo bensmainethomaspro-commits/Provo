@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel } from '../utils/helpers';
+import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel, isClosedOnDate, totalMinutes, formatDuration, haversineKm } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import Confetti from './Confetti';
+import ConfirmDialog from './ConfirmDialog';
 
 // Drag-to-reorder list for the day's remaining activities (touch + mouse).
 // Order is tracked as an array of ids; the parent commit happens on drop from a
@@ -104,6 +105,7 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
   const [showConfetti, setShowConfetti] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTab, setPickerTab] = useState('reserve');
+  const [pickSuggestion, setPickSuggestion] = useState(null);
 
   if (!day) {
     return (
@@ -144,13 +146,44 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
     vibrate([5, 5, 5]);
   };
 
-  const handlePick = (activity) => {
+  const commitPick = (activity) => {
     if (pickerTab === 'reserve') {
       onAddFromReserve?.(activity.id);
     } else {
       onMoveFromDay?.(pickerTab, activity.id);
     }
     vibrate([10]);
+  };
+
+  // Force de proposition, jamais de blocage : au moment de piocher une idée, on
+  // signale ce qui compte vraiment (lieu fermé aujourd'hui, temps restant
+  // insuffisant, lieu éloigné du dernier point du jour). Si rien à dire, on
+  // ajoute directement — pas de pop-up inutile.
+  const pickWarnings = (activity) => {
+    const w = [];
+    if (activity.openingHours && isClosedOnDate(activity.openingHours, day.date)) {
+      w.push(`D'après ses horaires, ce lieu est probablement fermé aujourd'hui (${activity.openingHours}).`);
+    }
+    const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
+    if (dur > 0) {
+      const used = totalMinutes(day.activities.filter(a => a.status !== 'nogo'));
+      const left = 12 * 60 - used; // journée de référence : 12 h d'amplitude
+      if (dur > left) w.push(`La journée est déjà bien remplie : il reste environ ${formatDuration(Math.max(0, left))}, et cette activité dure ${formatDuration(dur)}.`);
+    }
+    const last = [...day.activities].reverse().find(a => a.lat && a.lon && a.status !== 'nogo');
+    if (last && activity.lat && activity.lon) {
+      const km = haversineKm(last.lat, last.lon, activity.lat, activity.lon);
+      if (km > 8) w.push(`C'est à environ ${km.toFixed(0)} km de « ${last.title} », ta dernière étape du jour.`);
+    }
+    return w;
+  };
+
+  const handlePick = (activity) => {
+    const warnings = pickWarnings(activity);
+    if (warnings.length === 0) { commitPick(activity); setShowPicker(false); return; }
+    // On garde la liste ouverte derrière : si l'idée ne convient pas après
+    // lecture de la suggestion, on en choisit une autre sans tout rouvrir.
+    setPickSuggestion({ activity, warnings });
   };
 
   // Rebuild the full day order from a reordered list of "remaining" ids, leaving
@@ -255,6 +288,19 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
       )}
 
       {/* Picker sheet */}
+      {/* Suggestion au moment de piocher : on informe, on n'empêche jamais */}
+      {pickSuggestion && (
+        <ConfirmDialog
+          icon="💡"
+          title={pickSuggestion.activity.title}
+          message={pickSuggestion.warnings.join(' ')}
+          confirmLabel="Ajouter quand même"
+          cancelLabel="Choisir autre chose"
+          onConfirm={() => { commitPick(pickSuggestion.activity); setPickSuggestion(null); setShowPicker(false); }}
+          onCancel={() => setPickSuggestion(null)}
+        />
+      )}
+
       {showPicker && (
         <div className="act-sheet-overlay" onClick={() => setShowPicker(false)}>
           <div className="act-sheet today-picker-sheet" onClick={e => e.stopPropagation()}>
@@ -292,7 +338,7 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
                 pickerActivities.map(act => {
                   const meta = getCategoryMeta(act.category);
                   return (
-                    <button key={act.id} className="today-picker__item" onClick={() => { handlePick(act); setShowPicker(false); }}>
+                    <button key={act.id} className="today-picker__item" onClick={() => handlePick(act)}>
                       <span className="today-picker__emoji">{meta.emoji}</span>
                       <span className="today-picker__title">{act.title}</span>
                       <span className="today-picker__add">+</span>

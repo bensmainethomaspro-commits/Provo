@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 
 const TRIP_COLORS = [
-  { value: '#FF6B35', label: 'Orange' },
+  { value: '#35A7DD', label: 'Bleu clair' },
   { value: '#3b82f6', label: 'Bleu' },
   { value: '#8b5cf6', label: 'Violet' },
   { value: '#22c55e', label: 'Vert' },
   { value: '#ef4444', label: 'Rouge' },
   { value: '#06b6d4', label: 'Cyan' },
-  { value: '#f59e0b', label: 'Ambre' },
+  { value: '#14b8a6', label: 'Turquoise' },
   { value: '#ec4899', label: 'Rose' },
 ];
 
@@ -268,7 +268,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
               {TRIP_COLORS.map(c => (
                 <button
                   key={c.value}
-                  className={`color-swatch${(trip.color || '#FF6B35') === c.value ? ' color-swatch--active' : ''}`}
+                  className={`color-swatch${(trip.color || '#35A7DD') === c.value ? ' color-swatch--active' : ''}`}
                   style={{ background: c.value }}
                   onClick={() => handleColor(c.value)}
                   title={c.label}

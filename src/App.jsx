@@ -45,13 +45,13 @@ function AppInner() {
   useEffect(() => {
     function applyBackground() {
       if (!darkMode) {
-        // Jour : fond chaud très clair et aéré (fini le dégradé orange plein cadre).
-        // L'orange devient un accent, pas un mur — inspiration apps Apple/App Store.
-        document.body.style.background = 'linear-gradient(180deg, #FCEEE1 0%, #F9F2EA 42%, #F5EFE9 100%)';
+        // Jour : fond bleu très clair et aéré (fini le dégradé orange plein cadre).
+        // Le bleu reste un accent, pas un mur — inspiration apps Apple/App Store.
+        document.body.style.background = 'linear-gradient(180deg, #E6F2FB 0%, #EFF5FA 42%, #F2F6FA 100%)';
         document.body.style.backgroundAttachment = 'fixed';
       } else {
-        // Nuit chaude, cohérente avec la marque coucher de soleil (pas de bleu-nuit générique).
-        document.body.style.background = 'linear-gradient(165deg, #140d08 0%, #1e130b 45%, #2a1810 100%)';
+        // Nuit bleutée, cohérente avec la marque bleu clair.
+        document.body.style.background = 'linear-gradient(165deg, #08111A 0%, #0D1B26 45%, #122634 100%)';
         document.body.style.backgroundAttachment = 'fixed';
       }
     }

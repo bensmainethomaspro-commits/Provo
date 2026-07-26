@@ -302,17 +302,24 @@ export function useTrips() {
   const getTripById = useCallback((id) => trips.find(t => t.id === id), [trips]);
 
   const addToReserve = useCallback((tripId, activity) => {
+    // L'identifiant est créé ici (et non dans l'updater) pour pouvoir être
+    // renvoyé : l'enrichissement automatique en a besoin pour compléter la
+    // fiche une fois les informations récupérées en ligne.
+    const id = genId();
     setTrips(p => p.map(t => t.id !== tripId ? t : {
-      ...t, reserve: [...t.reserve, { ...activity, id: genId(), status: 'todo' }]
+      ...t, reserve: [...t.reserve, { ...activity, id, status: 'todo' }]
     }));
+    return id;
   }, []);
 
   const addToDay = useCallback((tripId, dayId, activity) => {
+    const id = genId();
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, days: t.days.map(d => d.id !== dayId ? d : {
-        ...d, activities: [...d.activities, { ...activity, id: genId(), status: 'todo' }]
+        ...d, activities: [...d.activities, { ...activity, id, status: 'todo' }]
       })
     }));
+    return id;
   }, []);
 
   const setActivityStatus = useCallback((tripId, location, activityId, status) => {
@@ -642,6 +649,12 @@ export function useTrips() {
     }));
   }, []);
 
+  const updateExpense = useCallback((tripId, expenseId, patch) => {
+    setTrips(p => p.map(t => t.id !== tripId ? t : {
+      ...t, expenses: (t.expenses || []).map(e => e.id === expenseId ? { ...e, ...patch } : e)
+    }));
+  }, []);
+
   const deleteExpense = useCallback((tripId, expenseId) => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, expenses: (t.expenses || []).filter(e => e.id !== expenseId)
@@ -763,7 +776,7 @@ export function useTrips() {
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
     enableSharing, loadSharedTrip,
     reorderDay, addToAllDays,
-    addExpense, deleteExpense,
+    addExpense, updateExpense, deleteExpense,
     copyDay, sortDayByTime,
     addDailyTemplate, removeDailyTemplate,
     fetchTripMembers, removeTripMember,

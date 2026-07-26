@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { CATEGORY_COLORS, getCategoryMeta, fetchPlaceData } from '../utils/helpers';
 
 function markerIcon(category) {
-  const color = CATEGORY_COLORS[category] || '#FF6B35';
+  const color = CATEGORY_COLORS[category] || '#35A7DD';
   const { emoji } = getCategoryMeta(category);
   return L.divIcon({
     className: '',
@@ -74,7 +74,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         L.marker([a.lat, a.lon], {
           icon: L.divIcon({
             className: '',
-            html: `<div style="background:${tripColor || '#FF6B35'};color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);">${idx + 1}</div>`,
+            html: `<div style="background:${tripColor || '#35A7DD'};color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);">${idx + 1}</div>`,
             iconSize: [20, 20],
             iconAnchor: [10, 10],
           }),
@@ -87,7 +87,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     if (roadTripMode && geoActs.length >= 2) {
       const points = geoActs.map(a => [a.lat, a.lon]);
       L.polyline(points, {
-        color: tripColor || '#FF6B35',
+        color: tripColor || '#35A7DD',
         weight: 3,
         opacity: 0.75,
         dashArray: '8 6',
