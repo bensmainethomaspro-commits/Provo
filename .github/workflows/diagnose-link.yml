@@ -1,7 +1,9 @@
 name: Diagnostic — résolution d'un lien
 
-# Outil de diagnostic temporaire. L'environnement de développement ne peut
-# joindre ni share.google ni Supabase ; un runner GitHub le peut.
+# Outil de diagnostic, lancé à la demande (Actions › Run workflow).
+# Sert quand un lien n'est plus extrait : il dit où la chaîne casse.
+# L'environnement de développement ne peut joindre ni share.google ni Supabase ;
+# un runner GitHub le peut, depuis une IP de datacenter comme la fonction Edge.
 
 on:
   workflow_dispatch:
@@ -10,9 +12,6 @@ on:
         description: 'Lien à analyser'
         required: true
         default: 'https://share.google/WNSiI0AooI1HiDmyD'
-  push:
-    paths:
-      - '.github/workflows/diagnose-link.yml'
 
 jobs:
   diagnose:

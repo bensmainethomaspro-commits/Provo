@@ -165,6 +165,27 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
         if (result && (result.title || result.lat != null)) {
           applyResult({ ...result, link: result.link || raw }, raw);
+
+          // Un lien partagé donne presque toujours le NOM du lieu, rarement son
+          // adresse : une recherche du nom seul ne donne rien (« Agapii Mou »
+          // n'existe pas pour un géocodeur sans ville). On relance donc la
+          // recherche en la situant sur la destination du voyage.
+          if (result.lat == null && result.title) {
+            const q = tripDestination ? `${result.title}, ${tripDestination}` : result.title;
+            const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
+            if (found.length === 1) {
+              // Le nom du lien fait foi : il vient de la fiche Google.
+              applyResult({ ...found[0], title: result.title, link: result.link || raw }, raw);
+            } else if (found.length > 1) {
+              setCandidates(found);
+              setImportMsg(`« ${result.title} » importé — précise lequel c'est.`);
+            } else {
+              setImportMsg(`« ${result.title} » importé ✓ — adresse introuvable, `
+                + `retape le nom avec la ville pour la compléter.`);
+            }
+            return;
+          }
+
           if (result.source === 'tiktok' && result.lat == null) {
             setImportMsg('Vidéo importée ✓ — vérifie le titre et ajoute un lieu si besoin.');
           }
