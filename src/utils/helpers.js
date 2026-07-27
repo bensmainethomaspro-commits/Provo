@@ -329,42 +329,47 @@ function makeAbortSignal(ms) {
 }
 
 async function fetchHtmlViaProxy(url) {
-  // Primary: allorigins.win — follows HTTP redirects, returns final URL in status.url
-  try {
-    const { signal, clear } = makeAbortSignal(12000);
+  // Ces proxys publics tombent souvent — mesuré le 27/07 : allorigins 520,
+  // codetabs 522, corsproxy 403, seul r.jina.ai répondait. En série avec 12 s
+  // chacun, l'utilisateur attendait jusqu'à 36 s avant de voir l'échec.
+  // On les interroge donc en parallèle : le premier qui répond gagne, et un
+  // échec complet ne coûte qu'une seule attente.
+  const TIMEOUT = 8000;
+
+  // allorigins est le seul à donner l'URL finale après redirections — précieux
+  // pour les liens courts, dont le nom du lieu est dans cette URL.
+  const viaAllOrigins = async () => {
+    const { signal, clear } = makeAbortSignal(TIMEOUT);
     const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`, { signal });
     clear();
-    if (r.ok) {
-      const d = await r.json();
-      const html = d.contents || '';
-      const finalUrl = d.status?.url || '';
-      if (html) return { html, finalUrl: finalUrl && finalUrl !== url ? finalUrl : null };
-    }
-  } catch {}
+    if (!r.ok) throw new Error('allorigins');
+    const d = await r.json();
+    const html = d.contents || '';
+    if (!html) throw new Error('allorigins vide');
+    const finalUrl = d.status?.url || '';
+    return { html, finalUrl: finalUrl && finalUrl !== url ? finalUrl : null };
+  };
 
-  // Fallback 1: codetabs — follows redirects server-side, returns final body
-  try {
-    const { signal, clear } = makeAbortSignal(12000);
-    const r = await fetch(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, { signal });
+  const viaPlain = async (proxyUrl, name) => {
+    const { signal, clear } = makeAbortSignal(TIMEOUT);
+    const r = await fetch(proxyUrl, { signal });
     clear();
-    if (r.ok) {
-      const html = await r.text();
-      if (html) return { html, finalUrl: null };
-    }
-  } catch {}
+    if (!r.ok) throw new Error(name);
+    const html = await r.text();
+    if (!html) throw new Error(`${name} vide`);
+    return { html, finalUrl: null };
+  };
 
-  // Fallback 2: corsproxy.io
   try {
-    const { signal, clear } = makeAbortSignal(12000);
-    const r = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { signal });
-    clear();
-    if (r.ok) {
-      const html = await r.text();
-      if (html) return { html, finalUrl: null };
-    }
-  } catch {}
-
-  return { html: '', finalUrl: null };
+    return await Promise.any([
+      viaAllOrigins(),
+      viaPlain(`https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`, 'codetabs'),
+      viaPlain(`https://corsproxy.io/?${encodeURIComponent(url)}`, 'corsproxy'),
+      viaPlain(`https://r.jina.ai/${url}`, 'jina'),
+    ]);
+  } catch {
+    return { html: '', finalUrl: null };
+  }
 }
 
 function extractCoordsFromUrl(url) {
