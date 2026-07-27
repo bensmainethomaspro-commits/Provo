@@ -1,0 +1,61 @@
+name: Diagnostic — résolution d'un lien
+
+# Outil de diagnostic temporaire. L'environnement de développement ne peut pas
+# joindre share.google ; un runner GitHub le peut, depuis une IP de datacenter
+# — exactement la situation de la fonction Edge. On mesure au lieu de deviner.
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Lien à analyser'
+        required: true
+        default: 'https://share.google/WNSiI0AooI1HiDmyD'
+  push:
+    paths:
+      - '.github/workflows/diagnose-link.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Résoudre le lien
+        env:
+          URL: ${{ github.event.inputs.url || 'https://share.google/WNSiI0AooI1HiDmyD' }}
+        run: |
+          UA='Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+          COOKIE='CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg'
+
+          echo "===== 1. CHAÎNE DE REDIRECTIONS (sans cookie) ====="
+          curl -sS -A "$UA" -H 'Accept-Language: fr,en;q=0.8' -o /tmp/a.html -D /tmp/a.head \
+               -L --max-time 30 -w '\nFINAL: %{url_effective}\nCODE: %{http_code}\nTAILLE: %{size_download}\n' \
+               "$URL" || echo "ÉCHEC CURL"
+          grep -iE '^(HTTP/|location:)' /tmp/a.head | head -20
+
+          echo
+          echo "===== 2. AVEC COOKIE DE CONSENTEMENT ====="
+          curl -sS -A "$UA" -H 'Accept-Language: fr,en;q=0.8' -H "Cookie: $COOKIE" \
+               -o /tmp/b.html -D /tmp/b.head -L --max-time 30 \
+               -w '\nFINAL: %{url_effective}\nCODE: %{http_code}\nTAILLE: %{size_download}\n' \
+               "$URL" || echo "ÉCHEC CURL"
+          grep -iE '^(HTTP/|location:)' /tmp/b.head | head -20
+
+          echo
+          echo "===== 3. CE QUE CONTIENT LA PAGE (avec cookie) ====="
+          echo "--- <title> ---"
+          grep -oiE '<title[^>]*>[^<]{0,200}' /tmp/b.html | head -3
+          echo "--- balises og: ---"
+          grep -oiE '<meta[^>]+(og:title|og:url|og:description)[^>]*>' /tmp/b.html | head -5 | cut -c1-220
+          echo "--- occurrences /maps/place/ ---"
+          grep -oE '/maps/place/[^/@?&"'"'"'\\]{0,80}' /tmp/b.html | head -5
+          echo "--- coordonnées @lat,lon ou !3d!4d ---"
+          grep -oE '@-?[0-9]{1,3}\.[0-9]{3,},-?[0-9]{1,3}\.[0-9]{3,}' /tmp/b.html | head -3
+          grep -oE '!3d-?[0-9]{1,3}\.[0-9]{3,}!4d-?[0-9]{1,3}\.[0-9]{3,}' /tmp/b.html | head -3
+          echo "--- indices de blocage ---"
+          grep -oiE 'consent\.google|captcha|unusual traffic|enable JavaScript|sorry/index' /tmp/b.html | sort -u | head
+          echo "--- 400 premiers caractères ---"
+          head -c 400 /tmp/b.html; echo
+
+          echo
+          echo "===== 4. SANS SUIVRE LES REDIRECTIONS (1er saut brut) ====="
+          curl -sS -A "$UA" -o /dev/null -D - --max-time 20 "$URL" | head -25
