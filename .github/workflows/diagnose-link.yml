@@ -1,8 +1,7 @@
 name: Diagnostic — résolution d'un lien
 
 # Outil de diagnostic temporaire. L'environnement de développement ne peut
-# joindre ni share.google ni Supabase ; un runner GitHub le peut, depuis une IP
-# de datacenter — exactement la situation de la fonction Edge.
+# joindre ni share.google ni Supabase ; un runner GitHub le peut.
 
 on:
   workflow_dispatch:
@@ -18,38 +17,49 @@ on:
 jobs:
   diagnose:
     runs-on: ubuntu-latest
+    env:
+      FN: https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place
+      KEY: sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD
+      ORIGIN: https://provo-tbens.vercel.app
     steps:
-      - name: A · La fonction Edge répond-elle ?
-        env:
-          URL: ${{ github.event.inputs.url || 'https://share.google/WNSiI0AooI1HiDmyD' }}
-          KEY: sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD
+      - name: A · Preflight CORS, tel que l'envoie le navigateur
         run: |
-          echo "Appel de extract-place avec la clé publiable, comme le fait le client."
-          curl -sS -X POST \
-            "https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place" \
-            -H "Authorization: Bearer $KEY" \
-            -H "apikey: $KEY" \
-            -H "Content-Type: application/json" \
-            --max-time 60 \
-            -w '\n--- CODE HTTP: %{http_code} ---\n' \
-            -d "{\"url\":\"$URL\"}" | head -c 1500
-          echo
+          echo "OPTIONS avec les en-têtes que supabase-js demande :"
+          curl -sS -X OPTIONS "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type,apikey,x-client-info,x-supabase-api-version" \
+            -D - -o /dev/null --max-time 30 -w '\n--- CODE: %{http_code} ---\n' \
+            | grep -iE '^(HTTP/|access-control|vary)' || true
 
-      - name: B · Le proxy CORS du client résout-il la redirection ?
+      - name: B · POST avec Origin — les en-têtes CORS reviennent-ils ?
         env:
           URL: ${{ github.event.inputs.url || 'https://share.google/WNSiI0AooI1HiDmyD' }}
         run: |
-          echo "allorigins.win doit renvoyer l'URL finale dans status.url."
-          curl -sS --max-time 40 \
-            "https://api.allorigins.win/get?url=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['URL'],safe=''))")" \
-            -w '\n--- CODE HTTP: %{http_code} ---\n' \
-            -o /tmp/proxy.json || echo "ÉCHEC"
-          echo "taille de la réponse : $(wc -c < /tmp/proxy.json 2>/dev/null || echo 0) octets"
-          python3 - <<'PY' || echo "réponse illisible"
-          import json
-          d = json.load(open('/tmp/proxy.json'))
-          st = d.get('status', {})
-          print('status.url  :', st.get('url'))
-          print('status.code :', st.get('http_code'))
-          print('contenu     :', len(d.get('contents') or ''), 'caractères')
-          PY
+          curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -H "x-client-info: supabase-js-web/2.0.0" \
+            -D /tmp/h -o /tmp/b --max-time 60 -w '\n--- CODE: %{http_code} ---\n' \
+            -d "{\"url\":\"$URL\"}"
+          echo "--- en-têtes CORS de la réponse ---"
+          grep -iE '^access-control' /tmp/h || echo "AUCUN en-tête CORS !"
+          echo "--- corps ---"
+          head -c 600 /tmp/b; echo
+
+      - name: C · Proxys CORS de secours — lesquels vivent encore ?
+        env:
+          URL: ${{ github.event.inputs.url || 'https://share.google/WNSiI0AooI1HiDmyD' }}
+        run: |
+          E=$(python3 -c "import urllib.parse,os;print(urllib.parse.quote(os.environ['URL'],safe=''))")
+          for P in \
+            "https://api.allorigins.win/get?url=$E" \
+            "https://api.codetabs.com/v1/proxy?quest=$E" \
+            "https://corsproxy.io/?$E" \
+            "https://r.jina.ai/$URL" ; do
+            C=$(curl -sS -o /tmp/p -w '%{http_code}' --max-time 25 "$P" 2>/dev/null || echo "ERR")
+            S=$(wc -c < /tmp/p 2>/dev/null || echo 0)
+            HIT=$(grep -oE 'q=Agapii\+Mou|Agapii Mou|q%3DAgapii' /tmp/p 2>/dev/null | head -1)
+            echo "$C  ${S}o  ${HIT:-—}  ${P%%\?*}"
+          done
