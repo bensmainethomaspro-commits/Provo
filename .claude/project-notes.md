@@ -39,6 +39,7 @@ trace de ce qu'on a sciemment écarté.
 | D3 · Rien à signaler | Aucune pop-up si le piochage ne pose pas de problème |
 | D4 · Annulable | `withUndo` dans `TripView` |
 | D5 · Confirmer | « ↩ Action annulée » |
+| E2 · Mesurer, pas deviner | `.github/workflows/diagnose-link.yml` |
 | F1 · Cache PWA | `vercel.json` |
 
 ## Écarté sciemment
@@ -79,3 +80,20 @@ browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMo
 
 Le thème se bascule **par le menu `⋯`**, pas par `localStorage` : `addInitScript`
 réécrit la clé à chaque rechargement.
+
+## Mesurer ce que le bac à sable ne peut pas joindre
+
+La politique réseau de l'environnement de développement **bloque `share.google`
+et le domaine Supabase du projet** (403 sur le CONNECT du proxy). Impossible d'y
+tester la résolution d'un lien ou la fonction Edge en local.
+
+Ne pas en conclure une cause : lancer `.github/workflows/diagnose-link.yml`
+(Actions › Run workflow, le lien en paramètre). Un exécuteur GitHub sort par une
+IP de centre de données, comme la fonction Edge, et mesure la chaîne complète —
+redirections, réponse de la fonction, préflight CORS, santé des proxys de
+secours (E2).
+
+Le déploiement de la fonction Edge est automatique :
+`.github/workflows/deploy-edge-functions.yml` se déclenche sur `main` dès que
+`supabase/functions/**` change. Un correctif de l'extracteur poussé sur une
+branche n'est donc **pas** en ligne tant qu'il n'est pas fusionné.
