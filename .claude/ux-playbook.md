@@ -145,10 +145,19 @@ deux thèmes, sur le plus petit écran cible, avant de dire que c'est fait.
 
 **E2. Quand un correctif ne marche pas, mesurer au lieu de re-deviner.**
 Interroger le DOM : positions réelles, `elementFromPoint`, dimensions calculées.
-*Origine : un bouton inatteignable a résisté à un premier correctif « logique ».
-La mesure a révélé une superposition de 784 px dans un écran de 667 px, causée
-par un ancêtre transformé qui redéfinissait le référentiel du `position: fixed`.
-Deux autres composants avaient le même défaut.*
+**Corollaire : si l'environnement de travail ne peut pas atteindre ce qu'il faut
+mesurer, en fabriquer un qui le peut** — un exécuteur d'intégration continue, un
+script déployé — plutôt que de raisonner à l'aveugle. Et ne jamais imputer un
+échec à une cause externe supposée sans l'avoir vérifiée.
+*Origines : (1) un bouton inatteignable a résisté à un premier correctif
+« logique » ; la mesure a révélé une superposition de 784 px dans un écran de
+667 px, causée par un ancêtre transformé qui redéfinissait le référentiel du
+`position: fixed` — deux autres composants avaient le même défaut. (2) un lien
+partagé « toujours pas extrait » après deux correctifs annoncés sans mesure : le
+bac à sable ne joignait ni le service de liens ni le serveur de fonctions, et
+j'avais accusé un déploiement supposé non passé. Mesuré depuis un exécuteur
+d'intégration continue, tout ce que j'accusais marchait déjà — la cause était
+ailleurs.*
 
 **E3. Tester le geste réel, pas seulement l'état final.** Vérifier que le
 déplacement est enregistré ne dit pas qu'il est atteignable au doigt.
@@ -188,7 +197,8 @@ Vérifier aussi les conditions d'utilisation, pas seulement le prix.
 et CGU interdisant d'afficher ces données sur une carte non-Google.*
 
 **F4. Dire ce qui n'a pas pu être vérifié.** Une limite annoncée vaut mieux
-qu'une confiance démentie à l'usage.
+qu'une confiance démentie à l'usage. Ne jamais présenter comme corrigé ce qui
+n'a pas été mesuré : une hypothèse s'annonce comme une hypothèse.
 
 ---
 
@@ -213,6 +223,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-07 | « il doit se connecter à Vercel, je ne veux pas » | F2 |
 | 2026-07 | « je ne veux rien dépenser » | F3 |
 | 2026-07 | mémoire partagée introuvable depuis un autre projet | F2 (affinée) |
+| 2026-07 | « ça ne fonctionne toujours pas […] une solution dont tu es sûre ! » (3ᵉ fois) | E2 (affinée), F4 |
 
 ### Récidives repérées
 
@@ -220,8 +231,13 @@ revient trois fois est un problème structurel, pas un détail.
   de l'écran → fusionner → trop d'informations). Ce n'est pas un réglage, c'est
   le premier réflexe à avoir sur tout nouvel écran → traiter A1–A6 en priorité
   dans chaque audit.
-- **Un correctif superficiel a été livré deux fois** avant la vraie cause (roue,
-  puis dépôt sur la timeline). → E2 est la règle la plus rentable du lot.
+- **Un correctif superficiel a été livré trois fois** avant la vraie cause (roue,
+  dépôt sur la timeline, puis extraction d'un lien partagé). C'est le thème le
+  plus coûteux du playbook : à chaque fois l'utilisateur a dû revenir dire « ça
+  ne marche toujours pas », et à chaque fois la mesure a désigné une cause que
+  le raisonnement n'avait pas envisagée. → **ne rien annoncer comme corrigé sans
+  une mesure** ; quand l'environnement empêche de mesurer, c'est l'environnement
+  qu'il faut changer, pas la mesure qu'il faut sauter (E2, F4).
 - **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
   une version périmée, preview inaccessible sans compte, mémoire partagée
   laissée sur une branche. À chaque fois le travail était fait *et* hors de
