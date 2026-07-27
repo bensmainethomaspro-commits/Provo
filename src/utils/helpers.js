@@ -443,7 +443,7 @@ async function reverseGeocode(lat, lon) {
   }
 
   return {
-    title: (p.name || p.display_name.split(',')[0]).trim(),
+    title: _placeTitle(p),
     address, category, lat, lon,
     ...(price ? { price } : {}),
     openingHours: ex.opening_hours || '',
@@ -645,6 +645,25 @@ const _PLACE_CAT_RULES = [
   [/nightclub|casino|cinema|theatre|amusement|theme_park|arcade|entertainment|concert/, 'fun'],
 ];
 
+// Un titre lisible. Attention au piège des adresses : Nominatim renvoie le
+// numéro de rue comme composant séparé (« 2, Rue du Helder, Biarritz… »), donc
+// prendre le premier morceau donne « 2 ». On recompose « 2 Rue du Helder ».
+const _isHouseNumber = (s) => /^\d+\s*[a-zA-Z]?$/.test(String(s || '').trim());
+
+function _placeTitle(p) {
+  const name = String(p.name || '').trim();
+  if (name && !_isHouseNumber(name)) return name;
+
+  const a = p.address || {};
+  const road = a.road || a.pedestrian || a.footway;
+  const num = a.house_number || (_isHouseNumber(name) ? name : '');
+  if (road) return [num, road].filter(Boolean).join(' ');
+
+  const parts = String(p.display_name || '').split(',').map(s => s.trim());
+  if (_isHouseNumber(parts[0]) && parts[1]) return `${parts[0]} ${parts[1]}`;
+  return parts[0] || '';
+}
+
 function _placeAddress(p) {
   const a = p.address || {};
   const road = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
@@ -695,10 +714,13 @@ export async function searchPlaces(query, { limit = 5, lat = null, lon = null } 
     if (!Array.isArray(data)) return [];
     return data.map(p => ({
       id: `${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
-      title: String(p.name || String(p.display_name).split(',')[0]).trim(),
+      title: _placeTitle(p),
       address: _placeAddress(p),
       displayName: String(p.display_name || ''),
       category: _placeCategory(p),
+      // Une adresse nue (pas de commerce nommé) : il n'y a rien à extraire
+      // dessus, mais il y a peut-être un établissement à ce point précis.
+      isAddress: !String(p.name || '').trim() || _isHouseNumber(p.name),
       openingHours: (p.extratags || {}).opening_hours || '',
       lat: parseFloat(p.lat),
       lon: parseFloat(p.lon),

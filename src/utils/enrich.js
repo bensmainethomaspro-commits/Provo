@@ -87,6 +87,75 @@ async function searchOverpass(name, lat, lon) {
   }
 }
 
+// Catégories Provo déduites des étiquettes OSM d'un commerce.
+const POI_CAT = [
+  [/restaurant|cafe|coffee|bar|pub|fast_food|bistro|bakery|ice_cream|food/, 'resto'],
+  [/hotel|hostel|guest_house|apartment|motel|spa|chalet/, 'repos'],
+  [/museum|gallery|artwork|monument|memorial|castle|attraction|viewpoint/, 'visite'],
+  [/cinema|theatre|nightclub|casino|arcade|bowling|zoo|aquarium/, 'fun'],
+  [/gym|fitness|sports_centre|swimming|climbing|surf/, 'sport'],
+  [/park|garden|beach|nature_reserve/, 'balade'],
+];
+
+/**
+ * Que trouve-t-on exactement à ces coordonnées ?
+ *
+ * Chercher « 2 Rue du Helder » par son nom ne donne rien : une adresse n'est
+ * pas un commerce. Mais il y a souvent un établissement à ce point précis —
+ * c'est lui qui porte les horaires, le site et le téléphone.
+ *
+ * @returns {Promise<object|null>} le lieu nommé le plus proche, ou null
+ */
+export async function poiAtCoords(lat, lon, radius = 60) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const key = `poi|${lat.toFixed(5)}|${lon.toFixed(5)}|${radius}`;
+  if (cache.has(key)) return cache.get(key);
+
+  const q = `[out:json][timeout:20];nwr["name"]["amenity"~"."](around:${radius},${lat},${lon});`
+    + `nwr["name"]["tourism"~"."](around:${radius},${lat},${lon});`
+    + `nwr["name"]["shop"~"."](around:${radius},${lat},${lon});out tags center 8;`;
+
+  const run = async () => {
+    try {
+      const res = await fetch(`${OVERPASS}?data=${encodeURIComponent(q)}`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const els = (data?.elements || []).filter(e => e.tags?.name);
+      if (!els.length) return null;
+
+      // Le plus proche du point demandé.
+      const dist = (e) => {
+        const y = e.lat ?? e.center?.lat, x = e.lon ?? e.center?.lon;
+        if (y == null || x == null) return Infinity;
+        return (y - lat) ** 2 + (x - lon) ** 2;
+      };
+      els.sort((a, b) => dist(a) - dist(b));
+      const t = els[0].tags;
+      const typeText = [t.amenity, t.tourism, t.shop, t.leisure].filter(Boolean).join(' ').toLowerCase();
+      let category = null;
+      for (const [re, c] of POI_CAT) if (re.test(typeText)) { category = c; break; }
+
+      const found = {
+        title: t.name,
+        ...(category ? { category } : {}),
+        openingHours: t.opening_hours || '',
+        ...(t.website || t['contact:website'] ? { link: t.website || t['contact:website'] } : {}),
+        ...(t.phone || t['contact:phone'] ? { phone: t.phone || t['contact:phone'] } : {}),
+        lat: els[0].lat ?? els[0].center?.lat,
+        lon: els[0].lon ?? els[0].center?.lon,
+      };
+      cache.set(key, found);
+      return found;
+    } catch {
+      return null;
+    }
+  };
+
+  const result = queue.then(run, run);
+  queue = result.catch(() => {});
+  return result;
+}
+
 // Garde le champ le plus informatif de chaque source.
 function merge(a, b) {
   if (!a) return b;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
+import { poiAtCoords } from '../utils/enrich';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
@@ -49,6 +50,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // Le retour de la recherche s'affiche sous le champ qui l'a déclenchée, en
   // haut de la feuille — `error` reste réservé à la validation, près du bouton.
   const [importMsg, setImportMsg] = useState('');
+  // Établissement trouvé à l'adresse choisie : proposé, jamais imposé.
+  const [poiHint, setPoiHint] = useState(null);
   const [saving, setSaving] = useState(false);
   const [recurring, setRecurring] = useState(false);
 
@@ -59,6 +62,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setImportUrl('');
       setCandidates([]);
       setImportMsg('');
+      setPoiHint(null);
       if (isEdit) {
         setForm({
           title: editActivity.title || '',
@@ -121,6 +125,27 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg('');
   };
 
+  // Une adresse n'est pas un commerce : OSM n'a ni horaires ni site dessus.
+  // On regarde donc ce qui se trouve à ce point précis, et on le propose.
+  const offerPoiAt = async (place) => {
+    if (!place || place.openingHours || place.lat == null) return;
+    const poi = await poiAtCoords(place.lat, place.lon).catch(() => null);
+    if (poi?.title) setPoiHint(poi);
+  };
+
+  const usePoiHint = () => {
+    if (!poiHint) return;
+    setForm(f => ({
+      ...f,
+      title: poiHint.title,
+      category: poiHint.category || f.category,
+      openingHours: poiHint.openingHours || f.openingHours,
+      ...(poiHint.link && !f.link ? { link: poiHint.link } : {}),
+      ...(poiHint.lat != null ? { lat: poiHint.lat, lon: poiHint.lon } : {}),
+    }));
+    setPoiHint(null);
+  };
+
   const handleImport = async () => {
     const raw = importUrl.trim();
     setImporting(true);
@@ -161,7 +186,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       if (!found.length && tripDestination && !raw.includes(',')) {
         found = await searchPlaces(`${raw}, ${tripDestination}`, { lat: tripLat, lon: tripLon });
       }
-      if (found.length === 1) { applyResult(found[0], raw); return; }
+      if (found.length === 1) { applyResult(found[0], raw); offerPoiAt(found[0]); return; }
       if (found.length > 1) { setCandidates(found); return; }
       setImportMsg('Aucun lieu trouvé. Ajoute la ville — ex. « 5 rue Victor Hugo, Biarritz ».');
     } catch {
@@ -366,6 +391,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
             {importMsg && <p className="import-msg">{importMsg}</p>}
+            {poiHint && (
+              <button type="button" className="poi-hint" onClick={usePoiHint}>
+                <span className="poi-hint__icon" aria-hidden="true">💡</span>
+                <span className="poi-hint__text">
+                  <strong>{poiHint.title}</strong>
+                  <small>
+                    est à cette adresse
+                    {poiHint.openingHours ? ' · horaires connus' : ''} — utiliser ?
+                  </small>
+                </span>
+                <span className="poi-hint__cta">Oui</span>
+              </button>
+            )}
             {/* Plusieurs correspondances : on laisse choisir plutôt que de
                 deviner. Le tap remplit adresse, coordonnées et catégorie. */}
             {candidates.length > 0 && (
@@ -378,7 +416,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                     key={c.id}
                     type="button"
                     className="place-result"
-                    onClick={() => applyResult(c, c.title)}
+                    onClick={() => { applyResult(c, c.title); offerPoiAt(c); }}
                   >
                     <span className="place-result__emoji">{getCategoryMeta(c.category).emoji}</span>
                     <span className="place-result__text">
