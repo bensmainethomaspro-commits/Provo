@@ -109,7 +109,13 @@ export function useTrips() {
     setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
     // Sync display_name to profiles table so other trip members can see it
     if (uid && meta.display_name) {
-      supabase.from('profiles').upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' });
+      supabase.from('profiles')
+        .upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' })
+        .then(({ error }) => {
+          // Sans cette ligne, les autres membres du voyage voient un identifiant
+          // à la place du prénom, sans qu'aucune erreur ne le signale.
+          if (error) console.error('[Provo] Publication du profil refusée :', error.message);
+        });
     }
   }, []);
 
@@ -320,7 +326,14 @@ export function useTrips() {
 
   const deleteTrip = useCallback((tripId) => {
     setTrips(p => p.filter(t => t.id !== tripId));
-    if (userId) supabase.from('trips').delete().eq('id', tripId).then();
+    // Seul le propriétaire a le droit de supprimer : pour un collaborateur la
+    // requête est refusée en silence, le voyage disparaît de l'écran puis
+    // revient au chargement suivant. Au minimum, la trace apparaît en console.
+    if (userId) {
+      supabase.from('trips').delete().eq('id', tripId).then(({ error }) => {
+        if (error) console.error('[Provo] Suppression du voyage refusée :', error.message);
+      });
+    }
   }, [userId]);
 
   const getTripById = useCallback((id) => trips.find(t => t.id === id), [trips]);
