@@ -146,17 +146,32 @@ export function useTrips() {
       if (syncedHashRef.current[trip.id] === hash) return;
       clearTimeout(syncTimeouts.current[trip.id]);
       syncTimeouts.current[trip.id] = setTimeout(async () => {
+        // L'empreinte est posée avant l'écriture pour qu'un rendu intermédiaire
+        // ne relance pas la même requête. Mais si l'écriture échoue (hors ligne,
+        // RLS), la garder revient à déclarer synchronisé ce qui ne l'est pas :
+        // la modification ne repart jamais, et le nuage — resté en arrière —
+        // l'écrase au prochain chargement. On la retire donc en cas d'échec,
+        // pour que la prochaine modification du voyage la remonte avec elle.
         syncedHashRef.current[trip.id] = hash;
         if (remoteIdsRef.current.has(trip.id)) {
-          await supabase.from('trips')
+          const { error } = await supabase.from('trips')
             .update({ data: trip, updated_at: new Date().toISOString() })
             .eq('id', trip.id);
+          if (error) {
+            delete syncedHashRef.current[trip.id];
+            console.error('[Provo] Écriture du voyage refusée :', error.message);
+          }
         } else {
           const { error } = await supabase.from('trips').insert({
             id: trip.id, owner_id: userId,
             data: trip, updated_at: new Date().toISOString(),
           });
-          if (!error) remoteIdsRef.current.add(trip.id);
+          if (error) {
+            delete syncedHashRef.current[trip.id];
+            console.error('[Provo] Création du voyage refusée :', error.message);
+          } else {
+            remoteIdsRef.current.add(trip.id);
+          }
         }
       }, 700);
     });
