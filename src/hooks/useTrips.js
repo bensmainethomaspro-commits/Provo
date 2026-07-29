@@ -135,7 +135,16 @@ export function useTrips() {
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+    } catch (e) {
+      // Photos de couverture, captures et PDF sont stockés en base64 dans le
+      // voyage : le quota du navigateur (~5 Mo) se dépasse vite. L'écriture
+      // échoue alors pour tout le reste aussi, et ce qui n'est pas encore parti
+      // vers Supabase disparaît au rechargement. À défaut de mieux, ne plus
+      // avaler l'échec en silence.
+      console.error('[Provo] Sauvegarde locale impossible :', e?.name || e);
+    }
   }, [trips]);
 
   // ── Sync vers Supabase (debounced, 700ms) ────────────────────────────────
