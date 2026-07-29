@@ -27,7 +27,7 @@ export default function CompareModal({ activities, onClose, onChoose }) {
               <div className="compare-subtitle">{activities.length} activités · Tape pour choisir</div>
             </div>
           </div>
-          <button className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
         </div>
 
         <div className="compare-body">

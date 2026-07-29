@@ -42,7 +42,7 @@ export default function DayDetailModal({
               {stats.total > 0 && ` · ${formatPrice(stats.total)}`}
             </div>
           </div>
-          <button className="sheet__close" onClick={close}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
         </div>
 
         <div className="day-detail__body">
