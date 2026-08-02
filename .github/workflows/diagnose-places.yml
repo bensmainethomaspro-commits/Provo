@@ -51,9 +51,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-fallback.mjs
 
-      - name: Vérification de la fonction Edge en production
-        run: node scripts/diag-verify.mjs
-
       - name: Chaîne TikTok
         if: ${{ always() }}
         run: node scripts/diag-tiktok.mjs
+
+      - name: Vérification de la fonction Edge en production
+        run: node scripts/diag-verify.mjs
+
