@@ -68,7 +68,7 @@ async function edge(url) {
   finally { clearTimeout(t); }
 }
 
-console.log('Mesure effectuée sur la fonction Edge telle que déployée.');
+console.log('Mesure sur la fonction Edge déployée — contrôle de non-régression.');
 console.log('='.repeat(74));
 console.log('1 · Trouver des liens TikTok réels, hors de TikTok');
 console.log('='.repeat(74));
