@@ -13,6 +13,7 @@ on:
     paths:
       - 'scripts/diag-places.mjs'
       - 'scripts/diag-strategy.mjs'
+      - 'scripts/diag-fallback.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -38,5 +39,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-places.mjs ${{ inputs.mode || 'all' }}
 
+      # Stratégies : tranché (inverse 28, nom seul 57, nom+ville 64, Overpass 17).
       - name: Stratégies de remplissage + sondes Google et TikTok
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-strategy.mjs all
+
+      - name: Repli pour les lieux absents de l'index
+        run: node scripts/diag-fallback.mjs
