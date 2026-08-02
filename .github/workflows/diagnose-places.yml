@@ -15,6 +15,7 @@ on:
       - 'scripts/diag-strategy.mjs'
       - 'scripts/diag-fallback.mjs'
       - 'scripts/diag-verify.mjs'
+      - 'scripts/diag-tiktok.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -52,3 +53,7 @@ jobs:
 
       - name: Vérification de la fonction Edge en production
         run: node scripts/diag-verify.mjs
+
+      - name: Chaîne TikTok
+        if: ${{ always() }}
+        run: node scripts/diag-tiktok.mjs
