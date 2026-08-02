@@ -532,23 +532,16 @@ const HASHTAG_STOPLIST = new Set([
 // Géocodage strict : n'accepte que de vrais lieux (villes, régions, sites) pour
 // éviter les faux positifs quand on tente les hashtags.
 async function geocodePlaceStrict(query: string) {
-  const { signal, clear } = withTimeout(6000);
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`,
-      { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
-    );
-    clear();
-    if (!r.ok) return null;
-    const data = await r.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    const p = data[0];
-    if (!["place", "boundary", "tourism", "natural", "leisure", "waterway"].includes(p.class)) return null;
-    return shapePlace(p);
-  } catch {
-    clear();
-    return null;
-  }
+  const list = await nominatimSearch(query, 5);
+  // `pickBest` refuse déjà tout candidat dont ni le nom ni la voie ne
+  // correspondent : c'est ce qui empêche un hashtag de ramener n'importe quoi.
+  const p = pickBest(list, { name: query });
+  if (!p) return null;
+  // Un hashtag ne peut désigner qu'une ville, une région ou un site — jamais
+  // un cours d'eau ni un objet naturel quelconque, d'où « Günz » (une rivière
+  // allemande) apparue en titre d'un restaurant.
+  if (!["place", "boundary", "tourism", "leisure"].includes(p.class)) return null;
+  return shapePlace(p);
 }
 
 function hashtagCandidates(caption: string): string[] {
@@ -637,10 +630,13 @@ async function handleTikTok(rawUrl: string) {
   // légende, 2) sinon, hashtags qui géocodent vers un vrai lieu (#lisbonne…).
   const geoQuery = (ai?.location) || locationHint;
   let place = geoQuery ? await geocode(geoQuery) : null;
+  // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
+  // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
+  let placeFromTag = false;
   if (!place) {
     for (const tag of hashtagCandidates(caption)) {
       place = await geocodePlaceStrict(tag);
-      if (place) break;
+      if (place) { placeFromTag = true; break; }
     }
   }
   if (place) {
@@ -649,10 +645,11 @@ async function handleTikTok(rawUrl: string) {
     result.lon = place.lon;
     if (!ai?.category) result.category = categoryFromHashtags(caption) || place.category;
     // Le nom du lieu peut l'emporter sur une légende qui n'en est pas un —
-    // mais seulement si c'est un vrai établissement nommé. Une adresse ou une
-    // ville ferait un plus mauvais titre que la légende.
-    const vraiNom = Boolean(place.title) && !/^\d/.test(place.title) &&
-      !["place", "boundary", "highway"].includes(place.osmClass || "");
+    // mais seulement si c'est un vrai établissement nommé, désigné
+    // explicitement dans la légende. Une ville, une adresse, ou un lieu deviné
+    // depuis un hashtag feraient un plus mauvais titre que la légende.
+    const vraiNom = !placeFromTag && Boolean(place.title) && !/^\d/.test(place.title) &&
+      !["place", "boundary", "highway", "waterway", "natural"].includes(place.osmClass || "");
     if (!title || (!ai?.title && vraiNom && captionLooksLikeSentence(title))) {
       result.title = place.title;
     }
