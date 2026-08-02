@@ -6,6 +6,13 @@ name: Diagnostic — détection de lieux
 # fonction Edge. C'est le seul endroit où la mesure est possible.
 
 on:
+  # Sur une branche de travail : à chaque push du banc, pour itérer vite.
+  # Le déclenchement manuel n'est possible qu'une fois le fichier sur `main`.
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'scripts/diag-places.mjs'
+      - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
       mode:
@@ -24,4 +31,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node scripts/diag-places.mjs ${{ inputs.mode }}
+      - run: node scripts/diag-places.mjs ${{ inputs.mode || 'all' }}
