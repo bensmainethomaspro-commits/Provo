@@ -636,6 +636,9 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     if (ai.title) title = ai.title;
     if (ai.category && VALID_CATEGORIES.includes(ai.category)) category = ai.category;
   }
+  // Témoin d'activation : permet de vérifier que le secret est bien posé sans
+  // jamais lire la clé. Ne révèle rien d'autre que « le modèle a répondu ».
+  const modeleActif = ai !== null;
 
   const result: any = {
     title: title || (author ? `Idée de ${author}` : "Activité TikTok"),
@@ -644,6 +647,7 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     photoUrl: thumb,
     notes: caption ? caption.slice(0, 400) : "",
     source: "tiktok",
+    ...(modeleActif ? { modele: true } : {}),
   };
 
   // Localisation : 1) lieu suggéré par l'IA ou repéré (📍 / "à …") dans la
@@ -739,7 +743,10 @@ function origineAutorisee(req: Request): boolean {
 }
 
 async function classifyWithLLM(text: string, _kind: string) {
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
+  // Deux noms acceptés : le secret Supabase est parfois nommé d'après le
+  // libellé de la clé côté Anthropic. Une clé posée sous le mauvais nom donne
+  // un silence, pas une erreur — autant fermer ce piège.
+  const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
   if (!key || !text || text.length < 4) return null;
   const { signal, clear } = withTimeout(12000);
   try {
