@@ -583,15 +583,24 @@ export async function importFromGoogleMaps(url) {
 
   const cleanTitle = toTitleCase(placeName.replace(/\+/g, ' '));
 
-  // Prefer reverse geocoding when URL contains coordinates — gives accurate address
+  // Les coordonnées d'un lien Maps désignent un point, pas la fiche : le
+  // géocodage inverse y ramasse ce qui traîne (un immeuble, un pont). Le nom
+  // est dans l'URL — on cherche donc le nom, situé par les coordonnées, et on
+  // ne retombe sur l'inverse que si cette recherche ne donne rien.
+  // Mesuré sur six lieux : inverse seul 28 points, nom situé 64.
   const urlCoords = extractCoordsFromUrl(resolvedUrl) || extractCoordsFromUrl(cleaned);
+
+  const named = await fetchPlaceData(placeName, urlCoords || {}).catch(() => null);
+  if (named && (!urlCoords || haversineKm(urlCoords.lat, urlCoords.lon, named.lat, named.lon) < 25)) {
+    return { ...named, title: named.title || cleanTitle, link: url };
+  }
+
   if (urlCoords) {
     const revData = await reverseGeocode(urlCoords.lat, urlCoords.lon).catch(() => null);
     if (revData) return { ...revData, title: cleanTitle, link: url };
   }
 
-  const placeData = await fetchPlaceData(placeName).catch(() => null);
-  if (placeData) return { ...placeData, title: placeData.title || cleanTitle, link: url };
+  if (named) return { ...named, title: named.title || cleanTitle, link: url };
   return { title: cleanTitle, link: url };
 }
 

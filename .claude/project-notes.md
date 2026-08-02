@@ -42,6 +42,27 @@ trace de ce qu'on a sciemment écarté.
 | E2 · Mesurer, pas deviner | `.github/workflows/diagnose-link.yml` |
 | F1 · Cache PWA | `vercel.json` |
 
+## Détection de lieux — ce qui a été mesuré
+
+Bancs dans `scripts/diag-*.mjs`, lancés par
+`.github/workflows/diagnose-places.yml`. Ne pas refaire ces mesures sans raison.
+
+| Question | Réponse mesurée |
+|---|---|
+| Nominatim est-il le maillon faible ? | **Non** — 24 lieux trouvés sur 27 (Photon : 25/27) |
+| Comment remplir une fiche depuis un lien Maps ? | **Nom + ville déduite des coordonnées** (64 pts) ≫ nom seul (57) ≫ géocodage inverse (28) |
+| Chercher le nom sans ville ? | **Dangereux** — « Da Enzo al 29 » ramène une rue au Brésil |
+| Overpass par nom en repli ? | **Écarté** — 504 sur deux requêtes sur trois, 9 s de latence |
+| Une page `share.google` porte-t-elle des coordonnées ? | **Non** — ni `@lat,lon`, ni JSON-LD, ni adresse. Le paramètre `q=` est le seul signal |
+| TikTok depuis un serveur ? | **Captcha** sur le HTML ; seul l'oEmbed répond |
+
+Conséquence tenue dans le code : les coordonnées d'un lien servent à *situer et
+vérifier* une recherche par nom, jamais à interroger la carte à l'aveugle.
+
+**Limite assumée :** un lieu absent d'OpenStreetMap ne sera jamais complété
+(vérifié sur « Agapii Mou », Athènes). L'app garde le titre et le lien, et le
+dit franchement plutôt que de laisser croire à une panne.
+
 ## Écarté sciemment
 
 - **Google Places** (F3) — carte bancaire obligatoire depuis mars 2025, et CGU

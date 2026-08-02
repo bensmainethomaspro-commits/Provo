@@ -177,11 +177,20 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               // Le nom du lien fait foi : il vient de la fiche Google.
               applyResult({ ...found[0], title: result.title, link: result.link || raw }, raw);
             } else if (found.length > 1) {
-              setCandidates(found);
-              setImportMsg(`« ${result.title} » importé — précise lequel c'est.`);
+              const net = (found[0]._score ?? 0) - (found[1]._score ?? 0) >= 5;
+              if (net) {
+                applyResult({ ...found[0], title: result.title, link: result.link || raw }, raw);
+              } else {
+                setCandidates(found);
+                setImportMsg(`« ${result.title} » importé — précise lequel c'est.`);
+              }
             } else {
-              setImportMsg(`« ${result.title} » importé ✓ — adresse introuvable, `
-                + `retape le nom avec la ville pour la compléter.`);
+              // Le lieu existe chez Google mais pas dans les données
+              // cartographiques ouvertes sur lesquelles l'app s'appuie. Le dire
+              // franchement vaut mieux que laisser croire à une panne.
+              setImportMsg(`« ${result.title} » importé ✓ — mais ce lieu n'est pas `
+                + `répertorié dans la carte ouverte, l'adresse et les horaires `
+                + `restent à compléter à la main.`);
             }
             return;
           }
@@ -208,8 +217,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         found = await searchPlaces(`${raw}, ${tripDestination}`, { lat: tripLat, lon: tripLon });
       }
       if (found.length === 1) { applyResult(found[0], raw); offerPoiAt(found[0]); return; }
-      if (found.length > 1) { setCandidates(found); return; }
-      setImportMsg('Aucun lieu trouvé. Ajoute la ville — ex. « 5 rue Victor Hugo, Biarritz ».');
+      if (found.length > 1) {
+        // Les candidats sont classés. Quand le premier détache nettement les
+        // autres, faire choisir n'apporte rien : on remplit, l'utilisateur
+        // corrige s'il le faut. On ne fait choisir que sur une vraie ambiguïté.
+        const net = (found[0]._score ?? 0) - (found[1]._score ?? 0) >= 5;
+        if (net) { applyResult(found[0], raw); offerPoiAt(found[0]); return; }
+        setCandidates(found);
+        return;
+      }
+      setImportMsg(tripDestination
+        ? `Aucun lieu trouvé, ni à ${tripDestination} ni ailleurs. Précise la ville — `
+          + 'ex. « 5 rue Victor Hugo, Biarritz ».'
+        : 'Aucun lieu trouvé. Ajoute la ville — ex. « 5 rue Victor Hugo, Biarritz ».');
     } catch {
       setImportMsg('Erreur réseau. Vérifie ta connexion et réessaie.');
     } finally {
