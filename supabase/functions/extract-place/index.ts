@@ -337,12 +337,28 @@ function extractMapsName(s: string): string | null {
 // l'application Google, il atterrit sur une page de *recherche* avec un panneau
 // de connaissances. Aucun /maps/place/, aucun @lat,lon — d'où l'échec. On y
 // récupère quand même le nom du lieu, que Nominatim géocode ensuite.
+// Google ne met pas toujours le nom du lieu dans `q=` : il y glisse parfois un
+// jeton de continuation opaque. Mesuré sur un lien partagé réel, qui a donné
+// « EhAmAB8UFTcGCj9f3UFPv9qGGLS3vtMGIjC4PObIgUP6… » en guise de titre.
+// Un nom de lieu contient des espaces, ou reste court.
+function looksLikeOpaqueToken(s: string): boolean {
+  const t = s.trim();
+  if (!t) return true;
+  if (/\s/.test(t)) return false;
+  return t.length > 24 && /^[A-Za-z0-9_\-]+$/.test(t) && /\d/.test(t) && /[A-Z]/.test(t);
+}
+
 function extractGoogleSearchName(finalUrl: string, html: string): string | null {
   try {
     const u = new URL(finalUrl);
     if (/\/search/.test(u.pathname)) {
       const q = u.searchParams.get("q");
-      if (q && !/^-?\d+\.\d+,/.test(q)) return decodeURIComponent(q.replace(/\+/g, " ")).trim();
+      if (q && !/^-?\d+\.\d+,/.test(q)) {
+        const name = decodeURIComponent(q.replace(/\+/g, " ")).trim();
+        // Un jeton opaque ferait un titre absurde : on préfère le <title> ou
+        // le JSON-LD ci-dessous, quitte à ne rien rendre du tout.
+        if (name && !looksLikeOpaqueToken(name)) return name;
+      }
     }
   } catch { /* ignore */ }
 
