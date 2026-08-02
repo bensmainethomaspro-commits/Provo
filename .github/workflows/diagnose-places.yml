@@ -12,6 +12,7 @@ on:
     branches: ['claude/**']
     paths:
       - 'scripts/diag-places.mjs'
+      - 'scripts/diag-strategy.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -31,4 +32,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node scripts/diag-places.mjs ${{ inputs.mode || 'all' }}
+      # Comparaison des géocodeurs : déjà tranchée (Nominatim 89 %, Photon 93 %).
+      # On ne la relance qu'à la demande.
+      - name: Comparaison des géocodeurs
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/diag-places.mjs ${{ inputs.mode || 'all' }}
+
+      - name: Stratégies de remplissage + sondes Google et TikTok
+        run: node scripts/diag-strategy.mjs all
