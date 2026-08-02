@@ -1,0 +1,27 @@
+name: Diagnostic — détection de lieux
+
+# Banc de mesure de la détection de lieux, lancé à la demande.
+# L'environnement de développement ne joint aucun hôte externe ; un exécuteur
+# GitHub a un vrai réseau et sort par une IP de centre de données, comme la
+# fonction Edge. C'est le seul endroit où la mesure est possible.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'search · links · all'
+        required: true
+        default: 'all'
+        type: choice
+        options: [all, search, links]
+
+jobs:
+  mesurer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/diag-places.mjs ${{ inputs.mode }}
