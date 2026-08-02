@@ -130,11 +130,26 @@ function pickBest(
 
     // Le nom demandé doit se retrouver dans le résultat, dans un sens ou dans
     // l'autre (« Da Enzo al 29 » → « Da Enzo »).
+    let nameHit = false;
     if (wanted) {
       const cand = normalize([p.name, p.namedetails?.["name:en"], p.namedetails?.int_name].filter(Boolean).join(" "));
-      if (cand && (cand.includes(wanted) || wanted.includes(cand))) s += 5;
-      else if (cand && wanted.split(" ").some((w) => w.length > 3 && cand.includes(w))) s += 2;
+      if (cand && (cand.includes(wanted) || wanted.includes(cand))) { s += 5; nameHit = true; }
+      else if (cand && wanted.split(" ").some((w) => w.length > 3 && cand.includes(w))) { s += 2; nameHit = true; }
     }
+
+    // Une adresse ne porte pas de nom : c'est la voie qui doit correspondre.
+    const road = normalize(a.road || a.pedestrian || a.footway || "");
+    const addrHit = Boolean(
+      road && wanted && wanted.split(" ").some((w) => w.length > 3 && road.includes(w)),
+    );
+    if (addrHit) s += 3;
+
+    // Sans coordonnées pour vérifier, et sans que le nom ni la voie ne
+    // correspondent, il n'y a aucune preuve que ce résultat soit le bon.
+    // Mesuré : « 3823 22nd Ave kensoha Wi » ramenait « Delhi », et
+    // « Perfect restaurant for Gen-Zs » ramenait « Günz ». Mieux vaut ne rien
+    // rendre que rendre n'importe quoi.
+    if (wanted && !coords && !nameHit && !addrHit) continue;
 
     // Proximité : décisive quand le lien porte des coordonnées. Au-delà de
     // 25 km, c'est un homonyme sur un autre continent — on l'écarte.
@@ -219,6 +234,9 @@ function shapePlace(p: any) {
     lat: parseFloat(p.lat),
     lon: parseFloat(p.lon),
     openingHours: ex.opening_hours || "",
+    // Sert à décider si ce résultat est un établissement nommé ou un simple
+    // point d'adresse. Le client ignore ce champ.
+    osmClass: String(p.class || ""),
     ...(price ? { price } : {}),
   };
 }
@@ -630,8 +648,12 @@ async function handleTikTok(rawUrl: string) {
     result.lat = place.lat;
     result.lon = place.lon;
     if (!ai?.category) result.category = categoryFromHashtags(caption) || place.category;
-    // Le nom du lieu l'emporte sur une légende qui n'en est pas un.
-    if (!title || (!ai?.title && place.title && captionLooksLikeSentence(title))) {
+    // Le nom du lieu peut l'emporter sur une légende qui n'en est pas un —
+    // mais seulement si c'est un vrai établissement nommé. Une adresse ou une
+    // ville ferait un plus mauvais titre que la légende.
+    const vraiNom = Boolean(place.title) && !/^\d/.test(place.title) &&
+      !["place", "boundary", "highway"].includes(place.osmClass || "");
+    if (!title || (!ai?.title && vraiNom && captionLooksLikeSentence(title))) {
       result.title = place.title;
     }
   }
