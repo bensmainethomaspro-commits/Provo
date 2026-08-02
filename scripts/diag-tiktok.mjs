@@ -94,10 +94,24 @@ for (const l of liens) {
 console.log('\n' + '='.repeat(74));
 console.log('3 · Chaîne complète via la fonction Edge');
 console.log('='.repeat(74));
+let avecModele = 0;
 for (const l of liens) {
   const e = await edge(l);
-  console.log(`  ${l.slice(0, 58)}\n     → ${e.status} ${e.body.slice(0, 320)}`);
+  let r = null;
+  try { r = JSON.parse(e.body)?.result; } catch { /* corps illisible */ }
+  if (r?.modele) avecModele++;
+  console.log(`  ${l.slice(0, 58)}`);
+  console.log(`     → ${e.status}  titre: « ${r?.title || '—'} »  cat: ${r?.category || '—'}`
+    + `  lieu: ${r?.address || '—'}  ${r?.modele ? '🤖 modèle' : '⚙️  règles'}`);
 }
+
+console.log('\n' + '='.repeat(74));
+console.log(avecModele > 0
+  ? `MODÈLE ACTIF — ${avecModele}/${liens.length} légendes lues par le modèle.`
+  : 'MODÈLE DORMANT — aucun appel. Le secret ANTHROPIC_API_KEY (ou\n'
+    + 'ANTHROPIC_API_KEY_TB) n\'est pas posé dans Supabase › Edge Functions ›\n'
+    + 'Secrets, ou la fonction n\'a pas été redéployée depuis.');
+console.log('='.repeat(74));
 
 if (!liens.length) {
   console.log('\n⚠️  Sans lien réel, la chaîne TikTok reste NON VÉRIFIÉE.');
