@@ -1,0 +1,66 @@
+name: Diagnostic — détection de lieux
+
+# Banc de mesure de la détection de lieux, lancé à la demande.
+# L'environnement de développement ne joint aucun hôte externe ; un exécuteur
+# GitHub a un vrai réseau et sort par une IP de centre de données, comme la
+# fonction Edge. C'est le seul endroit où la mesure est possible.
+
+on:
+  # Sur une branche de travail : à chaque push du banc, pour itérer vite.
+  # Le déclenchement manuel n'est possible qu'une fois le fichier sur `main`.
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'scripts/diag-places.mjs'
+      - 'scripts/diag-strategy.mjs'
+      - 'scripts/diag-fallback.mjs'
+      - 'scripts/diag-verify.mjs'
+      - 'scripts/diag-tiktok.mjs'
+      - 'scripts/diag-instagram.mjs'
+      - '.github/workflows/diagnose-places.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'search · links · all'
+        required: true
+        default: 'all'
+        type: choice
+        options: [all, search, links]
+
+jobs:
+  mesurer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Comparaison des géocodeurs : déjà tranchée (Nominatim 89 %, Photon 93 %).
+      # On ne la relance qu'à la demande.
+      - name: Comparaison des géocodeurs
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/diag-places.mjs ${{ inputs.mode || 'all' }}
+
+      # Stratégies : tranché (inverse 28, nom seul 57, nom+ville 64, Overpass 17).
+      - name: Stratégies de remplissage + sondes Google et TikTok
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/diag-strategy.mjs all
+
+      # Repli : tranché (Overpass par nom → 504 deux fois sur trois, écarté).
+      - name: Repli pour les lieux absents de l'index
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/diag-fallback.mjs
+
+      - name: Chaîne TikTok
+        if: ${{ always() }}
+        run: node scripts/diag-tiktok.mjs
+
+      - name: Vérification de la fonction Edge en production
+        run: node scripts/diag-verify.mjs
+
+      # Instagram : tranché deux fois (page sans balises, oEmbed sans jeton
+      # refusé, proxys bloqués). À la demande seulement.
+      - name: Instagram est-il joignable depuis un serveur ?
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/diag-instagram.mjs
