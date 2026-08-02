@@ -154,7 +154,7 @@ export default function SpinWheel({ travelers, onClose }) {
       <div className="spinwheel-modal">
         <div className="spinwheel-modal__header">
           <h2 className="spinwheel-modal__title">🎰 Roue de la fortune</h2>
-          <button className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
         </div>
 
         <div className="spinwheel-body">

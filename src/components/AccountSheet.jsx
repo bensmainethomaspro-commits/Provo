@@ -51,7 +51,7 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
       <div className="sheet sheet--account">
         <div className="sheet__header">
           <h2 className="sheet__title">👤 Mon compte</h2>
-          <button className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
         </div>
         <div className="sheet__body">
 

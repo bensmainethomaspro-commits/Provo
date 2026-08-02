@@ -78,7 +78,7 @@ export default function TripRecap({ trip, onClose }) {
         <div className="sheet__handle" />
         <div className="sheet__header">
           <h2 className="sheet__title">📊 Bilan du voyage</h2>
-          <button className="sheet__close" onClick={close}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
         </div>
         <div className="sheet__body">
 

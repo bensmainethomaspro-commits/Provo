@@ -326,7 +326,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         <div className="sheet__handle" />
         <div className="sheet__header">
           <h2 className="sheet__title">{isEdit ? '✏️ Modifier' : '+ Nouvelle activité'}</h2>
-          <button className="sheet__close" onClick={close}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
         </div>
 
         <div className="sheet__body">

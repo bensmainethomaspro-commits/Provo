@@ -109,7 +109,13 @@ export function useTrips() {
     setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
     // Sync display_name to profiles table so other trip members can see it
     if (uid && meta.display_name) {
-      supabase.from('profiles').upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' });
+      supabase.from('profiles')
+        .upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' })
+        .then(({ error }) => {
+          // Sans cette ligne, les autres membres du voyage voient un identifiant
+          // à la place du prénom, sans qu'aucune erreur ne le signale.
+          if (error) console.error('[Provo] Publication du profil refusée :', error.message);
+        });
     }
   }, []);
 
@@ -135,7 +141,16 @@ export function useTrips() {
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trips)); } catch {}
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+    } catch (e) {
+      // Photos de couverture, captures et PDF sont stockés en base64 dans le
+      // voyage : le quota du navigateur (~5 Mo) se dépasse vite. L'écriture
+      // échoue alors pour tout le reste aussi, et ce qui n'est pas encore parti
+      // vers Supabase disparaît au rechargement. À défaut de mieux, ne plus
+      // avaler l'échec en silence.
+      console.error('[Provo] Sauvegarde locale impossible :', e?.name || e);
+    }
   }, [trips]);
 
   // ── Sync vers Supabase (debounced, 700ms) ────────────────────────────────
@@ -146,17 +161,32 @@ export function useTrips() {
       if (syncedHashRef.current[trip.id] === hash) return;
       clearTimeout(syncTimeouts.current[trip.id]);
       syncTimeouts.current[trip.id] = setTimeout(async () => {
+        // L'empreinte est posée avant l'écriture pour qu'un rendu intermédiaire
+        // ne relance pas la même requête. Mais si l'écriture échoue (hors ligne,
+        // RLS), la garder revient à déclarer synchronisé ce qui ne l'est pas :
+        // la modification ne repart jamais, et le nuage — resté en arrière —
+        // l'écrase au prochain chargement. On la retire donc en cas d'échec,
+        // pour que la prochaine modification du voyage la remonte avec elle.
         syncedHashRef.current[trip.id] = hash;
         if (remoteIdsRef.current.has(trip.id)) {
-          await supabase.from('trips')
+          const { error } = await supabase.from('trips')
             .update({ data: trip, updated_at: new Date().toISOString() })
             .eq('id', trip.id);
+          if (error) {
+            delete syncedHashRef.current[trip.id];
+            console.error('[Provo] Écriture du voyage refusée :', error.message);
+          }
         } else {
           const { error } = await supabase.from('trips').insert({
             id: trip.id, owner_id: userId,
             data: trip, updated_at: new Date().toISOString(),
           });
-          if (!error) remoteIdsRef.current.add(trip.id);
+          if (error) {
+            delete syncedHashRef.current[trip.id];
+            console.error('[Provo] Création du voyage refusée :', error.message);
+          } else {
+            remoteIdsRef.current.add(trip.id);
+          }
         }
       }, 700);
     });
@@ -296,7 +326,14 @@ export function useTrips() {
 
   const deleteTrip = useCallback((tripId) => {
     setTrips(p => p.filter(t => t.id !== tripId));
-    if (userId) supabase.from('trips').delete().eq('id', tripId).then();
+    // Seul le propriétaire a le droit de supprimer : pour un collaborateur la
+    // requête est refusée en silence, le voyage disparaît de l'écran puis
+    // revient au chargement suivant. Au minimum, la trace apparaît en console.
+    if (userId) {
+      supabase.from('trips').delete().eq('id', tripId).then(({ error }) => {
+        if (error) console.error('[Provo] Suppression du voyage refusée :', error.message);
+      });
+    }
   }, [userId]);
 
   const getTripById = useCallback((id) => trips.find(t => t.id === id), [trips]);

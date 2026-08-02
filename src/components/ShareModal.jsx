@@ -46,7 +46,7 @@ export default function ShareModal({ trip, onClose }) {
       <div className="modal">
         <div className="modal__header">
           <h2 className="modal__title">🔗 Partager le voyage</h2>
-          <button className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
         </div>
         <div className="modal__body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 

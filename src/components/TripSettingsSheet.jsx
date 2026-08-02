@@ -82,7 +82,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
       <div className="sheet sheet--settings">
         <div className="sheet__header">
           <h2 className="sheet__title">⚙️ Paramètres du voyage</h2>
-          <button className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
         </div>
         <div className="sheet__body">
 
