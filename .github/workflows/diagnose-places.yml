@@ -16,6 +16,7 @@ on:
       - 'scripts/diag-fallback.mjs'
       - 'scripts/diag-verify.mjs'
       - 'scripts/diag-tiktok.mjs'
+      - 'scripts/diag-instagram.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -50,6 +51,9 @@ jobs:
       - name: Repli pour les lieux absents de l'index
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-fallback.mjs
+
+      - name: Instagram est-il joignable depuis un serveur ?
+        run: node scripts/diag-instagram.mjs
 
       - name: Chaîne TikTok
         if: ${{ always() }}
