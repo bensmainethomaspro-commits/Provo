@@ -592,7 +592,7 @@ function looksLikeCaptcha(html: string): boolean {
   return !metaTag(html, "og:description") && !metaTag(html, "og:title");
 }
 
-async function handleTikTok(rawUrl: string) {
+async function handleTikTok(rawUrl: string, permisIA = false) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
   // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
@@ -626,8 +626,12 @@ async function handleTikTok(rawUrl: string) {
   let title = cleanTitle(locationHint) || cleanTitle(caption);
   let category = categoryFromHashtags(caption) || "fun";
 
-  // Optional AI refinement of the messy caption.
-  const ai = await classifyWithLLM(caption, "tiktok").catch(() => null);
+  // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
+  // déjà « 📍 Bouillon Chartier, Paris » se lit sans lui, et chaque appel coûte.
+  const reglesSuffisent = Boolean(locationHint) && !captionLooksLikeSentence(title);
+  const ai = (permisIA && !reglesSuffisent)
+    ? await classifyWithLLM(caption, "tiktok").catch(() => null)
+    : null;
   if (ai) {
     if (ai.title) title = ai.title;
     if (ai.category && VALID_CATEGORIES.includes(ai.category)) category = ai.category;
@@ -704,7 +708,36 @@ async function handleGeneric(rawUrl: string) {
   return result;
 }
 
-// ── Optional Claude classification ────────────────────────────────────────
+// ── Lecture de la légende par un modèle ───────────────────────────────────
+//
+// C'est l'approche de Punkt AI : une légende de réseau social n'est pas un nom
+// de lieu, et aucune règle ne transforme « Perfect restaurant for Gen-Zs » en
+// adresse. Un modèle, si.
+//
+// La clé est payante : trois garde-fous encadrent l'appel.
+//   1. Seules les origines de l'app peuvent le déclencher — la clé publique
+//      Supabase est dans le bundle, donc lisible par n'importe qui.
+//   2. On n'appelle le modèle que si les règles ont échoué : une légende qui
+//      contient déjà « 📍 Bouillon Chartier, Paris » n'a besoin de personne.
+//   3. La réponse du modèle n'est jamais crue sur parole : le lieu qu'il
+//      propose repasse par le géocodeur, qui refuse ce qui ne correspond à rien.
+const ORIGINES_AUTORISEES = [
+  /^https:\/\/provo-tbens\.vercel\.app$/,
+  /^https:\/\/provo-[a-z0-9-]+-tbens\.vercel\.app$/,
+  /^https:\/\/localhost(:\d+)?$/,
+  /^http:\/\/localhost(:\d+)?$/,
+  /^capacitor:\/\//,
+  /^https:\/\/localhost$/,
+];
+
+function origineAutorisee(req: Request): boolean {
+  const o = req.headers.get("origin") || "";
+  // Une application native n'envoie pas d'origine : on ne la bloque pas, mais
+  // elle n'ouvre pas non plus la porte à un navigateur tiers.
+  if (!o) return true;
+  return ORIGINES_AUTORISEES.some((re) => re.test(o));
+}
+
 async function classifyWithLLM(text: string, _kind: string) {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key || !text || text.length < 4) return null;
@@ -722,11 +755,19 @@ async function classifyWithLLM(text: string, _kind: string) {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 256,
         system:
-          "You extract a single travel activity from a social-media caption. " +
-          "Reply ONLY with compact JSON: {\"title\":string,\"category\":one of " +
-          "[resto,visite,balade,plage,sport,repos,trajet,fun],\"location\":string}. " +
-          "title = short clean name of the place/activity (no hashtags/emoji, max 8 words). " +
-          "location = a geocodable 'Place, City, Country' if identifiable, else \"\".",
+          "Tu lis la légende d'une vidéo de voyage et tu en extrais UN lieu.\n" +
+          "Réponds UNIQUEMENT par du JSON compact :\n" +
+          '{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
+          '|"repos"|"trajet"|"fun","location":string,"confiance":"haute"|"basse"}\n' +
+          "title = le NOM de l'établissement ou du lieu, tel qu'on le chercherait " +
+          "sur une carte. Jamais une phrase, jamais un slogan, sans emoji ni " +
+          "hashtag. Si la légende ne nomme aucun lieu, renvoie \"\".\n" +
+          "location = « Nom, Ville, Pays » géocodable si tu l'identifies, sinon \"\".\n" +
+          "confiance = \"basse\" dès que tu devines. Mieux vaut une chaîne vide " +
+          "qu'une invention : un lieu faux est pire que pas de lieu.\n" +
+          "Exemples :\n" +
+          '« Perfect restaurant for Gen-Zs😂 #genz #fyp » → {"title":"","category":"resto","location":"","confiance":"basse"}\n' +
+          '« Bouillon Chartier, le moins cher de Paris » → {"title":"Bouillon Chartier","category":"resto","location":"Bouillon Chartier, Paris, France","confiance":"haute"}',
         messages: [{ role: "user", content: text.slice(0, 1500) }],
       }),
     });
@@ -737,10 +778,15 @@ async function classifyWithLLM(text: string, _kind: string) {
     const m = raw.match(/\{[\s\S]*\}/);
     if (!m) return null;
     const parsed = JSON.parse(m[0]);
+    const titre = typeof parsed.title === "string" ? parsed.title.trim() : "";
+    const lieu = typeof parsed.location === "string" ? parsed.location.trim() : "";
+    // Une réponse peu sûre ne sert qu'à classer : on ne lui laisse ni nommer
+    // l'activité ni la poser sur la carte.
+    const sur = parsed.confiance !== "basse";
     return {
-      title: typeof parsed.title === "string" ? parsed.title.trim() : "",
+      title: sur ? titre : "",
       category: typeof parsed.category === "string" ? parsed.category.trim() : "",
-      location: typeof parsed.location === "string" ? parsed.location.trim() : "",
+      location: sur ? lieu : "",
     };
   } catch {
     clear();
@@ -767,7 +813,7 @@ Deno.serve(async (req) => {
   try {
     let result = null;
     if (/tiktok\.com/i.test(url)) {
-      result = await handleTikTok(url);
+      result = await handleTikTok(url, origineAutorisee(req));
     } else if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google|share\.google/i.test(url)) {
       result = await handleGoogleMaps(url);
     } else {

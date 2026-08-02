@@ -55,6 +55,7 @@ Bancs dans `scripts/diag-*.mjs`, lancés par
 | Overpass par nom en repli ? | **Écarté** — 504 sur deux requêtes sur trois, 9 s de latence |
 | Une page `share.google` porte-t-elle des coordonnées ? | **Non** — ni `@lat,lon`, ni JSON-LD, ni adresse. Le paramètre `q=` est le seul signal |
 | TikTok depuis un serveur ? | **Captcha** sur le HTML ; seul l'oEmbed répond |
+| Instagram depuis un serveur ? | **Fermé** — page sans balises `og:`, oEmbed 404/400 sans jeton Facebook, proxys 403/521. Abandonné sciemment |
 
 Conséquence tenue dans le code : les coordonnées d'un lien servent à *situer et
 vérifier* une recherche par nom, jamais à interroger la carte à l'aveugle.
@@ -62,6 +63,23 @@ vérifier* une recherche par nom, jamais à interroger la carte à l'aveugle.
 **Limite assumée :** un lieu absent d'OpenStreetMap ne sera jamais complété
 (vérifié sur « Agapii Mou », Athènes). L'app garde le titre et le lien, et le
 dit franchement plutôt que de laisser croire à une panne.
+
+### Lecture des légendes par un modèle
+
+Inspiré de Punkt AI, qui fait lire la vidéo par une IA. Aucune règle ne
+transforme « Perfect restaurant for Gen-Zs » en nom de lieu ; un modèle, si.
+
+`classifyWithLLM` s'active dès que le secret **`ANTHROPIC_API_KEY`** est posé
+dans Supabase › Edge Functions › Secrets. Trois garde-fous, parce que la clé
+est payante et que la clé publique Supabase est lisible dans le bundle :
+
+1. Seules les origines de l'app déclenchent l'appel (`origineAutorisee`).
+2. Le modèle n'est appelé que si les règles ont échoué — une légende contenant
+   déjà « 📍 Bouillon Chartier, Paris » se lit sans lui.
+3. Sa réponse repasse par le géocodeur, qui refuse ce qui ne correspond à rien,
+   et une réponse marquée `confiance: "basse"` ne peut ni nommer ni situer.
+
+Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Écarté sciemment
 
