@@ -701,48 +701,141 @@ function _placePrice(p) {
  * @param {object} opts         {limit, lat, lon} — lat/lon = centre du voyage
  * @returns {Promise<Array>}    candidats, du plus pertinent au moins pertinent
  */
+const _norm = (s) => (s || '').toLowerCase().normalize('NFD')
+  .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+function _shapeNominatim(p) {
+  return {
+    id: `n${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
+    title: _placeTitle(p),
+    address: _placeAddress(p),
+    displayName: String(p.display_name || ''),
+    category: _placeCategory(p),
+    // Une adresse nue (pas de commerce nommé) : il n'y a rien à extraire
+    // dessus, mais il y a peut-être un établissement à ce point précis.
+    isAddress: !String(p.name || '').trim() || _isHouseNumber(p.name),
+    openingHours: (p.extratags || {}).opening_hours || '',
+    kind: `${p.class}/${p.type}`,
+    generic: ['place', 'highway', 'boundary', 'building', 'landuse'].includes(p.class),
+    lat: parseFloat(p.lat),
+    lon: parseFloat(p.lon),
+    ...(_placePrice(p) ? { price: _placePrice(p) } : {}),
+  };
+}
+
+// Photon : même fond de carte OpenStreetMap, mais un index de recherche
+// approximative. Mesuré : il trouve 25 lieux sur 27 là où Nominatim en trouve
+// 24, et surtout il rend des titres d'adresse propres (« 2 Rue du Helder »
+// plutôt que « 2 »). En revanche il ne porte ni horaires ni tarifs — d'où son
+// rôle de second recours, jamais de premier.
+function _shapePhoton(f) {
+  const p = f.properties || {};
+  const street = [p.housenumber, p.street].filter(Boolean).join(' ');
+  const city = p.city || p.town || p.village || p.county;
+  return {
+    id: `p${p.osm_type || 'x'}${p.osm_id || Math.random()}`,
+    title: p.name || street || city || '',
+    address: [street || p.district, city, p.country].filter(Boolean).join(', '),
+    displayName: [p.name, street, city, p.country].filter(Boolean).join(', '),
+    category: _placeCategory({ type: p.osm_value, class: p.osm_key, extratags: {} }),
+    isAddress: !p.name,
+    openingHours: '',
+    kind: `${p.osm_key}/${p.osm_value}`,
+    generic: ['place', 'highway', 'boundary', 'building', 'landuse'].includes(p.osm_key),
+    lat: f.geometry?.coordinates?.[1],
+    lon: f.geometry?.coordinates?.[0],
+  };
+}
+
+// Départager les candidats. Sans ce tri, on prend le premier venu : une
+// recherche « Da Enzo al 29 » ramène alors une rue au Brésil plutôt qu'un
+// restaurant à Rome.
+function _rank(list, { query = '', lat = null, lon = null } = {}) {
+  const wanted = _norm(query);
+  return list
+    .filter(r => Number.isFinite(r.lat) && Number.isFinite(r.lon))
+    .map(r => {
+      let s = 0;
+      if (r.title) s += 3;
+      if (!r.generic) s += 4;
+      if (r.openingHours) s += 2;
+      const cand = _norm(r.title);
+      if (wanted && cand) {
+        if (cand.includes(wanted) || wanted.includes(cand)) s += 5;
+        else if (wanted.split(' ').some(w => w.length > 3 && cand.includes(w))) s += 2;
+      }
+      if (lat != null && lon != null) {
+        const d = haversineKm(lat, lon, r.lat, r.lon);
+        s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : d > 500 ? -4 : 0;
+      }
+      return { ...r, _score: s };
+    })
+    .sort((a, b) => b._score - a._score);
+}
+
+/**
+ * Cherche un lieu à partir d'une adresse ou d'un nom, et renvoie plusieurs
+ * candidats classés — « 12 rue de la Paix » existe dans des dizaines de villes,
+ * il faut pouvoir choisir plutôt que subir le premier résultat.
+ *
+ * @param {string} query     adresse ou nom du lieu
+ * @param {object} opts      {limit, lat, lon} — lat/lon = ancrage du voyage
+ * @returns {Promise<Array>} candidats, du plus pertinent au moins pertinent
+ */
 export async function searchPlaces(query, { limit = 5, lat = null, lon = null } = {}) {
   const q = (query || '').trim();
   if (q.length < 3) return [];
+
   let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
-    + `&format=json&addressdetails=1&extratags=1&limit=${limit}`;
+    + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}`;
   // Biais géographique autour de la destination : une adresse tapée pendant un
   // voyage à Biarritz désigne presque toujours une rue de Biarritz.
   if (lat != null && lon != null) {
     const d = 0.7; // ≈ 75 km
     url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
   }
+
+  let out = [];
   try {
     const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data)) return [];
-    return data.map(p => ({
-      id: `${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
-      title: _placeTitle(p),
-      address: _placeAddress(p),
-      displayName: String(p.display_name || ''),
-      category: _placeCategory(p),
-      // Une adresse nue (pas de commerce nommé) : il n'y a rien à extraire
-      // dessus, mais il y a peut-être un établissement à ce point précis.
-      isAddress: !String(p.name || '').trim() || _isHouseNumber(p.name),
-      openingHours: (p.extratags || {}).opening_hours || '',
-      lat: parseFloat(p.lat),
-      lon: parseFloat(p.lon),
-      ...(_placePrice(p) ? { price: _placePrice(p) } : {}),
-    })).filter(r => Number.isFinite(r.lat));
-  } catch {
-    return [];
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) out = data.map(_shapeNominatim);
+    }
+  } catch { /* réseau : on tentera Photon */ }
+
+  // Second recours seulement si le premier n'a rien : Nominatim porte les
+  // horaires et les tarifs, on ne le remplace pas, on le complète.
+  if (!out.length) {
+    try {
+      let purl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}&lang=fr`;
+      if (lat != null && lon != null) purl += `&lat=${lat}&lon=${lon}`;
+      const res = await fetch(purl);
+      if (res.ok) {
+        const data = await res.json();
+        out = (data?.features || []).map(_shapePhoton).filter(r => r.title);
+      }
+    } catch { /* les deux ont échoué */ }
   }
+
+  return _rank(out, { query: q, lat, lon }).slice(0, limit);
 }
 
-export async function fetchPlaceData(query) {
+export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
   const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}`
+    + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5`,
+    { headers: { 'Accept-Language': 'fr' } }
   );
   const data = await res.json();
   if (!data?.length) return null;
-  const p = data[0];
+
+  // On demande cinq résultats et on garde le meilleur : avec `limit=1` le
+  // géocodeur impose son premier choix, qui est souvent une rue ou un immeuble
+  // plutôt que l'établissement cherché.
+  const ranked = _rank(data.map(_shapeNominatim), { query, lat, lon });
+  const winner = ranked[0];
+  const p = data.find(x => `n${x.osm_type || 'x'}${x.osm_id || x.place_id}` === winner?.id) || data[0];
   const ex = p.extratags || {};
 
   const address = _placeAddress(p);

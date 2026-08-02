@@ -15,6 +15,7 @@ import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import TripSearch from '../components/TripSearch';
 import { useWeather } from '../hooks/useWeather';
+import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
@@ -190,6 +191,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
   const trip = getTripById(tripId);
   const weather = useWeather(trip);
+  // Les recherches de lieu se situent sur la DESTINATION, jamais sur la
+  // première activité géolocalisée : un vol au départ ancrerait tout le
+  // voyage sur la ville de départ.
+  const anchor = useTripAnchor(trip?.destination);
   const { settings, setSetting } = useSettings();
   const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
@@ -583,7 +588,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     const complete = activity.address && activity.openingHours && activity.lat;
     if (complete) return;
     const found = await lookupPlace(activity.title, trip.destination,
-      { lat: weather?.lat, lon: weather?.lon });
+      { lat: anchor?.lat, lon: anchor?.lon });
     const patch = missingFieldsFrom(activity, found);
     if (patch) updateActivity(tripId, location, activityId, patch);
   };
@@ -1070,8 +1075,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         onMoveFromReserve={(actId) => { if (sheetDefaultDayId) undoableAssignFromReserve(sheetDefaultDayId, actId); }}
         tripTravelers={trip.tripTravelers || []}
         onAddToAllDays={(a) => addToAllDays(tripId, a)}
-        tripLat={weather?.lat}
-        tripLon={weather?.lon}
+        tripLat={anchor?.lat}
+        tripLon={anchor?.lon}
         tripDestination={trip.destination}
       />
 

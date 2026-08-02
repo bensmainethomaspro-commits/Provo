@@ -31,15 +31,48 @@ function buildAddress(a = {}) {
     .filter(Boolean).join(', ');
 }
 
+const GENERIC_CLASSES = ['place', 'highway', 'boundary', 'building', 'landuse'];
+
+function distKm(aLat, aLon, bLat, bLon) {
+  const R = 6371, rad = d => d * Math.PI / 180;
+  const dLat = rad(bLat - aLat), dLon = rad(bLon - aLon);
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 // ── Nominatim : très bon sur les lieux « nommés » (monuments, plages, parcs) ──
-async function searchNominatim(query) {
+// On demande cinq résultats et on garde le mieux renseigné, le plus proche du
+// voyage. Avec `limit=1`, le géocodeur imposait son premier choix — souvent une
+// rue ou un immeuble plutôt que l'établissement cherché.
+async function searchNominatim(query, lat = null, lon = null) {
   try {
     const url = `${NOMINATIM}?q=${encodeURIComponent(query)}`
-      + '&format=json&addressdetails=1&extratags=1&limit=1';
+      + '&format=json&addressdetails=1&extratags=1&limit=5';
     const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
     if (!res.ok) return null;
     const data = await res.json();
-    const p = Array.isArray(data) ? data[0] : null;
+    if (!Array.isArray(data) || !data.length) return null;
+
+    let p = null, best = -Infinity;
+    for (const c of data) {
+      const cLat = parseFloat(c.lat), cLon = parseFloat(c.lon);
+      if (!Number.isFinite(cLat)) continue;
+      const ex = c.extratags || {};
+      let s = 0;
+      if (c.name) s += 3;
+      if (!GENERIC_CLASSES.includes(c.class)) s += 4;
+      if (ex.opening_hours) s += 2;
+      if (ex.website || ex['contact:website']) s += 1;
+      if (c.address?.house_number) s += 1;
+      if (lat != null && lon != null) {
+        const d = distKm(lat, lon, cLat, cLon);
+        // Un homonyme à l'autre bout du monde n'est jamais le bon.
+        if (d > 500) continue;
+        s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : 0;
+      }
+      if (s > best) { best = s; p = c; }
+    }
     if (!p) return null;
 
     const ex = p.extratags || {};
@@ -186,7 +219,13 @@ export async function lookupPlace(title, near, coords = {}) {
   if (cache.has(key)) return cache.get(key);
 
   const run = async () => {
-    let found = await searchNominatim(query);
+    let found = await searchNominatim(query, coords.lat, coords.lon);
+    // Le nom seul, sans la ville, ramène des homonymes à l'autre bout du monde
+    // (« Da Enzo al 29 » → une rue au Brésil). On ne l'essaie qu'en dernier, et
+    // seulement si le voyage donne un point d'ancrage pour vérifier.
+    if (!found && near && coords.lat != null) {
+      found = await searchNominatim(name, coords.lat, coords.lon);
+    }
     // Complète (ou remplace) via Overpass si des informations clés manquent —
     // typiquement le cas des restaurants et cafés.
     if (!found || !found.openingHours || !found.address) {

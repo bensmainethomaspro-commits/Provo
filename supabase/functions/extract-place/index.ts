@@ -58,25 +58,129 @@ function categoryFromText(text: string): string | null {
   return null;
 }
 
-async function geocode(query: string) {
-  const { signal, clear } = withTimeout(8000);
+// Résultats bruts de Nominatim. On en demande plusieurs : le premier n'est pas
+// toujours le bon, et sans candidats on ne peut rien départager.
+async function nominatimSearch(query: string, limit = 5): Promise<any[]> {
+  const { signal, clear } = withTimeout(9000);
   try {
     const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}` +
+        `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}`,
       { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
     );
     clear();
-    if (!r.ok) return null;
+    if (!r.ok) return [];
     const data = await r.json();
-    if (!Array.isArray(data) || !data.length) return null;
-    return shapePlace(data[0]);
+    return Array.isArray(data) ? data : [];
   } catch {
     clear();
-    return null;
+    return [];
   }
 }
 
-async function reverseGeocode(lat: number, lon: number) {
+async function geocode(query: string) {
+  const list = await nominatimSearch(query, 5);
+  const best = pickBest(list, { name: query });
+  return best ? shapePlace(best) : null;
+}
+
+function cityOf(p: any): string {
+  const a = p?.address || {};
+  return a.city || a.town || a.village || a.municipality || a.county || a.state || "";
+}
+
+function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const R = 6371, toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat), dLon = toRad(bLon - aLon);
+  const h = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+const normalize = (s: string) =>
+  (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+// Un résultat vaut mieux qu'un autre s'il désigne un établissement nommé et
+// renseigné, et s'il se trouve là où on l'attend. Sans ce tri, `limit=1`
+// impose le premier venu — d'où les « défibrillateur » à la place d'une
+// basilique.
+function pickBest(
+  list: any[],
+  { name = "", coords = null as { lat: number; lon: number } | null } = {},
+): any | null {
+  if (!list?.length) return null;
+  const wanted = normalize(name);
+  let best: any = null, bestScore = -Infinity;
+
+  for (const p of list) {
+    const lat = parseFloat(p.lat), lon = parseFloat(p.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    let s = 0;
+    // Un établissement nommé, pas une rue ni un polygone administratif.
+    const generic = ["place", "highway", "boundary", "building", "landuse"].includes(p.class);
+    if (p.name) s += 3;
+    if (!generic) s += 4;
+
+    const ex = p.extratags || {}, a = p.address || {};
+    if (ex.opening_hours) s += 2;
+    if (ex.website || ex["contact:website"]) s += 1;
+    if (ex.phone || ex["contact:phone"]) s += 1;
+    if (a.house_number) s += 1;
+
+    // Le nom demandé doit se retrouver dans le résultat, dans un sens ou dans
+    // l'autre (« Da Enzo al 29 » → « Da Enzo »).
+    if (wanted) {
+      const cand = normalize([p.name, p.namedetails?.["name:en"], p.namedetails?.int_name].filter(Boolean).join(" "));
+      if (cand && (cand.includes(wanted) || wanted.includes(cand))) s += 5;
+      else if (cand && wanted.split(" ").some((w) => w.length > 3 && cand.includes(w))) s += 2;
+    }
+
+    // Proximité : décisive quand le lien porte des coordonnées. Au-delà de
+    // 25 km, c'est un homonyme sur un autre continent — on l'écarte.
+    if (coords) {
+      const d = distanceKm(coords.lat, coords.lon, lat, lon);
+      if (d > 25) continue;
+      s += d < 0.15 ? 6 : d < 1 ? 4 : d < 5 ? 2 : 0;
+    }
+
+    if (s > bestScore) { bestScore = s; best = p; }
+  }
+  return best;
+}
+
+/**
+ * Trouve la meilleure fiche pour un lieu.
+ *
+ * Mesuré sur six lieux réels (points cumulés, plus haut = mieux renseigné) :
+ *   géocodage inverse seul .......... 28   ← ce que faisait l'app
+ *   nom seul ........................ 57   (mais homonymes à l'autre bout du monde)
+ *   nom + ville déduite des coords ... 64   ← retenu
+ * Les coordonnées d'un lien Maps ne désignent pas la fiche : elles désignent un
+ * point. Le géocodage inverse y ramasse ce qui traîne — un immeuble, un pont,
+ * un défibrillateur. Le nom, lui, est dans l'URL : il sert à chercher, et les
+ * coordonnées ne servent qu'à situer la recherche puis à vérifier le résultat.
+ */
+async function resolvePlace(
+  name: string | null,
+  coords: { lat: number; lon: number } | null,
+) {
+  const reverse = coords ? await reverseGeocodeRaw(coords.lat, coords.lon) : null;
+  const city = reverse ? cityOf(reverse) : "";
+
+  if (name) {
+    const queries = city ? [`${name}, ${city}`, name] : [name];
+    for (const q of queries) {
+      const best = pickBest(await nominatimSearch(q, 5), { name, coords });
+      if (best) return shapePlace(best);
+    }
+  }
+
+  // Aucun nom exploitable, ou introuvable : le point reste la seule information.
+  return reverse ? shapePlace(reverse) : null;
+}
+
+async function reverseGeocodeRaw(lat: number, lon: number) {
   const { signal, clear } = withTimeout(8000);
   try {
     const r = await fetch(
@@ -87,7 +191,7 @@ async function reverseGeocode(lat: number, lon: number) {
     if (!r.ok) return null;
     const p = await r.json();
     if (!p?.display_name) return null;
-    return shapePlace(p);
+    return p;
   } catch {
     clear();
     return null;
@@ -259,35 +363,33 @@ async function handleGoogleMaps(rawUrl: string) {
   if (!name) name = extractGoogleSearchName(finalUrl, html);
 
   const coords = extractMapsCoords(haystack);
+  const clean = cleanTitle(name);
 
-  // Coordinates → reverse geocode gives the most accurate address + category.
-  if (coords) {
-    const place = await reverseGeocode(coords.lat, coords.lon);
-    if (place) {
-      return {
-        ...place,
-        title: cleanTitle(name) || place.title,
-        lat: coords.lat,
-        lon: coords.lon,
-        link: rawUrl,
-        source: "google_maps",
-      };
-    }
+  const place = await resolvePlace(name, coords);
+  if (place) {
+    // Quand la fiche trouvée est bien celle du lien, ses coordonnées sont plus
+    // précises que le centrage de la carte : on garde les siennes. Sinon on
+    // retombe sur le point du lien.
+    const named = Boolean(place.title) && place.title !== "Lieu";
     return {
-      title: cleanTitle(name) || "Lieu",
-      lat: coords.lat,
-      lon: coords.lon,
-      category: "visite",
+      ...place,
+      title: clean || place.title,
+      lat: named ? place.lat : (coords?.lat ?? place.lat),
+      lon: named ? place.lon : (coords?.lon ?? place.lon),
       link: rawUrl,
       source: "google_maps",
     };
   }
 
-  // No coordinates — geocode the place name.
-  if (name) {
-    const place = await geocode(name);
-    if (place) return { ...place, title: cleanTitle(name) || place.title, link: rawUrl, source: "google_maps" };
-    return { title: cleanTitle(name), category: "visite", link: rawUrl, source: "google_maps" };
+  // Ni fiche ni point : le nom seul vaut mieux que rien.
+  if (clean || coords) {
+    return {
+      title: clean || "Lieu",
+      category: "visite",
+      ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
+      link: rawUrl,
+      source: "google_maps",
+    };
   }
   return null;
 }
@@ -377,31 +479,50 @@ function hashtagCandidates(caption: string): string[] {
   return tags.filter(t => !HASHTAG_STOPLIST.has(t) && !/^\d+$/.test(t)).slice(0, 3);
 }
 
-async function handleTikTok(rawUrl: string) {
-  const { finalUrl, html: pageHtml } = await resolve(rawUrl);
-  const target = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
-
-  let caption = "";
-  let author = "";
-  let thumb = "";
+async function tiktokOembed(url: string) {
+  const { signal, clear } = withTimeout(8000);
   try {
-    const { signal, clear } = withTimeout(8000);
-    const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(target)}`, {
+    const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`, {
       headers: { "User-Agent": UA },
       signal,
     });
     clear();
-    if (r.ok) {
-      const d = await r.json();
-      caption = d.title || "";
-      author = d.author_name || "";
-      thumb = d.thumbnail_url || "";
-    }
-  } catch { /* ignore */ }
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d?.title && !d?.author_name) return null;
+    return { caption: d.title || "", author: d.author_name || "", thumb: d.thumbnail_url || "" };
+  } catch {
+    clear();
+    return null;
+  }
+}
 
-  // Fallback : l'oEmbed échoue parfois (posts photo, liens régionaux) — les
-  // balises og: de la page contiennent la légende et la vignette.
-  if (!caption && pageHtml) {
+// TikTok sert une page de vérification aux adresses de centre de données —
+// mesuré depuis un exécuteur : « captcha » présent, aucune balise og:. Toute
+// légende tirée d'une telle page serait du bruit.
+function looksLikeCaptcha(html: string): boolean {
+  if (!html) return true;
+  if (/captcha|verify_?page|security check|Vérification de sécurité/i.test(html)) return true;
+  return !metaTag(html, "og:description") && !metaTag(html, "og:title");
+}
+
+async function handleTikTok(rawUrl: string) {
+  const { finalUrl, html: pageHtml } = await resolve(rawUrl);
+  const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
+  // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
+  const bare = canonical.split("?")[0];
+
+  let caption = "", author = "", thumb = "";
+  // L'oEmbed est la seule voie fiable depuis un serveur : on l'essaie sur
+  // l'URL canonique, puis dépouillée, puis sur le lien brut.
+  for (const candidate of [...new Set([canonical, bare, rawUrl])]) {
+    const d = await tiktokOembed(candidate);
+    if (d) { caption = d.caption; author = d.author; thumb = d.thumb; break; }
+  }
+
+  // Repli sur les balises og: — utile quand l'app tourne côté navigateur, mais
+  // inutilisable si TikTok a répondu par une page de vérification.
+  if (!caption && !looksLikeCaptcha(pageHtml)) {
     caption = metaTag(pageHtml, "og:description") || "";
     if (!author) {
       const t = metaTag(pageHtml, "og:title");
@@ -410,6 +531,10 @@ async function handleTikTok(rawUrl: string) {
     }
     if (!thumb) thumb = metaTag(pageHtml, "og:image") || "";
   }
+
+  // Ni légende ni auteur : inutile de fabriquer une fiche vide, le client saura
+  // le dire mieux que nous.
+  if (!caption && !author) return null;
 
   const locationHint = extractLocationHint(caption);
   let title = cleanTitle(locationHint) || cleanTitle(caption);
