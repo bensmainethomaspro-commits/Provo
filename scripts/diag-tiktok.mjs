@@ -68,7 +68,10 @@ async function edge(url) {
   finally { clearTimeout(t); }
 }
 
-console.log('Mesure sur la fonction Edge déployée — contrôle final.');
+// Sans le secret ANTHROPIC_API_KEY, le modèle reste dormant : les titres
+// doivent rester ceux des règles. Avec la clé, ils devraient devenir des noms
+// de lieux — c'est le gain à vérifier après l'avoir posée.
+console.log('Mesure sur la fonction Edge déployée.');
 console.log('='.repeat(74));
 console.log('1 · Trouver des liens TikTok réels, hors de TikTok');
 console.log('='.repeat(74));
