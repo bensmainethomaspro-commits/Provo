@@ -14,6 +14,7 @@ on:
       - 'scripts/diag-places.mjs'
       - 'scripts/diag-strategy.mjs'
       - 'scripts/diag-fallback.mjs'
+      - 'scripts/diag-verify.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -44,5 +45,10 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-strategy.mjs all
 
+      # Repli : tranché (Overpass par nom → 504 deux fois sur trois, écarté).
       - name: Repli pour les lieux absents de l'index
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-fallback.mjs
+
+      - name: Vérification de la fonction Edge en production
+        run: node scripts/diag-verify.mjs
