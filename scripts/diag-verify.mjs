@@ -60,7 +60,12 @@ console.log('FONCTION EDGE EN PRODUCTION — ce qui arrive dans le formulaire');
 console.log('='.repeat(76));
 
 let complets = 0, total = 0, bonneCat = 0, avecHoraires = 0;
+const pause = ms => new Promise(r => setTimeout(r, ms));
 for (const [nom, url, catAttendue] of LIENS) {
+  // Chaque extraction déclenche jusqu'à trois requêtes Nominatim, qui limite à
+  // une par seconde. Sans cette pause, c'est le banc qui se fait jeter — et il
+  // le lit comme un échec du code.
+  await pause(4000);
   const r = await extract(url);
   console.log(ligne(nom, r));
   const p = r.body?.result;
