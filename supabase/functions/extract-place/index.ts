@@ -431,15 +431,74 @@ function cleanTitle(raw: string | null): string {
   return t.replace(/[\s,]+$/, "").trim();
 }
 
+// Voies (fr, en, es, it, de) — pour repérer une adresse écrite en clair.
+const STREET_WORDS =
+  "ave|avenue|st|street|rd|road|blvd|boulevard|dr|drive|lane|ln|way|hwy" +
+  "|rue|avenue|boulevard|impasse|chemin|quai|place|allée|allee|cours" +
+  "|via|viale|piazza|corso|calle|carrer|avenida|plaza|paseo" +
+  "|strasse|straße|str|weg|platz";
+
+// Une légende continue après l'adresse : « … Kenosha WI Open Monday-Saturday »,
+// « chez Da Enzo hier soir ». Ce qui suit n'est pas du lieu et fausse le
+// géocodage — on coupe au premier mot qui parle d'autre chose.
+const NOISE_AFTER =
+  /\b(open|ouvert|closed|ferm[ée]|hours?|horaires?|reservation|r[ée]servation|menu|prix|price|from|d[èe]s|hier|demain|aujourd|tonight|today|now|maintenant|mon|tues?|wed|thur?s?|fri|sat|sun|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/iu;
+
+function trimNoise(s: string): string {
+  const m = s.match(NOISE_AFTER);
+  const cut = m?.index != null ? s.slice(0, m.index) : s;
+  return cut.replace(/\s+/g, " ").trim().replace(/[\s,\-–—]+$/, "");
+}
+
 function extractLocationHint(caption: string): string | null {
   // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
   // stays clean instead of swallowing the rest of the caption.
   const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
-  if (pin) return pin[1].replace(/\s+/g, " ").trim().replace(/[\s,]+$/, "");
-  // "at <Place>" / "à <Place>"
-  const at = caption.match(/(?:^|\s)(?:at|à|chez|in)\s+([A-ZÀ-Ý][\p{L}'’\- ]{2,50})/u);
-  if (at) return at[1].trim();
+  if (pin) return trimNoise(pin[1]) || null;
+
+  // Une adresse écrite en clair. Deux ordres selon la langue, et il faut les
+  // deux : « 12 rue de Rivoli » (numéro, voie, nom) en français, espagnol et
+  // italien ; « 3823 22nd Ave » (numéro, nom, voie) en anglais et allemand.
+  // Mesuré sur de vraies légendes TikTok — c'est le cas le plus fréquent, et
+  // l'ancienne règle le manquait en exigeant une majuscule après « at ».
+  const addrFr = caption.match(
+    new RegExp(
+      `\\b(\\d{1,5}\\s*(?:bis|ter)?\\s+(?:${STREET_WORDS})\\s+[\\p{L}][\\p{L}\\p{N}\\s,'’.\\-]{2,45})`,
+      "iu",
+    ),
+  );
+  if (addrFr) return trimNoise(addrFr[1]) || null;
+
+  const addrEn = caption.match(
+    new RegExp(
+      `\\b(\\d{1,5}\\s+[\\p{L}\\p{N}'’.\\-]+(?:\\s+[\\p{L}\\p{N}'’.\\-]+){0,3}\\s+(?:${STREET_WORDS})\\b[\\p{L}\\p{N}\\s,'’.\\-]{0,40})`,
+      "iu",
+    ),
+  );
+  if (addrEn) return trimNoise(addrEn[1]) || null;
+
+  // « rue de Rivoli, Paris » — la voie d'abord, le numéro absent.
+  const street = caption.match(
+    new RegExp(`\\b((?:${STREET_WORDS})\\s+[\\p{L}][\\p{L}\\p{N}\\s'’.\\-]{2,40})`, "iu"),
+  );
+  if (street) return trimNoise(street[1]) || null;
+
+  // "at <Place>" / "à <Place>" — un nom propre, ou un numéro de rue.
+  const at = caption.match(
+    /(?:^|\s)(?:located\s+at|at|à|chez|dans|in|sur)\s+([A-ZÀ-Ý\d][\p{L}\p{N}'’\- ]{2,50})/u,
+  );
+  if (at) return trimNoise(at[1]) || null;
   return null;
+}
+
+// Une légende n'est pas un nom de lieu : « Located at 3823 22nd Ave… » ou
+// « Perfect restaurant for Gen-Zs » font de mauvais titres. Quand la légende
+// ressemble à une phrase et qu'on a identifié le lieu, le nom du lieu vaut
+// mieux.
+function captionLooksLikeSentence(t: string): boolean {
+  if (!t) return true;
+  if (t.split(/\s+/).length > 6) return true;
+  return /^(located|situé|situe|retrouvez|find|go|allez|venez|on\b|the\b|le\b|la\b|perfect|best|meilleur)/i.test(t);
 }
 
 // Hashtags trop génériques pour désigner un lieu — ne jamais les géocoder.
@@ -571,7 +630,10 @@ async function handleTikTok(rawUrl: string) {
     result.lat = place.lat;
     result.lon = place.lon;
     if (!ai?.category) result.category = categoryFromHashtags(caption) || place.category;
-    if (!title) result.title = place.title;
+    // Le nom du lieu l'emporte sur une légende qui n'en est pas un.
+    if (!title || (!ai?.title && place.title && captionLooksLikeSentence(title))) {
+      result.title = place.title;
+    }
   }
   return result;
 }
