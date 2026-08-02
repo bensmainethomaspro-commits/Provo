@@ -59,5 +59,8 @@ jobs:
       - name: Vérification de la fonction Edge en production
         run: node scripts/diag-verify.mjs
 
+      # Instagram : tranché deux fois (page sans balises, oEmbed sans jeton
+      # refusé, proxys bloqués). À la demande seulement.
       - name: Instagram est-il joignable depuis un serveur ?
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-instagram.mjs
