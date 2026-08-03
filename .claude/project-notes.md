@@ -120,6 +120,24 @@ browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMo
 Le thème se bascule **par le menu `⋯`**, pas par `localStorage` : `addInitScript`
 réécrit la clé à chaque rechargement.
 
+Puis, **avant toute livraison qui touche l'interface** :
+
+```bash
+npm run verif-ui
+```
+
+`/verif-ui` mesure ce qu'un coup d'œil ne tranche pas — contraste WCAG, cibles
+de 44 px, débordement horizontal, action passée sous la ligne de flottaison,
+boutons sans nom accessible, erreurs JS — sur les sept écrans principaux, dans
+les deux thèmes. Il complète `/audit`, qui juge et propose ; lui ne fait que
+compter. Le jeu de données de référence est `scripts/ui-fixture.mjs` : le même
+voyage à chaque exécution, pour que deux mesures soient comparables.
+
+Le contraste n'est calculé que sur fond **uni** : sur un dégradé ou une photo,
+la couleur derrière le texte dépend de l'endroit exact où il tombe. Ces cas
+sortent dans une liste séparée, non comptée en défaut. Un outil qui invente des
+défauts finit par ne plus être lu.
+
 ## Mesurer ce que le bac à sable ne peut pas joindre
 
 La politique réseau de l'environnement de développement **bloque `share.google`

@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "verif-ui": "node scripts/verif-ui.mjs",
     "sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android"
   },
