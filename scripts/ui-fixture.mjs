@@ -26,11 +26,16 @@ export const trip = {
   id: 'tr1', name: 'Vienne', destination: 'Vienne', emoji: '🇦🇹', coverPhoto: null,
   travelers: 2, initialBudget: 900, startDate: day(0), endDate: day(5),
   createdAt: new Date().toISOString(), packingList: [],
+  // Forme exacte attendue par ExpensesTab : `payerId` / `participantIds` /
+  // `description`. Une fixture approximative faisait planter l'onglet, et
+  // /verif-ui mesurait donc un écran d'erreur en croyant mesurer les dépenses.
   expenses: [
-    { id: 'e1', label: 'Billets de train', amount: 148, category: 'transport',
-      paidBy: 't1', date: day(0), sharedWith: ['t1', 't2'] },
-    { id: 'e2', label: 'Dîner Figlmüller', amount: 52.4, category: 'resto',
-      paidBy: 't2', date: day(1), sharedWith: ['t1', 't2'] },
+    { id: 'e1', description: 'Billets de train', amount: 148, eurAmount: 148,
+      currency: 'EUR', expenseCategory: 'transport',
+      payerId: 't1', date: day(0), participantIds: ['t1', 't2'] },
+    { id: 'e2', description: 'Dîner Figlmüller', amount: 52.4, eurAmount: 52.4,
+      currency: 'EUR', expenseCategory: 'resto',
+      payerId: 't2', date: day(1), participantIds: ['t1', 't2'] },
   ],
   tripTravelers: [{ id: 't1', name: 'Thomas', emoji: '🧔' }, { id: 't2', name: 'Léa', emoji: '👩' }],
   tripNotes: 'Vol AB1234 — 14h30 Terminal 2',

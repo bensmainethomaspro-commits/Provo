@@ -71,8 +71,8 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         <span className="dashboard__logo-icon">🧳</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
-          <RefreshButton />
-          <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
+          <RefreshButton className="btn btn--ghost-white btn--round" />
+          <button className="btn btn--ghost-white btn--round" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
           {/* Seulement là où le bouton installe vraiment. Sur iOS il ne pouvait
