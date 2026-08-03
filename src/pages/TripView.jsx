@@ -1115,7 +1115,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
           <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
-            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} onOpenActivity={openActivityFromMap} />
+            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} accommodationLat={trip.accommodationLat} accommodationLon={trip.accommodationLon} onOpenActivity={openActivityFromMap} />
           </Suspense>
         )}
       </div>

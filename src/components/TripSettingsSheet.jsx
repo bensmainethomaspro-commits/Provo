@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { localiserHebergement } from '../utils/geocodeLodging';
 
 const TRIP_COLORS = [
   { value: '#35A7DD', label: 'Bleu clair' },
@@ -22,6 +23,30 @@ const RECURRING_PRESETS = [
 
 export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate, enableCollaboration, userId, tripMembers, currentUserId, onRemoveMember }) {
   const [newName, setNewName] = useState('');
+  // État de la localisation de l'hébergement : null tant qu'on n'a rien tenté,
+  // puis 'recherche' | 'ok' | 'introuvable'.
+  const [etatLieu, setEtatLieu] = useState(
+    () => (trip?.accommodationLat != null ? 'ok' : null)
+  );
+
+  // Simple gestionnaire d'événement, appelé quand on quitte le champ : rien à
+  // mémoriser, et le mémoriser obligerait à lister tout `trip` en dépendance.
+  const localiser = async (valeur) => {
+    const adresse = (valeur || '').trim();
+    if (!adresse) { setEtatLieu(null); return; }
+    setEtatLieu('recherche');
+    const trouve = await localiserHebergement(adresse, {
+      destination: trip.destination,
+      lat: trip.anchorLat ?? null, lon: trip.anchorLon ?? null,
+    });
+    if (!trouve) { setEtatLieu('introuvable'); return; }
+    onUpdateTrip(trip.id, {
+      accommodationLat: trouve.lat,
+      accommodationLon: trouve.lon,
+      accommodationResolved: trouve.address,
+    });
+    setEtatLieu('ok');
+  };
   const [newEmoji, setNewEmoji] = useState('😀');
   const [inviteCode, setInviteCode] = useState(null);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -322,13 +347,34 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
           {/* Accommodation address */}
           <div className="settings-section">
             <div className="settings-section__title">Adresse d'hébergement</div>
-            <div className="settings-section__desc">Utilisée pour calculer les temps de trajet depuis/vers le logement.</div>
+            <div className="settings-section__desc">Utilisée pour la carte et les temps de trajet depuis le logement.</div>
             <input
               className="form-input"
               placeholder="Ex: 5 rue de Rivoli, Paris"
               value={trip.accommodationAddress || ''}
-              onChange={e => onUpdateTrip(trip.id, { accommodationAddress: e.target.value })}
+              onChange={e => onUpdateTrip(trip.id, {
+                accommodationAddress: e.target.value,
+                // L'adresse change : les coordonnées d'avant ne valent plus rien.
+                accommodationLat: null, accommodationLon: null,
+              })}
+              onBlur={e => localiser(e.target.value)}
             />
+            {/* Sans retour, une adresse introuvable disparaît simplement de la
+                carte — et on cherche le bug ailleurs. */}
+            {etatLieu === 'recherche' && (
+              <p className="lodging-state">Localisation en cours…</p>
+            )}
+            {etatLieu === 'ok' && (
+              <p className="lodging-state lodging-state--ok">
+                📍 Localisé{trip.accommodationResolved ? ` — ${trip.accommodationResolved}` : ''}
+              </p>
+            )}
+            {etatLieu === 'introuvable' && (
+              <p className="lodging-state lodging-state--ko">
+                Adresse introuvable — elle n'apparaîtra pas sur la carte.
+                Essaie sans le nom de l'établissement, ou ajoute la ville.
+              </p>
+            )}
           </div>
 
           {/* Haptics */}
