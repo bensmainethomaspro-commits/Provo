@@ -35,6 +35,12 @@ Produit et UX, puis retour au début.
 | A-008 | 2026-07-29 | Fiabilité | Suppression d'un voyage par un collaborateur refusée en silence, voyage « zombie » au rechargement | Mineur | CORRIGÉ (journalisation) / PROPOSÉ (interface) |
 | A-009 | 2026-07-29 | Dette technique | Neuf boutons de fermeture ✕ sans nom accessible | Mineur | CORRIGÉ |
 | A-010 | 2026-07-29 | Méthode | `.audit/contexte.md.` (point final parasite) : le fichier de contexte n'est pas lu sous son nom attendu | Mineur | CORRIGÉ (copie créée) |
+| A-011 | 2026-08-03 | Sécurité | `origineAutorisee` rend `true` quand l'en-tête `Origin` est absent : le garde-fou n°1 de la clé Anthropic ne filtre que les navigateurs, jamais un script (`extract-place/index.ts:737-743`) | Majeur | PROPOSÉ |
+| A-012 | 2026-08-03 | Fiabilité | Chaîne d'appels séquentiels sans budget global côté fonction Edge (jusqu'à ~82 s pour un lien TikTok) et aucun plafond côté client sur `extractViaEdge` | Majeur | PROPOSÉ |
+| A-013 | 2026-08-03 | Fiabilité | `ai.title` est le seul titre du fichier à ne pas passer par `cleanTitle()` : la sortie du modèle atterrit brute dans la fiche (`index.ts:636`) | Mineur | PROPOSÉ |
+| A-014 | 2026-08-03 | Fiabilité | `resolve()` systématique sur TikTok alors que le dépôt a mesuré que la page renvoie un captcha depuis un serveur : jusqu'à 10 s perdues par import (`index.ts:596`) | Mineur | PROPOSÉ |
+| A-015 | 2026-08-03 | Fiabilité | `fetchPlaceData` appelait `res.json()` sans vérifier `res.ok` : le 429 de Nominatim levait au lieu de rendre `null` | Mineur | CORRIGÉ |
+| A-016 | 2026-08-03 | Dette technique | Liaison morte `finalUrl` dans `handleGeneric`, neutralisée par un `void` | Mineur | CORRIGÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -43,9 +49,17 @@ Exemple de ligne, à supprimer :
 
 ## Dernier audit effectif
 
-Date : 2026-07-29
-Type : PROFOND (premier audit effectif ; 133 commits, aucun passage antérieur)
-Dernier axe rotatif couvert : Dette technique
+Date : 2026-08-03
+Type : LÉGER (5 jours écoulés, 28 commits dont 8 significatifs → axes sécurité
+et fiabilité uniquement, pas d'axe rotatif)
+Dernier axe rotatif couvert : Dette technique (au 2026-07-29)
 Prochain axe rotatif : Produit et UX
 Référence ESLint à la date de l'audit : 53 erreurs, 3 avertissements
-(54 avant l'audit — une erreur `no-empty` corrigée au passage)
+(inchangé depuis le 2026-07-29 — le code ajouté n'a pas aggravé la dette)
+
+### Historique
+
+| Date | Type | Axes | Constats retenus |
+|---|---|---|---|
+| 2026-07-29 | PROFOND | Tous + roadmap | A-001 à A-010 |
+| 2026-08-03 | LÉGER | Sécurité, Fiabilité | A-011 à A-016 |
