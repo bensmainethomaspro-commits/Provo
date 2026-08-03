@@ -132,6 +132,25 @@ const SONDES = `(() => {
   });
 
   // 2 · Cibles tactiles — un pouce ne vise pas mieux que 44 px.
+  //
+  // Le dessin d'un bouton et sa zone sensible sont deux choses différentes :
+  // un pseudo-élément peut étendre la seconde sans toucher au premier, ce qui
+  // est justement la bonne façon de rendre une petite icône atteignable sans
+  // alourdir l'écran. Mesurer la boîte seule ferait donc signaler comme
+  // défaut ce qui est déjà corrigé. On interroge le point réellement touché.
+  const atteignable = (el, r) => {
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const d = ${CIBLE_MIN} / 2 - 1;
+    return [[cx - d, cy], [cx + d, cy], [cx, cy - d], [cx, cy + d]].every(([x, y]) => {
+      // Un bord d'écran n'est pas un défaut de dessin : le pouce y arrive.
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return true;
+      // Seul un tap qui atterrit sur le bouton — ou sur son contenu — le
+      // déclenche. Un ancêtre qui reçoit le point ne compte pas : le doigt
+      // touche la carte, pas le bouton.
+      const touche = document.elementFromPoint(x, y);
+      return !!touche && (touche === el || el.contains(touche));
+    });
+  };
   const cibles = [];
   const vusC = new Set();
   document.querySelectorAll('button, a[href], [role="button"], input:not([type="hidden"]), select, textarea')
@@ -139,6 +158,7 @@ const SONDES = `(() => {
       if (!visible(el)) return;
       const r = el.getBoundingClientRect();
       if (Math.min(r.width, r.height) >= ${CIBLE_MIN} - 0.5) return;
+      if (atteignable(el, r)) return;
       const cle = String(el.className) + '|' + nomme(el);
       if (vusC.has(cle)) return;
       vusC.add(cle);

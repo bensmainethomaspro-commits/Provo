@@ -6232,3 +6232,74 @@ button.budget-inline:active { transform: scale(0.98); }
    les boutons de zoom traverser la fiche. Un contexte d'empilement local
    enferme toute cette hiérarchie sous la carte elle-même. */
 .map-wrap { position: relative; z-index: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISIBILITÉ ET PRISE EN MAIN — mesuré par /verif-ui
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Pastilles de comptage ───────────────────────────────────────────────
+   Blanc sur l'accent : 2,72:1. Blanc sur le vert : 2,28:1. Il faut 4,5:1.
+   Ces pastilles portent des chiffres qu'on lit d'un coup d'œil, dehors, sur
+   un écran baissé — c'est exactement le cas où un contraste faible coûte.
+   La teinte reste celle de la marque, seulement assez foncée pour que le
+   blanc tienne dessus. Le token est dédié : --accent ne bouge pas. */
+:root {
+  --accent-deep: #287DA6;   /* blanc dessus : 4,59:1 */
+  --green-deep:  #178841;   /* blanc dessus : 4,53:1 */
+}
+
+.tab-badge { background: var(--accent-deep) !important; color: #fff !important; }
+.tab-badge--today { background: var(--green-deep) !important; }
+/* Sur l'onglet actif la pastille s'inverse : fond blanc, chiffre coloré.
+   Le même bleu profond y passe de 2,72:1 à 4,59:1. */
+.tab-btn--active .tab-badge {
+  background: #fff !important;
+  color: var(--accent-deep) !important;
+}
+
+/* ─── Zones tactiles ──────────────────────────────────────────────────────
+   Un pouce ne vise pas mieux que 44 px. Mais grossir les boutons alourdirait
+   l'interface qu'on vient d'épurer : on étend la zone *sensible* sans
+   toucher au dessin. Le bouton garde sa taille, le doigt gagne ses 44 px. */
+.header__back,
+.header__add-btn,
+.trip-card__menu-btn,
+.activity-card__dots-btn,
+.undo-toast__close,
+.undo-toast__btn,
+.today-act-card__btn,
+.reserve-filter__pill,
+.reserve-assign__toggle,
+.today-geo__toggle,
+.tool-btn,
+.budget-inline,
+.btn--sm { position: relative; }
+
+.header__back::after,
+.header__add-btn::after,
+.trip-card__menu-btn::after,
+.activity-card__dots-btn::after,
+.undo-toast__close::after,
+.undo-toast__btn::after,
+.today-act-card__btn::after,
+.reserve-filter__pill::after,
+.reserve-assign__toggle::after,
+.today-geo__toggle::after,
+.tool-btn::after,
+.budget-inline::after,
+.btn--sm::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  /* Invisible et sans effet sur la mise en page : seulement une cible. */
+  border-radius: inherit;
+}
+
+/* Les champs de saisie ne peuvent pas porter de pseudo-élément : eux
+   grandissent vraiment — et un champ plus haut se vise mieux de toute façon. */
+.dashboard__search-input,
+.reserve-search-input,
+.reserve-sort-select { min-height: 44px; }
