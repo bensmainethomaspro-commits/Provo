@@ -75,8 +75,15 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
+          {/* Seulement là où le bouton installe vraiment. Sur iOS il ne pouvait
+              qu'expliquer une manipulation manuelle, ce qui encombrait l'en-tête
+              sans rien résoudre : écarté après essai. */}
           {canInstall && (
-            <button className="btn btn--ghost-white btn--sm install-btn" onClick={install} title="Installer l'application">
+            <button
+              className="btn btn--ghost-white btn--sm install-btn"
+              onClick={install}
+              title="Installer l'application"
+            >
               📲 Installer
             </button>
           )}
@@ -249,6 +256,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           trips={[...currentTrips, ...pastTrips]}
         />
       )}
+
     </div>
   );
 }

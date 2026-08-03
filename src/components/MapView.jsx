@@ -3,6 +3,11 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { CATEGORY_COLORS, getCategoryMeta, fetchPlaceData } from '../utils/helpers';
 
+// L'échappement évite qu'un titre contenant des chevrons casse la bulle —
+// le contenu est injecté en HTML brut par Leaflet.
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 function markerIcon(category) {
   const color = CATEGORY_COLORS[category] || '#35A7DD';
   const { emoji } = getCategoryMeta(category);
@@ -25,7 +30,7 @@ function homeIcon() {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress }) {
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, onOpenActivity }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [accom, setAccom] = useState(null);
@@ -65,9 +70,25 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
 
     const bounds = [];
     geoActs.forEach((a, idx) => {
+      // Une épingle sans issue oblige à retrouver l'activité dans une autre
+      // liste pour la corriger. La bulle ouvre désormais sa fiche.
       const marker = L.marker([a.lat, a.lon], { icon: markerIcon(a.category) })
         .addTo(map)
-        .bindPopup(`<strong>${a.title}</strong><br><small style="color:#888">${a.dayLabel}${a.address ? ' · ' + a.address : ''}</small>`);
+        .bindPopup(
+          `<strong>${esc(a.title)}</strong>`
+          + `<br><small style="color:#888">${esc(a.dayLabel)}`
+          + `${a.address ? ' · ' + esc(a.address) : ''}</small>`
+          + (onOpenActivity
+            ? `<br><button type="button" class="map-popup__edit" data-act-id="${esc(a.id)}">Ouvrir la fiche</button>`
+            : '')
+        );
+
+      if (onOpenActivity) {
+        marker.on('popupopen', (e) => {
+          const btn = e.popup.getElement()?.querySelector('.map-popup__edit');
+          if (btn) btn.onclick = () => { map.closePopup(); onOpenActivity(a.id); };
+        });
+      }
 
       if (roadTripMode) {
         L.divIcon({ className: '' });

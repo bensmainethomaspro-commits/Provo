@@ -615,8 +615,11 @@ body {
 }
 .category-btn:active { transform: scale(0.94); }
 .category-btn span:first-child { font-size: 20px; }
-.category-btn--active { border-color: var(--orange); background: #F0F8FD; color: var(--orange); box-shadow: 0 0 0 3px rgba(53,167,221,0.1); }
-[data-theme="dark"] .category-btn--active { background: #2e1208; }
+.category-btn--active {
+  border-color: var(--accent); color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
 
 .duration-row { display: flex; gap: 8px; align-items: center; }
 .duration-row .form-input { text-align: center; }
@@ -647,8 +650,10 @@ body {
   line-height: 1;
 }
 .emoji-option:hover { background: var(--border); }
-.emoji-option.selected { border-color: var(--orange); background: #F0F8FD; }
-[data-theme="dark"] .emoji-option.selected { background: #2e1208; }
+.emoji-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+}
 
 /* ─── CONFIRM DIALOG ─────────────────────────────────────── */
 .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 400; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -5044,7 +5049,12 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   --surface-sunken: #E9EFF5;
   --text: #12202B;
   --text-muted: #576A78;
-  --text-light: #8698A6;
+  /* Mesuré à 2,57:1 sur le fond enfoncé — un texte qu'on devine plus qu'on ne
+     le lit. L'app se consulte dehors, en plein soleil, sur un écran baissé :
+     les dates et les compteurs doivent se lire. Assombri jusqu'à 4,5:1 (WCAG
+     AA) à teinte constante. Du coup ce gris rejoint --text-muted : la
+     hiérarchie passe désormais par la taille et la graisse, pas par la pâleur. */
+  --text-light: #606D78;
   --border: rgba(16, 45, 70, 0.10);
   --border-strong: rgba(16, 45, 70, 0.18);
   /* Ombres teintées ambre — jamais de noir pur */
@@ -5064,7 +5074,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   --surface-sunken: #0B1218;
   --text: #E6EEF4;
   --text-muted: #A5B6C2;
-  --text-light: #6F818E;
+  /* 3,86:1 sur la surface haute — même correction, éclaircie cette fois. */
+  --text-light: #798D9B;
   --border: rgba(170,214,255, 0.10);
   --border-strong: rgba(170,214,255, 0.20);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
@@ -5919,4 +5930,466 @@ button.budget-inline:active { transform: scale(0.98); }
   font-size: 12px; font-weight: 800; white-space: nowrap; flex-shrink: 0;
   background: var(--accent-grad, var(--accent)); color: #fff;
   border-radius: 999px; padding: 5px 13px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RÉSERVE — fiches compactes, assignation repliée
+   Avant : chaque fiche portait une pastille par jour du voyage, en permanence.
+   Sur six jours, ce bloc dépassait la hauteur de la fiche elle-même, et huit
+   idées demandaient 1 750 px de défilement. On ne choisit un jour qu'au moment
+   de piocher ; le reste du temps, ce n'est que du bruit entre deux idées.
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* Une pastille alignée à droite, pas une barre pleine largeur : répété sur huit
+   fiches, un bandeau étiqueté coûtait 368 px de pure redite. */
+.reserve-assign {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 0 10px 8px;
+}
+.reserve-assign__toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-sunken);
+  font-size: 11.5px; font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, color 0.12s, transform 0.08s;
+}
+.reserve-assign__toggle:active { transform: scale(0.94); }
+.reserve-assign--open .reserve-assign__toggle {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.reserve-assign__chevron { font-size: 10px; opacity: 0.8; }
+
+/* Trois colonnes égales : les jours se lisent en grille, pas en paragraphe. */
+.reserve-assign__days {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+.reserve-assign__day {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  min-height: 46px;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  -webkit-tap-highlight-color: transparent;
+}
+.reserve-assign__day:active { transform: scale(0.94); }
+.reserve-assign__day-num {
+  font-size: 13px; font-weight: 800; color: var(--accent);
+  line-height: 1;
+}
+.reserve-assign__day-date {
+  font-size: 10.5px; font-weight: 600; color: var(--text-muted);
+  line-height: 1; white-space: nowrap;
+}
+
+/* La photo servait de bandeau pleine largeur : une fiche avec image faisait
+   trois fois la hauteur d'une fiche sans image, et la liste perdait tout
+   rythme. En vignette, les fiches se scannent d'un coup d'œil. */
+.reserve-card .activity-card__photo {
+  width: 60px; height: 60px;
+  object-fit: cover;
+  border-radius: 12px;
+  float: left;
+  margin: 0 12px 0 0;
+}
+.reserve-card .activity-card--expanded .activity-card__photo {
+  width: 100%; height: 150px;
+  float: none; margin: 0 0 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VUE JOUR — ce qu'on lit d'abord, le reste au tap
+   Avant : le total de la journée répété trois fois, chaque activité dépliée
+   avec heure + durée + prix + adresse, un champ de notes vide occupant un quart
+   de l'écran, et l'action principale rejetée sous la liste donc hors écran.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* La feuille garde son pied visible : le corps défile, l'action reste. */
+.day-detail-sheet { display: flex; flex-direction: column; }
+.day-detail__body { flex: 1; min-height: 0; overflow-y: auto; }
+.day-detail__footer {
+  flex-shrink: 0;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.day-detail__add { width: 100%; }
+
+/* Repliée, une activité montre l'heure et sa durée — ce qui décide quand on
+   lit son programme. L'adresse et le prix servent une fois sur place : ils
+   arrivent au tap, avec le reste. */
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__address,
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__price {
+  display: none;
+}
+/* La photo passe en vignette tant que la fiche est repliée : en bandeau elle
+   poussait à elle seule le reste de la journée hors de l'écran. */
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__photo {
+  width: 52px; height: 52px; object-fit: cover;
+  border-radius: 10px; float: left; margin: 0 10px 0 0;
+}
+
+/* Les barres de catégorie étaient larges et saturées : quatre couleurs vives
+   empilées se lisaient comme des alertes. Un filet suffit à distinguer. */
+.day-detail-sheet .activity-card::before { width: 3px; opacity: 0.75; }
+
+.budget-pill--spent {
+  background: color-mix(in srgb, var(--green, #15803d) 12%, transparent);
+  color: var(--green, #15803d);
+  font-weight: 700;
+}
+
+/* Notes repliées : un bouton discret, le champ n'apparaît qu'à la demande. */
+.day-detail__notes { margin-top: 14px; }
+.day-detail__notes-toggle {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-sunken);
+  font-size: 13px; font-weight: 700; color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.day-detail__notes--open .day-detail__notes-toggle {
+  color: var(--accent);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.day-detail__notes-chevron { font-size: 11px; opacity: 0.8; }
+.day-detail__notes--open .day-notes-textarea {
+  border-top-left-radius: 0; border-top-right-radius: 0;
+  border-top: none; margin-top: 0;
+}
+
+/* Le balayage vers la Réserve est une action rare : il ne se dispute plus la
+   vedette avec l'ajout d'activité. */
+.day-detail__sweep {
+  width: 100%; margin-top: 10px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APAISEMENT — la couleur ne sert plus qu'à ce qui est interactif
+   Inspiration : les listes d'iOS (Rappels, Calendrier, Réglages). La hiérarchie
+   y est portée par la typographie et l'espacement ; la couleur est réservée aux
+   éléments sur lesquels on peut agir. Ici, chaque ligne cumulait un badge bleu
+   plein, une barre de catégorie saturée et quatre émojis en guise d'icônes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* L'heure est une donnée, pas un bouton : texte gris à chiffres alignés plutôt
+   que pastille bleue pleine. Une heure imposée se distingue par la graisse. */
+.time-slot {
+  background: none !important;
+  color: var(--text-muted) !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.time-slot--fixed { color: var(--text) !important; font-weight: 650; }
+
+/* Durée, prix, adresse : même registre, séparés par des points médians plutôt
+   que par des pictogrammes. */
+.activity-card__duration,
+.activity-card__price,
+.activity-card__address {
+  background: none !important;
+  color: var(--text-muted) !important;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+.activity-card__meta { gap: 0; align-items: baseline; row-gap: 2px; }
+.activity-card__meta > * + *::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--text-light);
+  font-weight: 400;
+}
+.activity-card__address { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* La barre de catégorie devient une pastille discrète : empilées, quatre
+   couleurs vives sur toute la hauteur se lisaient comme autant d'alertes. */
+.activity-card::before {
+  width: 6px !important;
+  height: 6px !important;
+  top: 50% !important;
+  left: 6px !important;
+  transform: translateY(-50%);
+  border-radius: 50% !important;
+  opacity: 1 !important;
+}
+.day-detail-sheet .activity-card::before { width: 6px !important; height: 6px !important; }
+
+/* Les boutons perdent leur dégradé et leur halo : une couleur pleine, un rayon
+   franc, rien d'autre. */
+.btn--primary {
+  background: var(--accent) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.btn--primary:active { background: color-mix(in srgb, var(--accent) 85%, black) !important; }
+
+/* Les séparateurs entre activités remplacent les cartes empilées : un filet
+   fin, en retrait à gauche, comme dans une liste groupée iOS. */
+.day-detail-sheet .day-section__body .activity-card-swipe + .activity-card-swipe .activity-card {
+  border-top: 0.5px solid var(--border);
+}
+
+/* La catégorie était signalée trois fois : par l'émoji, par un filet coloré à
+   gauche, et par la teinte de ce filet. Un seul suffit — l'émoji. Le filet ne
+   sert plus qu'au statut, qui lui est une vraie information : fait, ou écarté. */
+.activity-card { border-left: none !important; }
+.activity-card::before { display: none; }
+.activity-card--done::before,
+.activity-card--nogo::before {
+  display: block;
+  width: 3px !important; height: auto !important;
+  top: 6px !important; bottom: 6px !important; left: 0 !important;
+  border-radius: 0 2px 2px 0 !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+/* Un incontournable garde un repère, mais discret : un liseré, pas un cadre. */
+.activity-card--mustdo { box-shadow: none !important; outline: none !important; }
+.activity-card--mustdo .activity-card__title::after {
+  content: '★';
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  vertical-align: 1px;
+}
+/* L'étoile suffit à marquer un incontournable : le cadre coloré revenait à
+   souligner une ligne sur quatre au marqueur. */
+.activity-card--mustdo { border: none !important; }
+.activity-card--mustdo::after { display: none !important; }
+/* L'adresse passe souvent à la ligne : son point de séparation se retrouvait
+   alors orphelin en début de ligne. Elle s'en passe. */
+.activity-card__address::before { content: none !important; margin: 0 !important; }
+
+/* ─── Position en direct ──────────────────────────────────────────────────
+   « À combien je suis ? » se répond sur la fiche de l'activité, pas dans un
+   autre écran. Éteinte par défaut : autorisation système et batterie. */
+.today-geo { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.today-geo__toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 13px; font-weight: 650; color: var(--text-muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.today-geo__toggle::before { content: '◎'; font-size: 13px; }
+.today-geo__toggle--on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.today-geo__state { font-size: 12.5px; color: var(--text-muted); }
+.today-geo__state--err { color: var(--red, #b91c1c); }
+.today-act-card__distance {
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  margin-top: 2px;
+}
+
+/* ─── Carte : ouvrir la fiche depuis l'épingle ────────────────────────────
+   Une bulle qui n'affiche qu'un titre oblige à refermer la carte et à
+   retrouver l'activité dans la bonne liste pour la corriger. */
+.leaflet-popup-content { margin: 12px 14px; font-family: inherit; }
+.leaflet-popup-content strong { font-size: 14.5px; color: #1a1a2e; }
+.map-popup__edit {
+  display: block; width: 100%; margin-top: 10px;
+  min-height: 44px; padding: 0 12px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-popup__edit:active { opacity: 0.82; }
+
+/* Leaflet empile ses calques jusqu'à z-index 800 — bien au-dessus des fiches
+   (200). Ouvrir une activité depuis une épingle laissait donc les épingles et
+   les boutons de zoom traverser la fiche. Un contexte d'empilement local
+   enferme toute cette hiérarchie sous la carte elle-même. */
+.map-wrap { position: relative; z-index: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISIBILITÉ ET PRISE EN MAIN — mesuré par /verif-ui
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Pastilles de comptage ───────────────────────────────────────────────
+   Blanc sur l'accent : 2,72:1. Blanc sur le vert : 2,28:1. Il faut 4,5:1.
+   Ces pastilles portent des chiffres qu'on lit d'un coup d'œil, dehors, sur
+   un écran baissé — c'est exactement le cas où un contraste faible coûte.
+   La teinte reste celle de la marque, seulement assez foncée pour que le
+   blanc tienne dessus. Le token est dédié : --accent ne bouge pas. */
+:root {
+  --accent-deep: #287DA6;   /* blanc dessus : 4,59:1 */
+  --green-deep:  #178841;   /* blanc dessus : 4,53:1 */
+}
+
+.tab-badge { background: var(--accent-deep) !important; color: #fff !important; }
+.tab-badge--today { background: var(--green-deep) !important; }
+/* Sur l'onglet actif la pastille s'inverse : fond blanc, chiffre coloré.
+   Le même bleu profond y passe de 2,72:1 à 4,59:1. */
+.tab-btn--active .tab-badge {
+  background: #fff !important;
+  color: var(--accent-deep) !important;
+}
+
+/* ─── Zones tactiles ──────────────────────────────────────────────────────
+   Un pouce ne vise pas mieux que 44 px. Mais grossir les boutons alourdirait
+   l'interface qu'on vient d'épurer : on étend la zone *sensible* sans
+   toucher au dessin. Le bouton garde sa taille, le doigt gagne ses 44 px. */
+.header__back,
+.header__add-btn,
+.trip-card__menu-btn,
+.activity-card__dots-btn,
+.undo-toast__close,
+.undo-toast__btn,
+.today-act-card__btn,
+.reserve-filter__pill,
+.reserve-assign__toggle,
+.today-geo__toggle,
+.tool-btn,
+.budget-inline,
+.btn--sm { position: relative; }
+
+.header__back::after,
+.header__add-btn::after,
+.trip-card__menu-btn::after,
+.activity-card__dots-btn::after,
+.undo-toast__close::after,
+.undo-toast__btn::after,
+.today-act-card__btn::after,
+.reserve-filter__pill::after,
+.reserve-assign__toggle::after,
+.today-geo__toggle::after,
+.tool-btn::after,
+.budget-inline::after,
+.btn--sm::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  /* Invisible et sans effet sur la mise en page : seulement une cible. */
+  border-radius: inherit;
+}
+
+/* Les champs de saisie ne peuvent pas porter de pseudo-élément : eux
+   grandissent vraiment — et un champ plus haut se vise mieux de toute façon. */
+.dashboard__search-input,
+.reserve-search-input,
+.reserve-sort-select { min-height: 44px; }
+
+/* ─── Contrôle des lieux ──────────────────────────────────────────────────
+   Un lieu géocodé à 800 km ne se voit pas dans une liste. Le bandeau le dit,
+   sans bloquer : on peut le refermer et continuer. */
+.place-alert {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin: 0 0 14px;
+  border-radius: var(--radius-sm, 12px);
+  background: color-mix(in srgb, var(--amber, #f59e0b) 12%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--amber, #f59e0b) 34%, transparent);
+}
+.place-alert__icon { font-size: 18px; flex-shrink: 0; }
+.place-alert__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.place-alert__text strong { font-size: 14px; color: var(--text); }
+.place-alert__text span { font-size: 12.5px; color: var(--text-muted); }
+.place-alert__cta {
+  flex-shrink: 0; min-height: 36px; padding: 0 14px;
+  border: none; border-radius: 999px;
+  background: var(--accent-deep); color: #fff;
+  font-family: inherit; font-size: 13.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.place-alert__close {
+  flex-shrink: 0; width: 26px; height: 26px;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sheet--check { max-height: 88dvh; }
+
+.check-progress { padding: 26px 4px; text-align: center; }
+.check-progress__bar {
+  height: 5px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-sunken); margin-bottom: 16px;
+}
+.check-progress__fill {
+  height: 100%; border-radius: 999px; background: var(--accent);
+  transition: width 0.3s ease;
+}
+.check-progress__label { font-size: 14.5px; color: var(--text); margin: 0 0 6px; }
+.check-progress__note { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.45; }
+
+.check-empty { padding: 32px 12px; text-align: center; }
+.check-empty__icon { font-size: 34px; margin-bottom: 10px; }
+.check-empty p { margin: 0 0 6px; font-size: 15px; color: var(--text); }
+.check-empty__hint { font-size: 13px !important; color: var(--text-muted) !important; line-height: 1.5; }
+
+.check-card {
+  padding: 14px; margin-bottom: 10px;
+  border-radius: var(--radius-sm, 12px);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+.check-card--done { opacity: 0.62; }
+.check-card__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.check-card__title { font-size: 15px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; }
+.check-card__where {
+  flex-shrink: 0; font-size: 11px; font-weight: 650; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.check-card__why { margin: 0 0 10px; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+.check-card__diff { display: grid; gap: 4px; margin-bottom: 12px; }
+/* Ce qui part et ce qui arrive doivent se distinguer d'un coup d'œil, sans
+   avoir à lire l'étiquette. */
+.check-card__from {
+  font-size: 12.5px; color: var(--text-muted);
+  text-decoration: line-through; text-decoration-color: var(--red, #ef4444);
+}
+.check-card__to { font-size: 13px; color: var(--text); font-weight: 600; }
+.check-card__to--soft { font-weight: 500; color: var(--text-muted); }
+.check-card__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.check-card__actions .btn { min-height: 38px; }
+.check-card__done { margin: 0; font-size: 13px; font-weight: 650; color: var(--green, #15803d); }
+
+.trip-header-menu__count {
+  margin-left: auto; min-width: 20px; padding: 1px 6px;
+  border-radius: 999px; background: var(--amber, #f59e0b); color: #fff;
+  font-size: 11px; font-weight: 700; text-align: center;
+}
+.check-card__adds { margin: 0 0 12px; display: grid; gap: 5px; }
+.check-card__add { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.check-card__add dt {
+  flex-shrink: 0; width: 76px;
+  color: var(--text-muted); font-weight: 600;
+}
+.check-card__add dd {
+  margin: 0; flex: 1; min-width: 0;
+  color: var(--text); font-weight: 600; overflow-wrap: anywhere;
 }

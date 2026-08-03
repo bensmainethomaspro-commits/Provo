@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useTripsContext } from '../context/TripsContext';
 import DayDetailModal from '../components/DayDetailModal';
 import ActivityCard from '../components/ActivityCard';
@@ -14,6 +14,7 @@ import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import TripSearch from '../components/TripSearch';
+import ReserveAssign from '../components/ReserveAssign';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useSettings } from '../hooks/useSettings';
@@ -21,9 +22,13 @@ import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
 import { budgetStats, formatPrice, formatDate, CATEGORIES, detectCountryTheme, haversineKm } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
+import { analyserVoyage } from '../utils/verifyPlaces';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
+// Le contrôle des lieux ne sert qu'à la demande : inutile de l'embarquer
+// dans le paquet principal.
+const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 
 function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -195,6 +200,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // première activité géolocalisée : un vol au départ ancrerait tout le
   // voyage sur la ville de départ.
   const anchor = useTripAnchor(trip?.destination);
+
+  // Repère les fiches douteuses. Purement géométrique : aucune requête, donc
+  // ça tourne en continu, même hors ligne. Un lieu à 800 km de la destination
+  // est presque toujours une erreur de géocodage — mais on le signale, on ne
+  // le corrige pas : c'est la recherche en ligne, à la demande, qui propose.
+  const analysePlaces = useMemo(
+    () => (trip ? analyserVoyage(trip, anchor) : { ecartes: [], incompletes: [], total: 0 }),
+    [trip, anchor]
+  );
+
   const { settings, setSetting } = useSettings();
   const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
@@ -207,6 +222,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [showDeleteTrip, setShowDeleteTrip] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
   const [detailDay, setDetailDay] = useState(null);
+  const [showPlaceCheck, setShowPlaceCheck] = useState(false);
+  const [checkBannerDismissed, setCheckBannerDismissed] = useState(false);
   const [showOptimConfirm, setShowOptimConfirm] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
@@ -577,6 +594,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setSheetOpen(true);
   };
 
+  // Une épingle qu'on ne peut que regarder oblige à refermer la carte et à
+  // retrouver l'activité dans la bonne liste pour corriger une adresse. La
+  // bulle ouvre directement la fiche, où qu'elle soit rangée.
+  const openActivityFromMap = (actId) => {
+    for (const d of trip.days) {
+      const activity = d.activities.find(a => a.id === actId);
+      if (activity) {
+        setEditingActivity({ activity, location: { type: 'day', dayId: d.id } });
+        return;
+      }
+    }
+    const inReserve = (trip.reserve || []).find(a => a.id === actId);
+    if (inReserve) setEditingActivity({ activity: inReserve, location: { type: 'reserve' } });
+  };
+
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
@@ -692,6 +724,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     ⚖️ Comparer des activités
                   </button>
                 )}
+                <button className="trip-header-menu__item" onClick={() => { setShowPlaceCheck(true); setTripMenuOpen(false); }}>
+                  📍 Vérifier les lieux
+                  {analysePlaces.total > 0 && (
+                    <span className="trip-header-menu__count">{analysePlaces.total}</span>
+                  )}
+                </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
                   🔗 Partager
                 </button>
@@ -832,6 +870,31 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
           <>
+            {/* Un lieu mal situé ne se voit pas dans une liste : on le dit.
+                Discret, refermable, et sans rien changer tant qu'on n'a pas
+                demandé — l'app propose, elle ne réorganise jamais d'office. */}
+            {analysePlaces.ecartes.length > 0 && !checkBannerDismissed && (
+              <div className="place-alert">
+                <span className="place-alert__icon" aria-hidden="true">📍</span>
+                <div className="place-alert__text">
+                  <strong>
+                    {analysePlaces.ecartes.length === 1
+                      ? '1 lieu semble mal situé'
+                      : `${analysePlaces.ecartes.length} lieux semblent mal situés`}
+                  </strong>
+                  <span>Loin de {trip.destination || 'la destination'} — sans doute une erreur d'import.</span>
+                </div>
+                <button className="place-alert__cta" onClick={() => setShowPlaceCheck(true)}>
+                  Vérifier
+                </button>
+                <button
+                  className="place-alert__close"
+                  onClick={() => setCheckBannerDismissed(true)}
+                  aria-label="Masquer cet avertissement"
+                >✕</button>
+              </div>
+            )}
+
             {/* Avant le départ : compte à rebours */}
             {daysUntil > 0 && (
               <div className="countdown-banner">
@@ -997,15 +1060,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       compareSelected={compareSelectedIds.has(activity.id)}
                       onToggleCompare={() => toggleCompare(activity.id)}
                     />
-                    <div className="reserve-card__assign">
-                      <span className="reserve-card__assign-label">Assigner :</span>
-                      {trip.days.map((d, di) => (
-                        <button key={d.id} className="day-pill"
-                          onClick={() => undoableAssignFromReserve(d.id, activity.id)}>
-                          J{di + 1} {formatDate(d.date).split(' ').slice(0, 2).join(' ')}
-                        </button>
-                      ))}
-                    </div>
+                    <ReserveAssign
+                      days={trip.days}
+                      onAssign={(dayId) => undoableAssignFromReserve(dayId, activity.id)}
+                    />
                   </div>
                   ))
                 })()}
@@ -1057,7 +1115,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
           <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
-            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} />
+            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} onOpenActivity={openActivityFromMap} />
           </Suspense>
         )}
       </div>
@@ -1079,6 +1137,18 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
       />
+
+      {showPlaceCheck && (
+        <Suspense fallback={null}>
+          <PlaceCheckSheet
+            analyse={analysePlaces}
+            destination={trip.destination}
+            ancre={anchor}
+            onAppliquer={(location, actId, patch) => updateActivity(tripId, location, actId, patch)}
+            onClose={() => setShowPlaceCheck(false)}
+          />
+        </Suspense>
+      )}
 
       {editingActivity && (
         <AddActivitySheet
