@@ -13,7 +13,21 @@ const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const cache = new Map();
 
 // Nominatim demande un usage raisonnable : une requête à la fois, en série.
+//
+// « En série » ne suffit pas : enchaînées sans pause, vingt requêtes partent en
+// quelques secondes et le service répond alors des vides. On l'a mesuré — un
+// contrôle qui semblait rater huit lieux sur neuf n'était que rate-limité. La
+// file n'avance donc qu'après un délai, ce qui garantit l'intervalle quelle que
+// soit la vitesse du réseau.
+const PAUSE_MS = 1100;
+const pause = (ms) => new Promise(r => setTimeout(r, ms));
 let queue = Promise.resolve();
+
+function enfile(run) {
+  const result = queue.then(run, run);
+  queue = result.then(() => pause(PAUSE_MS), () => pause(PAUSE_MS));
+  return result;
+}
 
 function parsePrice(extratags = {}) {
   // OSM stocke le tarif dans `charge` ou `fee` ("5 EUR", "free", "yes"…)
@@ -33,7 +47,7 @@ function buildAddress(a = {}) {
 
 const GENERIC_CLASSES = ['place', 'highway', 'boundary', 'building', 'landuse'];
 
-function distKm(aLat, aLon, bLat, bLon) {
+export function distKm(aLat, aLon, bLat, bLon) {
   const R = 6371, rad = d => d * Math.PI / 180;
   const dLat = rad(bLat - aLat), dLon = rad(bLon - aLon);
   const h = Math.sin(dLat / 2) ** 2
@@ -184,9 +198,7 @@ export async function poiAtCoords(lat, lon, radius = 60) {
     }
   };
 
-  const result = queue.then(run, run);
-  queue = result.catch(() => {});
-  return result;
+  return enfile(run);
 }
 
 // Garde le champ le plus informatif de chaque source.
@@ -237,9 +249,7 @@ export async function lookupPlace(title, near, coords = {}) {
   };
 
   // Sérialisé pour rester poli avec ces services publics et gratuits.
-  const result = queue.then(run, run);
-  queue = result.catch(() => {});
-  return result;
+  return enfile(run);
 }
 
 /**

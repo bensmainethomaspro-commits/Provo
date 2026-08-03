@@ -138,6 +138,25 @@ la couleur derrière le texte dépend de l'endroit exact où il tombe. Ces cas
 sortent dans une liste séparée, non comptée en défaut. Un outil qui invente des
 défauts finit par ne plus être lu.
 
+## Contrôle des lieux (`verifyPlaces.js`)
+
+Un géocodeur se trompe : « Vienna state opera » est déjà ressorti à Opera, en
+Italie. L'erreur ne se voit pas dans une liste — elle se découvre sur la carte,
+ou sur place. Deux temps **volontairement séparés** :
+
+- `analyserVoyage(trip, ancre)` — pure géométrie, aucune requête. Tourne en
+  continu, même hors ligne. Seuil : 150 km de la destination. En road trip,
+  la distance à la destination ne veut plus rien dire : c'est l'**isolement**
+  qui compte (loin de la destination *et* de toutes les autres activités).
+- `chercherCorrections(...)` — en ligne, lent, seulement sur demande.
+
+Rien n'est jamais appliqué d'office (principe produit). Le bandeau se referme,
+chaque proposition se laisse, et une correction n'écrase que ce qui est faux :
+pour un lieu écarté la position, pour une fiche incomplète les seuls trous.
+
+Fausses alertes vérifiées comme telles : excursion à 55 km, road trip étalé,
+repas, voyage sans ancre géocodée — aucun n'est signalé.
+
 ## Mesurer ce que le bac à sable ne peut pas joindre
 
 La politique réseau de l'environnement de développement **bloque `share.google`

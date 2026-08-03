@@ -6303,3 +6303,93 @@ button.budget-inline:active { transform: scale(0.98); }
 .dashboard__search-input,
 .reserve-search-input,
 .reserve-sort-select { min-height: 44px; }
+
+/* ─── Contrôle des lieux ──────────────────────────────────────────────────
+   Un lieu géocodé à 800 km ne se voit pas dans une liste. Le bandeau le dit,
+   sans bloquer : on peut le refermer et continuer. */
+.place-alert {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; margin: 0 0 14px;
+  border-radius: var(--radius-sm, 12px);
+  background: color-mix(in srgb, var(--amber, #f59e0b) 12%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--amber, #f59e0b) 34%, transparent);
+}
+.place-alert__icon { font-size: 18px; flex-shrink: 0; }
+.place-alert__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.place-alert__text strong { font-size: 14px; color: var(--text); }
+.place-alert__text span { font-size: 12.5px; color: var(--text-muted); }
+.place-alert__cta {
+  flex-shrink: 0; min-height: 36px; padding: 0 14px;
+  border: none; border-radius: 999px;
+  background: var(--accent-deep); color: #fff;
+  font-family: inherit; font-size: 13.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.place-alert__close {
+  flex-shrink: 0; width: 26px; height: 26px;
+  border: none; border-radius: 50%; background: transparent;
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sheet--check { max-height: 88dvh; }
+
+.check-progress { padding: 26px 4px; text-align: center; }
+.check-progress__bar {
+  height: 5px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-sunken); margin-bottom: 16px;
+}
+.check-progress__fill {
+  height: 100%; border-radius: 999px; background: var(--accent);
+  transition: width 0.3s ease;
+}
+.check-progress__label { font-size: 14.5px; color: var(--text); margin: 0 0 6px; }
+.check-progress__note { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.45; }
+
+.check-empty { padding: 32px 12px; text-align: center; }
+.check-empty__icon { font-size: 34px; margin-bottom: 10px; }
+.check-empty p { margin: 0 0 6px; font-size: 15px; color: var(--text); }
+.check-empty__hint { font-size: 13px !important; color: var(--text-muted) !important; line-height: 1.5; }
+
+.check-card {
+  padding: 14px; margin-bottom: 10px;
+  border-radius: var(--radius-sm, 12px);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+.check-card--done { opacity: 0.62; }
+.check-card__head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.check-card__title { font-size: 15px; font-weight: 700; color: var(--text); flex: 1; min-width: 0; }
+.check-card__where {
+  flex-shrink: 0; font-size: 11px; font-weight: 650; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.check-card__why { margin: 0 0 10px; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+.check-card__diff { display: grid; gap: 4px; margin-bottom: 12px; }
+/* Ce qui part et ce qui arrive doivent se distinguer d'un coup d'œil, sans
+   avoir à lire l'étiquette. */
+.check-card__from {
+  font-size: 12.5px; color: var(--text-muted);
+  text-decoration: line-through; text-decoration-color: var(--red, #ef4444);
+}
+.check-card__to { font-size: 13px; color: var(--text); font-weight: 600; }
+.check-card__to--soft { font-weight: 500; color: var(--text-muted); }
+.check-card__actions { display: flex; gap: 8px; justify-content: flex-end; }
+.check-card__actions .btn { min-height: 38px; }
+.check-card__done { margin: 0; font-size: 13px; font-weight: 650; color: var(--green, #15803d); }
+
+.trip-header-menu__count {
+  margin-left: auto; min-width: 20px; padding: 1px 6px;
+  border-radius: 999px; background: var(--amber, #f59e0b); color: #fff;
+  font-size: 11px; font-weight: 700; text-align: center;
+}
+.check-card__adds { margin: 0 0 12px; display: grid; gap: 5px; }
+.check-card__add { display: flex; gap: 10px; align-items: baseline; font-size: 13px; }
+.check-card__add dt {
+  flex-shrink: 0; width: 76px;
+  color: var(--text-muted); font-weight: 600;
+}
+.check-card__add dd {
+  margin: 0; flex: 1; min-width: 0;
+  color: var(--text); font-weight: 600; overflow-wrap: anywhere;
+}
