@@ -14,6 +14,7 @@ import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TodayMode from '../components/TodayMode';
 import TripSearch from '../components/TripSearch';
+import ReserveAssign from '../components/ReserveAssign';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useSettings } from '../hooks/useSettings';
@@ -997,15 +998,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       compareSelected={compareSelectedIds.has(activity.id)}
                       onToggleCompare={() => toggleCompare(activity.id)}
                     />
-                    <div className="reserve-card__assign">
-                      <span className="reserve-card__assign-label">Assigner :</span>
-                      {trip.days.map((d, di) => (
-                        <button key={d.id} className="day-pill"
-                          onClick={() => undoableAssignFromReserve(d.id, activity.id)}>
-                          J{di + 1} {formatDate(d.date).split(' ').slice(0, 2).join(' ')}
-                        </button>
-                      ))}
-                    </div>
+                    <ReserveAssign
+                      days={trip.days}
+                      onAssign={(dayId) => undoableAssignFromReserve(dayId, activity.id)}
+                    />
                   </div>
                   ))
                 })()}
