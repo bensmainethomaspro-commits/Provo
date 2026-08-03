@@ -4212,8 +4212,16 @@ body {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.dashboard { animation: pageEnter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.trip-view  { animation: pageEnter 0.3s  cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* `both` laisse l'état final collé à l'élément : le `transform: translateY(0)`
+   de fin reste dans le style calculé (`matrix(1,0,0,1,0,0)`), et un transform
+   non nul fait de l'élément le bloc conteneur de ses enfants `position: fixed`.
+   La barre d'onglets n'était donc pas fixée à l'écran mais à `.trip-view` —
+   mesuré : en allongeant la vue de 400 px, la barre descendait avec elle.
+   Invisible en Chromium, dont le viewport ne bouge pas ; sous Safari iOS où
+   `100dvh` change quand la barre d'URL se replie, la barre dérive.
+   `backwards` ne s'applique qu'avant le départ : plus rien ne subsiste après. */
+.dashboard { animation: pageEnter 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.trip-view  { animation: pageEnter 0.3s  cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 
 /* ── Dashboard header ────────────────────────────────────────────────────── */
 .dashboard__logo {
@@ -4974,11 +4982,15 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .trip-view .tabs {
   position: fixed;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Centrer par `left: 50%` + `translateX(-50%)` demande à Safari de composer
+     un pourcentage et un transform à chaque recalcul de viewport — source de
+     dérive au repli de la barre d'URL. Deux ancrages et une marge automatique
+     donnent le même centrage sans aucun transform. */
+  left: 0;
+  right: 0;
   width: 100%;
   max-width: 480px;
-  margin: 0;
+  margin: 0 auto;
   z-index: 150;
   border: none;
   border-top: 1px solid var(--border);
@@ -6402,4 +6414,82 @@ button.budget-inline:active { transform: scale(0.98); }
   background: transparent; color: var(--text-muted);
   font-family: inherit; font-size: 13.5px; font-weight: 600;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── En-tête de l'accueil : des cibles atteignables ──────────────────────
+   Les trois boutons faisaient 31 px de haut. Étendre leur zone par un
+   pseudo-élément, comme ailleurs, ne pouvait pas marcher ici : le bas de la
+   zone tombe sur le sous-titre « Ton gestionnaire de voyages », qui captait
+   le tap à leur place — mesuré. Ils grandissent donc pour de bon.
+   Les deux boutons d'icône deviennent des pastilles de 44 px, comme le retour
+   et le « + » de l'en-tête de voyage : même geste, même forme partout. */
+.dashboard__logo-actions { align-items: center; }
+.btn--round {
+  width: 44px; height: 44px; flex-shrink: 0;
+  padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1;
+}
+/* Le bouton qui porte du texte garde sa pilule, mais atteint la même hauteur. */
+.dashboard__logo-actions .btn--sm {
+  min-height: 44px; padding-top: 0; padding-bottom: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dashboard__logo-actions .btn--account-avatar { width: 44px; height: 44px; font-size: 20px; }
+/* L'en-tête gagnait 13 px : le sous-titre les rend en se resserrant. */
+.dashboard__logo-sub { padding-top: 0; }
+
+/* ─── En-tête de voyage : même traitement que l'accueil ───────────────────
+   Le « + », le retour et le ⋯ se touchent presque : étendre leur zone par un
+   pseudo-élément faisait empiéter chacun sur son voisin — mesuré, le point
+   droit du « + » atterrissait sur le ⋯. Ils grandissent donc vraiment, à la
+   taille des pastilles de l'accueil, et l'écart entre eux suit. */
+.header__back { width: 44px; height: 44px; margin-top: 0; }
+.header__add-btn { width: 44px; height: 44px; font-size: 24px; }
+.header__actions, .header > .header__actions { gap: 8px; }
+.header .btn--ghost-white.btn--sm {
+  min-height: 44px; padding-top: 0; padding-bottom: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* La pastille de budget est large mais plate : son pseudo-élément suffisait
+   en théorie, sauf que les points hauts et bas retombaient sur l'en-tête. */
+.budget-inline { min-height: 44px; }
+
+/* La vue voyage doit tenir exactement dans l'écran : c'est `.tab-content` qui
+   défile, pas le document. Avec `min-height`, le moindre dépassement — ici
+   l'en-tête agrandi — rendait la page entière défilante, ce qui rognait
+   l'en-tête et, sous Safari, faisait replier la barre d'URL en cours de route
+   (donc changer `100dvh`, donc déplacer la barre du bas). Mesuré : document
+   à 875 px pour un écran de 844.
+   La contrainte se pose sur `.app` : `.trip-view` est un enfant flex en
+   `flex: 1`, donc son `flex-basis: 0%` l'emporterait sur toute `height`.
+   Et un enfant flex ne descend sous la taille de son contenu que si on lui
+   retire son `min-height: auto` implicite. */
+.app:has(.trip-view) { height: 100dvh; overflow: hidden; }
+.trip-view { min-height: 0; overflow: hidden; }
+.trip-view .tab-content { min-height: 0; }
+
+/* Onglet Dépenses : jamais mesuré jusqu'ici — l'écran plantait sur une
+   dépense mal formée, et l'outil croyait donc n'avoir rien à signaler.
+   Même méthode qu'ailleurs : la zone sensible s'étend, le dessin ne bouge pas. */
+.expenses-section-btn,
+.debts-card__detail-btn,
+.debt-settle-btn,
+.expense-item__edit,
+.expense-item__delete,
+.traveler-assign-chip { position: relative; }
+
+.expenses-section-btn::after,
+.debts-card__detail-btn::after,
+.debt-settle-btn::after,
+.expense-item__edit::after,
+.expense-item__delete::after,
+.traveler-assign-chip::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  border-radius: inherit;
 }

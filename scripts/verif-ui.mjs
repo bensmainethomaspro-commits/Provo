@@ -89,11 +89,22 @@ const SONDES = `(() => {
     const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
     return (x + 0.05) / (y + 0.05);
   };
+  // Deux pièges qui faisaient compter des défauts imaginaires :
+  //
+  // 1. Un élément peut être opaque alors que son PARENT est à opacity 0 —
+  //    c'est le cas du bandeau d'annulation au repos. Ses boutons étaient
+  //    mesurés alors que personne ne les voit.
+  // 2. Un élément peut avoir défilé hors du cadre. Une cible à top: -332
+  //    n'est pas une cible trop petite, c'est une cible absente.
   const visible = (el) => {
-    const s = getComputedStyle(el);
-    if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) return false;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) return false;
+    }
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
+    if (r.width <= 0 || r.height <= 0) return false;
+    return r.bottom > 0 && r.top < window.innerHeight
+        && r.right > 0 && r.left < window.innerWidth;
   };
   const nomme = (el) =>
     (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '')

@@ -53,7 +53,10 @@ function calcDebts(expenses, travelers) {
   travelers.forEach(t => { bal[t.id] = 0; });
 
   expenses.forEach(exp => {
-    const n = exp.participantIds.length;
+    // Une dépense écrite par une version antérieure, ou arrivée à moitié par
+    // la synchro, n'a pas forcément ce champ. Sans garde, un seul objet mal
+    // formé fait tomber toute la vue voyage — barre d'onglets comprise.
+    const n = (exp.participantIds || []).length;
     if (!n) return;
     const eurAmount = exp.eurAmount ?? exp.amount;
     const share = eurAmount / n;
@@ -86,7 +89,10 @@ function calcBalances(expenses, travelers) {
   const bal = {};
   travelers.forEach(t => { bal[t.id] = 0; });
   expenses.forEach(exp => {
-    const n = exp.participantIds.length;
+    // Une dépense écrite par une version antérieure, ou arrivée à moitié par
+    // la synchro, n'a pas forcément ce champ. Sans garde, un seul objet mal
+    // formé fait tomber toute la vue voyage — barre d'onglets comprise.
+    const n = (exp.participantIds || []).length;
     if (!n) return;
     const eurAmount = exp.eurAmount ?? exp.amount;
     const share = eurAmount / n;
