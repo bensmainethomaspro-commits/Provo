@@ -172,10 +172,14 @@ export default function ActivityCard({
             <div className="activity-card__main">
               <div className="activity-card__title">{activity.title}</div>
               <div className="activity-card__meta">
-                {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.fixed ? '📌 ' : ''}{slot.start} – {slot.end}</span>}
-                {dur > 0 && <span className="activity-card__duration">⏱ {formatDuration(dur)}</span>}
-                {activity.price > 0 && <span className="activity-card__price">💶 {formatPrice(parseFloat(activity.price))}</span>}
-                {activity.address && <span className="activity-card__address">📍 {activity.address}</span>}
+                {/* Les métadonnées se lisent, elles ne se décorent pas : l'émoji
+                    devant chaque valeur ajoutait quatre pictogrammes colorés par
+                    ligne, là où la position et la graisse suffisent à distinguer
+                    une heure d'un prix. */}
+                {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.start} – {slot.end}</span>}
+                {dur > 0 && <span className="activity-card__duration">{formatDuration(dur)}</span>}
+                {activity.price > 0 && <span className="activity-card__price">{formatPrice(parseFloat(activity.price))}</span>}
+                {activity.address && <span className="activity-card__address">{activity.address}</span>}
               </div>
             </div>
             {!compareMode && onTouchDragStart && (

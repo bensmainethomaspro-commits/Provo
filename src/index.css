@@ -6071,3 +6071,108 @@ button.budget-inline:active { transform: scale(0.98); }
   font-size: 12.5px; font-weight: 600;
   color: var(--text-muted);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APAISEMENT — la couleur ne sert plus qu'à ce qui est interactif
+   Inspiration : les listes d'iOS (Rappels, Calendrier, Réglages). La hiérarchie
+   y est portée par la typographie et l'espacement ; la couleur est réservée aux
+   éléments sur lesquels on peut agir. Ici, chaque ligne cumulait un badge bleu
+   plein, une barre de catégorie saturée et quatre émojis en guise d'icônes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* L'heure est une donnée, pas un bouton : texte gris à chiffres alignés plutôt
+   que pastille bleue pleine. Une heure imposée se distingue par la graisse. */
+.time-slot {
+  background: none !important;
+  color: var(--text-muted) !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.time-slot--fixed { color: var(--text) !important; font-weight: 650; }
+
+/* Durée, prix, adresse : même registre, séparés par des points médians plutôt
+   que par des pictogrammes. */
+.activity-card__duration,
+.activity-card__price,
+.activity-card__address {
+  background: none !important;
+  color: var(--text-muted) !important;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+.activity-card__meta { gap: 0; align-items: baseline; row-gap: 2px; }
+.activity-card__meta > * + *::before {
+  content: '·';
+  margin: 0 6px;
+  color: var(--text-light);
+  font-weight: 400;
+}
+.activity-card__address { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* La barre de catégorie devient une pastille discrète : empilées, quatre
+   couleurs vives sur toute la hauteur se lisaient comme autant d'alertes. */
+.activity-card::before {
+  width: 6px !important;
+  height: 6px !important;
+  top: 50% !important;
+  left: 6px !important;
+  transform: translateY(-50%);
+  border-radius: 50% !important;
+  opacity: 1 !important;
+}
+.day-detail-sheet .activity-card::before { width: 6px !important; height: 6px !important; }
+
+/* Les boutons perdent leur dégradé et leur halo : une couleur pleine, un rayon
+   franc, rien d'autre. */
+.btn--primary {
+  background: var(--accent) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.btn--primary:active { background: color-mix(in srgb, var(--accent) 85%, black) !important; }
+
+/* Les séparateurs entre activités remplacent les cartes empilées : un filet
+   fin, en retrait à gauche, comme dans une liste groupée iOS. */
+.day-detail-sheet .day-section__body .activity-card-swipe + .activity-card-swipe .activity-card {
+  border-top: 0.5px solid var(--border);
+}
+
+/* La catégorie était signalée trois fois : par l'émoji, par un filet coloré à
+   gauche, et par la teinte de ce filet. Un seul suffit — l'émoji. Le filet ne
+   sert plus qu'au statut, qui lui est une vraie information : fait, ou écarté. */
+.activity-card { border-left: none !important; }
+.activity-card::before { display: none; }
+.activity-card--done::before,
+.activity-card--nogo::before {
+  display: block;
+  width: 3px !important; height: auto !important;
+  top: 6px !important; bottom: 6px !important; left: 0 !important;
+  border-radius: 0 2px 2px 0 !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+/* Un incontournable garde un repère, mais discret : un liseré, pas un cadre. */
+.activity-card--mustdo { box-shadow: none !important; outline: none !important; }
+.activity-card--mustdo .activity-card__title::after {
+  content: '★';
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--accent);
+  vertical-align: 1px;
+}
+/* L'étoile suffit à marquer un incontournable : le cadre coloré revenait à
+   souligner une ligne sur quatre au marqueur. */
+.activity-card--mustdo { border: none !important; }
+.activity-card--mustdo::after { display: none !important; }
+/* L'adresse passe souvent à la ligne : son point de séparation se retrouvait
+   alors orphelin en début de ligne. Elle s'en passe. */
+.activity-card__address::before { content: none !important; margin: 0 !important; }
