@@ -12,6 +12,8 @@ export default function DayDetailModal({
   onNotesChange, onSweep, routeGain, onOptimizeRoute,
 }) {
   const [closing, setClosing] = useState(false);
+  // Ouvertes d'emblée seulement si elles contiennent déjà quelque chose.
+  const [notesOpen, setNotesOpen] = useState(Boolean(day.notes?.trim()));
   const todoActivities = day.activities.filter(a => a.status === 'todo');
 
   const close = () => {
@@ -48,26 +50,19 @@ export default function DayDetailModal({
         <div className="day-detail__body">
           <div className="day-section__start-time" style={{ marginBottom: 12 }}>
             <label htmlFor={`modal-start-${day.id}`}>🕘 Départ :</label>
-            <input id={`modal-start-${day.id}`} type="time"
+            <input id={`modal-start-${day.id}`} type="time" lang="fr-FR"
               value={day.startTime || '09:00'}
               onChange={e => onStartTimeChange(day.id, e.target.value)} />
           </div>
 
-          {stats.total > 0 && (
+          {/* Le total de la journée est déjà dans l'en-tête : le répéter ici en
+              deux pastilles de couleurs différentes n'ajoutait rien. Seule la
+              part déjà dépensée mérite d'être distinguée, quand il y en a une. */}
+          {stats.spent > 0 && (
             <div className="budget-row" style={{ marginBottom: 12 }}>
-              <span className="budget-pill" style={{ background: '#fef3c7', color: '#92400e' }}>
-                💰 {formatPrice(stats.total)}
+              <span className="budget-pill budget-pill--spent">
+                Déjà payé · {formatPrice(stats.spent)}
               </span>
-              {stats.spent > 0 && (
-                <span className="budget-pill" style={{ background: '#fee2e2', color: '#b91c1c' }}>
-                  ✅ {formatPrice(stats.spent)}
-                </span>
-              )}
-              {stats.remaining > 0 && (
-                <span className="budget-pill" style={{ background: '#dcfce7', color: '#15803d' }}>
-                  💵 {formatPrice(stats.remaining)}
-                </span>
-              )}
             </div>
           )}
 
@@ -127,13 +122,32 @@ export default function DayDetailModal({
             }
           </div>
 
-          <button
-            className="btn btn--primary"
-            style={{ width: '100%', marginTop: 14 }}
-            onClick={() => { close(); onAddActivity(day.id); }}
-          >
-            + Ajouter une activité à ce jour
-          </button>
+          {/* Les notes ne servent qu'à quelques journées : dépliées d'office,
+              leur champ vide occupait un quart de l'écran entre le programme et
+              le bas de la feuille. Un point signale qu'il y a quelque chose. */}
+          {onNotesChange && (
+            <div className={`day-detail__notes${notesOpen ? ' day-detail__notes--open' : ''}`}>
+              <button
+                type="button"
+                className="day-detail__notes-toggle"
+                aria-expanded={notesOpen}
+                onClick={() => setNotesOpen(o => !o)}
+              >
+                <span>Notes du jour{day.notes?.trim() ? ' •' : ''}</span>
+                <span className="day-detail__notes-chevron" aria-hidden="true">{notesOpen ? '▴' : '▾'}</span>
+              </button>
+              {notesOpen && (
+                <textarea
+                  id={`modal-notes-${day.id}`}
+                  className="day-notes-textarea"
+                  placeholder="Hébergement, infos pratiques, adresse…"
+                  value={day.notes || ''}
+                  onChange={e => onNotesChange(day.id, e.target.value)}
+                  autoFocus
+                />
+              )}
+            </div>
+          )}
 
           {onSweep && todoActivities.length > 0 && (
             <button
@@ -141,22 +155,20 @@ export default function DayDetailModal({
               onClick={() => onSweep(day.id)}
               title="Déplacer les activités « à faire » vers la Réserve"
             >
-              🪄 On verra plus tard · {todoActivities.length} → Réserve
+              Tout renvoyer en Réserve · {todoActivities.length}
             </button>
           )}
+        </div>
 
-          {onNotesChange && (
-            <div className="day-detail__notes">
-              <label className="day-detail__notes-label" htmlFor={`modal-notes-${day.id}`}>📝 Notes du jour</label>
-              <textarea
-                id={`modal-notes-${day.id}`}
-                className="day-notes-textarea"
-                placeholder="Hébergement, infos pratiques, adresse…"
-                value={day.notes || ''}
-                onChange={e => onNotesChange(day.id, e.target.value)}
-              />
-            </div>
-          )}
+        {/* L'action principale reste sous le pouce : elle se trouvait après la
+            liste, donc hors écran dès qu'une journée était remplie. */}
+        <div className="day-detail__footer">
+          <button
+            className="btn btn--primary day-detail__add"
+            onClick={() => { close(); onAddActivity(day.id); }}
+          >
+            + Ajouter une activité
+          </button>
         </div>
       </div>
     </div>

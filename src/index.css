@@ -5999,3 +5999,75 @@ button.budget-inline:active { transform: scale(0.98); }
   width: 100%; height: 150px;
   float: none; margin: 0 0 10px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VUE JOUR — ce qu'on lit d'abord, le reste au tap
+   Avant : le total de la journée répété trois fois, chaque activité dépliée
+   avec heure + durée + prix + adresse, un champ de notes vide occupant un quart
+   de l'écran, et l'action principale rejetée sous la liste donc hors écran.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* La feuille garde son pied visible : le corps défile, l'action reste. */
+.day-detail-sheet { display: flex; flex-direction: column; }
+.day-detail__body { flex: 1; min-height: 0; overflow-y: auto; }
+.day-detail__footer {
+  flex-shrink: 0;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.day-detail__add { width: 100%; }
+
+/* Repliée, une activité montre l'heure et sa durée — ce qui décide quand on
+   lit son programme. L'adresse et le prix servent une fois sur place : ils
+   arrivent au tap, avec le reste. */
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__address,
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__price {
+  display: none;
+}
+/* La photo passe en vignette tant que la fiche est repliée : en bandeau elle
+   poussait à elle seule le reste de la journée hors de l'écran. */
+.day-detail-sheet .activity-card:not(.activity-card--expanded) .activity-card__photo {
+  width: 52px; height: 52px; object-fit: cover;
+  border-radius: 10px; float: left; margin: 0 10px 0 0;
+}
+
+/* Les barres de catégorie étaient larges et saturées : quatre couleurs vives
+   empilées se lisaient comme des alertes. Un filet suffit à distinguer. */
+.day-detail-sheet .activity-card::before { width: 3px; opacity: 0.75; }
+
+.budget-pill--spent {
+  background: color-mix(in srgb, var(--green, #15803d) 12%, transparent);
+  color: var(--green, #15803d);
+  font-weight: 700;
+}
+
+/* Notes repliées : un bouton discret, le champ n'apparaît qu'à la demande. */
+.day-detail__notes { margin-top: 14px; }
+.day-detail__notes-toggle {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-sunken);
+  font-size: 13px; font-weight: 700; color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.day-detail__notes--open .day-detail__notes-toggle {
+  color: var(--accent);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.day-detail__notes-chevron { font-size: 11px; opacity: 0.8; }
+.day-detail__notes--open .day-notes-textarea {
+  border-top-left-radius: 0; border-top-right-radius: 0;
+  border-top: none; margin-top: 0;
+}
+
+/* Le balayage vers la Réserve est une action rare : il ne se dispute plus la
+   vedette avec l'ajout d'activité. */
+.day-detail__sweep {
+  width: 100%; margin-top: 10px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-muted);
+}
