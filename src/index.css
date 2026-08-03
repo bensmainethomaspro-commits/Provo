@@ -615,8 +615,11 @@ body {
 }
 .category-btn:active { transform: scale(0.94); }
 .category-btn span:first-child { font-size: 20px; }
-.category-btn--active { border-color: var(--orange); background: #F0F8FD; color: var(--orange); box-shadow: 0 0 0 3px rgba(53,167,221,0.1); }
-[data-theme="dark"] .category-btn--active { background: #2e1208; }
+.category-btn--active {
+  border-color: var(--accent); color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
 
 .duration-row { display: flex; gap: 8px; align-items: center; }
 .duration-row .form-input { text-align: center; }
@@ -647,8 +650,10 @@ body {
   line-height: 1;
 }
 .emoji-option:hover { background: var(--border); }
-.emoji-option.selected { border-color: var(--orange); background: #F0F8FD; }
-[data-theme="dark"] .emoji-option.selected { background: #2e1208; }
+.emoji-option.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
+}
 
 /* ─── CONFIRM DIALOG ─────────────────────────────────────── */
 .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 400; display: flex; align-items: center; justify-content: center; padding: 24px; }
