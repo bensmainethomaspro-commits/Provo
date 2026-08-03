@@ -6393,3 +6393,13 @@ button.budget-inline:active { transform: scale(0.98); }
   margin: 0; flex: 1; min-width: 0;
   color: var(--text); font-weight: 600; overflow-wrap: anywhere;
 }
+
+/* Reprise complète : un choix, pas le comportement par défaut. Discret, car
+   la plupart du temps il n'y a aucune raison de tout repasser. */
+.check-recheck {
+  display: block; width: 100%; min-height: 44px; margin-top: 4px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-sm, 12px);
+  background: transparent; color: var(--text-muted);
+  font-family: inherit; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}

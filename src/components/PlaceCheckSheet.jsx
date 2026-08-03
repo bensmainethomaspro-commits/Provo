@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { chercherCorrections, formatKm } from '../utils/verifyPlaces';
+import { chercherCorrections, aExaminer, signaturePlace, formatKm } from '../utils/verifyPlaces';
 
 /**
  * Contrôle des lieux — propose, n'impose pas.
@@ -7,24 +7,41 @@ import { chercherCorrections, formatKm } from '../utils/verifyPlaces';
  * L'app ne corrige jamais d'office : elle montre ce qu'elle a trouvé, dit
  * pourquoi elle le trouve douteux, et laisse trancher. Un lieu ignoré le reste.
  */
-export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliquer, onClose }) {
+export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliquer, onOuvrirFiche, onClose }) {
   const [progres, setProgres] = useState({ fait: 0, total: 0, titre: null });
   const [propositions, setPropositions] = useState(null);
   const [ignores, setIgnores] = useState(() => new Set());
   const [applique, setApplique] = useState(() => new Set());
+  // Une reprise complète est un choix explicite : par défaut on ne repasse pas
+  // une seconde par lieu sur ce qui a déjà été examiné.
+  const [tout, setTout] = useState(false);
   const arretRef = useRef(null);
+  // La recherche dure plusieurs dizaines de secondes : elle ne doit pas
+  // repartir de zéro parce que le parent s'est redessiné. Le rappel passe donc
+  // par un ref, tenu à jour hors du rendu.
+  const appliquerRef = useRef(onAppliquer);
+  useEffect(() => { appliquerRef.current = onAppliquer; }, [onAppliquer]);
+
+  const aVerifier = aExaminer(analyse, tout);
 
   useEffect(() => {
     const ctrl = new AbortController();
     arretRef.current = ctrl;
-    const aVerifier = [...analyse.ecartes, ...analyse.incompletes];
     chercherCorrections(aVerifier, {
       destination, ancre, arret: ctrl.signal,
       onProgres: (p) => { if (!ctrl.signal.aborted) setProgres(p); },
-    }).then(r => { if (!ctrl.signal.aborted) setPropositions(r); })
-      .catch(() => { if (!ctrl.signal.aborted) setPropositions([]); });
+    }).then(({ propositions: props, examines }) => {
+      if (ctrl.signal.aborted) return;
+      // Rien à montrer pour celles-là, mais il faut s'en souvenir : sans ça,
+      // la prochaine ouverture redépense le même temps pour le même vide.
+      examines.forEach(e => appliquerRef.current(e.emplacement, e.id, e.patch));
+      setPropositions(props);
+    }).catch(() => { if (!ctrl.signal.aborted) setPropositions([]); });
     return () => ctrl.abort();
-  }, [analyse, destination, ancre]);
+    // `aVerifier` est recalculé à chaque rendu : le déclencheur, c'est la
+    // demande de reprise complète, pas l'identité du tableau.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tout, destination, ancre]);
 
   const fermer = () => { arretRef.current?.abort(); onClose(); };
 
@@ -32,15 +49,24 @@ export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliqu
     onAppliquer(p.emplacement, p.id, p.patch);
     setApplique(s => new Set(s).add(p.id));
   };
+  // « Laisser » est une décision, pas un report : on la retient pour ne plus
+  // reposer la question tant que le lieu n'a pas changé.
+  const laisserUne = (p) => {
+    const act = trouverActivite(analyse, p.id);
+    if (act) onAppliquer(p.emplacement, p.id, { placeCheckSig: signaturePlace(act) });
+    setIgnores(s => new Set(s).add(p.id));
+  };
   const toutAppliquer = () => {
-    const restantes = (propositions || []).filter(p => !ignores.has(p.id) && !applique.has(p.id));
+    const restantes = (propositions || [])
+      .filter(p => p.motif !== 'introuvable' && !ignores.has(p.id) && !applique.has(p.id));
     restantes.forEach(p => onAppliquer(p.emplacement, p.id, p.patch));
     setApplique(s => { const n = new Set(s); restantes.forEach(p => n.add(p.id)); return n; });
   };
 
   const enCours = propositions === null;
   const visibles = (propositions || []).filter(p => !ignores.has(p.id));
-  const restantes = visibles.filter(p => !applique.has(p.id));
+  const restantes = visibles.filter(p => p.motif !== 'introuvable' && !applique.has(p.id));
+  const dejaVus = analyse.total - aExaminer(analyse, false).length;
 
   return (
     <div className="sheet-overlay" onClick={fermer}>
@@ -75,13 +101,19 @@ export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliqu
           {!enCours && !visibles.length && (
             <div className="check-empty">
               <div className="check-empty__icon">✅</div>
-              <p>Rien à corriger.</p>
+              <p>Rien de nouveau à corriger.</p>
               <p className="check-empty__hint">
-                {analyse.total > 0
-                  ? "Les lieux signalés n'ont pas de meilleure correspondance en ligne. Tu peux les corriger à la main depuis leur fiche."
+                {dejaVus > 0 && !tout
+                  ? `${dejaVus} ${dejaVus > 1 ? 'fiches ont déjà été passées' : 'fiche a déjà été passée'} en revue. Tu peux tout reprendre si besoin.`
                   : 'Toutes les fiches sont cohérentes avec la destination.'}
               </p>
             </div>
+          )}
+
+          {!enCours && dejaVus > 0 && !tout && (
+            <button className="check-recheck" onClick={() => { setPropositions(null); setTout(true); }}>
+              Tout revérifier ({analyse.total})
+            </button>
           )}
 
           {!enCours && visibles.map(p => {
@@ -93,7 +125,31 @@ export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliqu
                   <span className="check-card__where">{p.ou}</span>
                 </div>
 
-                {p.motif === 'ecarte' ? (
+                {p.motif === 'introuvable' ? (
+                  <>
+                    <p className="check-card__why">
+                      Situé à <strong>{formatKm(p.distanceKm)}</strong> de {destination || 'la destination'},
+                      mais {RAISON[p.raison]}
+                    </p>
+                    <div className="check-card__diff">
+                      <div className="check-card__to check-card__to--soft">{p.avant.address}</div>
+                    </div>
+                    <div className="check-card__actions">
+                      <button
+                        className="btn btn--ghost btn--sm check-card__skip"
+                        onClick={() => laisserUne(p)}
+                      >
+                        C'est correct
+                      </button>
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={() => { onOuvrirFiche?.(p.emplacement, p.id); onClose(); }}
+                      >
+                        Corriger à la main
+                      </button>
+                    </div>
+                  </>
+                ) : p.motif === 'ecarte' ? (
                   <>
                     <p className="check-card__why">
                       Situé à <strong>{formatKm(p.distanceKm)}</strong> de {destination || 'la destination'}.
@@ -120,13 +176,13 @@ export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliqu
                   </>
                 )}
 
-                {fait ? (
+                {p.motif === 'introuvable' ? null : fait ? (
                   <p className="check-card__done">✅ Corrigé</p>
                 ) : (
                   <div className="check-card__actions">
                     <button
                       className="btn btn--ghost btn--sm check-card__skip"
-                      onClick={() => setIgnores(s => new Set(s).add(p.id))}
+                      onClick={() => laisserUne(p)}
                     >
                       Laisser
                     </button>
@@ -160,6 +216,18 @@ const LIBELLE = {
   price: 'Prix',
   link: 'Site web',
 };
+
+const RAISON = {
+  aucun: "aucun lieu de ce nom n'a été trouvé près de là.",
+  loin: "le seul lieu de ce nom est bien là-bas — c'est peut-être le bon.",
+  identique: 'la recherche renvoie exactement le même endroit.',
+};
+
+/** Retrouve l'activité dans l'analyse, pour calculer son empreinte. */
+function trouverActivite(analyse, id) {
+  const x = [...analyse.ecartes, ...analyse.incompletes].find(e => e.activite.id === id);
+  return x?.activite || null;
+}
 
 function formatValeur(cle, patch) {
   if (cle === 'lat') return 'sur la carte';
