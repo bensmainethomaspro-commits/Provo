@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel, isClosedOnDate, totalMinutes, formatDuration, haversineKm } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
+import { useLiveLocation, formatDistance, formatMarche } from '../hooks/useLiveLocation';
 import Confetti from './Confetti';
 import ConfirmDialog from './ConfirmDialog';
 
 // Drag-to-reorder list for the day's remaining activities (touch + mouse).
 // Order is tracked as an array of ids; the parent commit happens on drop from a
 // ref (never inside a setState updater) so we never feed it a malformed list.
-function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
+function TodayReorderList({ items, slots, onCommit, onDone, onSkip, maPosition }) {
   const [orderIds, setOrderIds] = useState(() => items.map(a => a.id));
   const [dragId, setDragId] = useState(null);
   const orderRef = useRef(orderIds);
@@ -62,6 +63,10 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
   return list.map(act => {
     const meta = getCategoryMeta(act.category);
     const slot = slots[act.id];
+    // « À combien je suis ? » se répond sur la fiche, pas dans un autre écran.
+    const km = (maPosition && act.lat != null && act.lon != null)
+      ? haversineKm(maPosition.lat, maPosition.lon, act.lat, act.lon)
+      : null;
     return (
       <div
         key={act.id}
@@ -79,6 +84,11 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip }) {
           <div className="today-act-card__info">
             <div className="today-act-card__title">{act.title}</div>
             {slot && <div className="today-act-card__time">{slot.start} – {slot.end}</div>}
+            {km != null && (
+              <div className="today-act-card__distance">
+                {formatDistance(km)} · {formatMarche(km)}
+              </div>
+            )}
             {act.address && (
               <a
                 className="today-act-card__addr"
@@ -106,6 +116,8 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
   const [showPicker, setShowPicker] = useState(false);
   const [pickerTab, setPickerTab] = useState('reserve');
   const [pickSuggestion, setPickSuggestion] = useState(null);
+  // Position en direct : proposée, jamais imposée. Éteinte, elle ne coûte rien.
+  const geo = useLiveLocation();
 
   if (!day) {
     return (
@@ -220,6 +232,26 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
         </div>
       </div>
 
+      {/* Se localiser répond à « c'est loin ? » sans quitter l'écran du jour.
+          Éteint par défaut : la géolocalisation demande une autorisation et
+          consomme de la batterie, ce n'est pas à l'app d'en décider. */}
+      {geo.disponible && (
+        <div className="today-geo">
+          <button
+            type="button"
+            className={`today-geo__toggle${geo.active ? ' today-geo__toggle--on' : ''}`}
+            onClick={geo.basculer}
+            aria-pressed={geo.active}
+          >
+            {geo.active ? 'Position activée' : 'Où suis-je ?'}
+          </button>
+          {geo.active && !geo.position && !geo.erreur && (
+            <span className="today-geo__state">Recherche…</span>
+          )}
+          {geo.erreur && <span className="today-geo__state today-geo__state--err">{geo.erreur}</span>}
+        </div>
+      )}
+
       {allDone && (
         <div className="today-mode__all-done">
           <div className="today-mode__all-done-icon">🎉</div>
@@ -236,6 +268,7 @@ export default function TodayMode({ day, dayIndex, totalDays, trip, onStatusChan
             onCommit={commitRemainingOrder}
             onDone={handleDone}
             onSkip={handleSkip}
+            maPosition={geo.position}
           />
         </div>
       )}

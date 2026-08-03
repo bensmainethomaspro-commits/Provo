@@ -6176,3 +6176,50 @@ button.budget-inline:active { transform: scale(0.98); }
 /* L'adresse passe souvent à la ligne : son point de séparation se retrouvait
    alors orphelin en début de ligne. Elle s'en passe. */
 .activity-card__address::before { content: none !important; margin: 0 !important; }
+
+/* ─── Installation sur iPhone ─────────────────────────────────────────────
+   iOS n'expose pas `beforeinstallprompt` : le bouton « Installer » ne pouvait
+   rien y déclencher et restait donc caché. Il explique désormais le chemin. */
+.install-ios__intro { font-size: 14px; line-height: 1.5; color: var(--text-muted); margin-bottom: 18px; }
+.install-ios__steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 12px; }
+.install-ios__steps li {
+  display: flex; align-items: flex-start; gap: 12px;
+  font-size: 15px; line-height: 1.45; color: var(--text);
+}
+.install-ios__num {
+  flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.install-ios__glyph { font-size: 17px; }
+.install-ios__note {
+  font-size: 12.5px; line-height: 1.45; color: var(--text-muted);
+  background: var(--surface-sunken); border-radius: 12px; padding: 10px 12px;
+}
+
+/* ─── Position en direct ──────────────────────────────────────────────────
+   « À combien je suis ? » se répond sur la fiche de l'activité, pas dans un
+   autre écran. Éteinte par défaut : autorisation système et batterie. */
+.today-geo { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+.today-geo__toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 13px; font-weight: 650; color: var(--text-muted);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 0.14s, color 0.14s, border-color 0.14s;
+}
+.today-geo__toggle::before { content: '◎'; font-size: 13px; }
+.today-geo__toggle--on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.today-geo__state { font-size: 12.5px; color: var(--text-muted); }
+.today-geo__state--err { color: var(--red, #b91c1c); }
+.today-act-card__distance {
+  font-size: 12.5px; font-weight: 600; color: var(--accent);
+  margin-top: 2px;
+}

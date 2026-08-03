@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AccountSheet from '../components/AccountSheet';
 import { getCategoryMeta, formatDate } from '../utils/helpers';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import InstallIosSheet from '../components/InstallIosSheet';
 
 function todayStr() {
   const d = new Date();
@@ -22,7 +23,8 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   const [previewTrip, setPreviewTrip] = useState(null);
   const [showAccount, setShowAccount] = useState(false);
   const [search, setSearch] = useState('');
-  const { canInstall, install } = useInstallPrompt();
+  const { canInstall, install, needsManualInstall } = useInstallPrompt();
+  const [showIosInstall, setShowIosInstall] = useState(false);
 
   const handleCreate = (data) => {
     const id = createTrip(data);
@@ -75,8 +77,15 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           <button className="btn btn--ghost-white btn--sm" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
             {darkMode ? '☀️' : '🌙'}
           </button>
-          {canInstall && (
-            <button className="btn btn--ghost-white btn--sm install-btn" onClick={install} title="Installer l'application">
+          {/* Android propose l'installation ; iOS ne le permet pas depuis une
+              page, il faut passer par le menu de partage de Safari. Le bouton
+              existe dans les deux cas — il installe, ou il explique. */}
+          {(canInstall || needsManualInstall) && (
+            <button
+              className="btn btn--ghost-white btn--sm install-btn"
+              onClick={() => (canInstall ? install() : setShowIosInstall(true))}
+              title="Installer l'application"
+            >
               📲 Installer
             </button>
           )}
@@ -249,6 +258,8 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           trips={[...currentTrips, ...pastTrips]}
         />
       )}
+
+      {showIosInstall && <InstallIosSheet onClose={() => setShowIosInstall(false)} />}
     </div>
   );
 }
