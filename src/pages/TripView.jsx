@@ -726,8 +726,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 )}
                 <button className="trip-header-menu__item" onClick={() => { setShowPlaceCheck(true); setTripMenuOpen(false); }}>
                   📍 Vérifier les lieux
-                  {analysePlaces.total > 0 && (
-                    <span className="trip-header-menu__count">{analysePlaces.total}</span>
+                  {analysePlaces.nouveaux > 0 && (
+                    <span className="trip-header-menu__count">{analysePlaces.nouveaux}</span>
                   )}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
@@ -873,14 +873,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             {/* Un lieu mal situé ne se voit pas dans une liste : on le dit.
                 Discret, refermable, et sans rien changer tant qu'on n'a pas
                 demandé — l'app propose, elle ne réorganise jamais d'office. */}
-            {analysePlaces.ecartes.length > 0 && !checkBannerDismissed && (
+            {analysePlaces.ecartesNeufs > 0 && !checkBannerDismissed && (
               <div className="place-alert">
                 <span className="place-alert__icon" aria-hidden="true">📍</span>
                 <div className="place-alert__text">
                   <strong>
-                    {analysePlaces.ecartes.length === 1
+                    {analysePlaces.ecartesNeufs === 1
                       ? '1 lieu semble mal situé'
-                      : `${analysePlaces.ecartes.length} lieux semblent mal situés`}
+                      : `${analysePlaces.ecartesNeufs} lieux semblent mal situés`}
                   </strong>
                   <span>Loin de {trip.destination || 'la destination'} — sans doute une erreur d'import.</span>
                 </div>
@@ -1145,6 +1145,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             destination={trip.destination}
             ancre={anchor}
             onAppliquer={(location, actId, patch) => updateActivity(tripId, location, actId, patch)}
+            onOuvrirFiche={openActivityFromMap}
             onClose={() => setShowPlaceCheck(false)}
           />
         </Suspense>

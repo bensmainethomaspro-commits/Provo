@@ -154,6 +154,20 @@ Rien n'est jamais appliqué d'office (principe produit). Le bandeau se referme,
 chaque proposition se laisse, et une correction n'écrase que ce qui est faux :
 pour un lieu écarté la position, pour une fiche incomplète les seuls trous.
 
+**Jamais d'abandon silencieux.** Quand la recherche ne trouve rien d'utilisable,
+la fiche s'affiche quand même avec la raison (`aucun`, `loin`, `identique`) et
+deux issues : « C'est correct » ou « Corriger à la main ». Un lieu signalé puis
+laissé sans un mot est le pire des deux mondes — l'erreur persiste et on ne sait
+pas pourquoi. C'est le cas « Casa de Mozart » : le géocodeur ne connaît que la
+maison de Salzbourg, aucune correction automatique n'est possible, il faut le
+dire.
+
+**Mémoire des vérifications.** `signaturePlace(a)` = `titre|lat|lon` arrondis,
+stockée dans `a.placeCheckSig`. Une fiche déjà examinée n'est plus recherchée en
+ligne (une seconde par lieu, c'est cher) ni comptée dans le bandeau. Modifier le
+titre ou la position invalide l'empreinte et remet la fiche dans le circuit.
+`analyse.nouveaux` alerte, `analyse.total` sert au bouton « Tout revérifier ».
+
 Fausses alertes vérifiées comme telles : excursion à 55 km, road trip étalé,
 repas, voyage sans ancre géocodée — aucun n'est signalé.
 
