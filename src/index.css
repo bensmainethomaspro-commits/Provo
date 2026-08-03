@@ -5049,7 +5049,12 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   --surface-sunken: #E9EFF5;
   --text: #12202B;
   --text-muted: #576A78;
-  --text-light: #8698A6;
+  /* Mesuré à 2,57:1 sur le fond enfoncé — un texte qu'on devine plus qu'on ne
+     le lit. L'app se consulte dehors, en plein soleil, sur un écran baissé :
+     les dates et les compteurs doivent se lire. Assombri jusqu'à 4,5:1 (WCAG
+     AA) à teinte constante. Du coup ce gris rejoint --text-muted : la
+     hiérarchie passe désormais par la taille et la graisse, pas par la pâleur. */
+  --text-light: #606D78;
   --border: rgba(16, 45, 70, 0.10);
   --border-strong: rgba(16, 45, 70, 0.18);
   /* Ombres teintées ambre — jamais de noir pur */
@@ -5069,7 +5074,8 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
   --surface-sunken: #0B1218;
   --text: #E6EEF4;
   --text-muted: #A5B6C2;
-  --text-light: #6F818E;
+  /* 3,86:1 sur la surface haute — même correction, éclaircie cette fois. */
+  --text-light: #798D9B;
   --border: rgba(170,214,255, 0.10);
   --border-strong: rgba(170,214,255, 0.20);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
