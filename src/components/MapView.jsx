@@ -30,21 +30,31 @@ function homeIcon() {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, onOpenActivity }) {
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
-  const [accom, setAccom] = useState(null);
+  const [accomTrouve, setAccomTrouve] = useState(null);
 
-  // Geocode the accommodation address from trip settings (Nominatim, CORS-ok).
+  // L'hébergement est localisé une fois, à la saisie, et rangé sur le voyage.
+  // La carte n'a donc plus rien à demander au réseau : elle affiche l'épingle
+  // même hors ligne, et une adresse introuvable se dit dans les réglages au
+  // lieu de disparaître ici sans un mot.
+  const addr = (accommodationAddress || '').trim();
+  const stocke = Number.isFinite(accommodationLat) && Number.isFinite(accommodationLon);
+  const accom = !addr ? null
+    : stocke ? { lat: accommodationLat, lon: accommodationLon, address: addr }
+    : accomTrouve;
+
+  // Repli pour les voyages enregistrés avant ce changement, qui n'ont que
+  // l'adresse en texte.
   useEffect(() => {
-    const addr = (accommodationAddress || '').trim();
-    if (!addr) { setAccom(null); return; }
+    if (!addr || stocke) return;
     let cancelled = false;
     fetchPlaceData(addr)
-      .then(p => { if (!cancelled && p?.lat != null) setAccom({ lat: p.lat, lon: p.lon, address: p.address || addr }); })
+      .then(p => { if (!cancelled && p?.lat != null) setAccomTrouve({ lat: p.lat, lon: p.lon, address: p.address || addr }); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [accommodationAddress]);
+  }, [addr, stocke]);
 
   const geoActs = [
     ...days.flatMap((d, i) => d.activities

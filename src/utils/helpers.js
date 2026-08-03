@@ -875,7 +875,9 @@ export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
   }
 
   return {
-    title: (p.name || p.display_name.split(',')[0]).trim(),
+    // `display_name` manque sur certaines réponses partielles : sans garde,
+    // une seule mauvaise réponse fait lever toute la fonction.
+    title: (p.name || (p.display_name || '').split(',')[0] || '').trim(),
     address,
     category,
     photoUrl,
