@@ -683,7 +683,7 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
 
 // ── Generic website ───────────────────────────────────────────────────────
 async function handleGeneric(rawUrl: string) {
-  const { finalUrl, html } = await resolve(rawUrl);
+  const { html } = await resolve(rawUrl);
   const title = metaTag(html, "og:title") || metaTag(html, "twitter:title") ||
     (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "");
   const desc = metaTag(html, "og:description") || metaTag(html, "description");
@@ -708,7 +708,6 @@ async function handleGeneric(rawUrl: string) {
     category = category || place.category;
   }
   result.category = category || "visite";
-  void finalUrl;
   return result;
 }
 

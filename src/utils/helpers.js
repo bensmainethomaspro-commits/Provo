@@ -836,6 +836,11 @@ export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
     + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5`,
     { headers: { 'Accept-Language': 'fr' } }
   );
+  // Nominatim limite à une requête par seconde et répond alors 429 avec un
+  // corps qui n'est pas du JSON : sans ce contrôle, `res.json()` lève et
+  // l'échec ressort en exception au lieu du `null` que tous les appelants
+  // savent déjà traiter. `searchPlaces` et `enrich.js` vérifient déjà `ok`.
+  if (!res.ok) return null;
   const data = await res.json();
   if (!data?.length) return null;
 

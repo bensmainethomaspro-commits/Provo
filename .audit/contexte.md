@@ -41,14 +41,29 @@ personnes, quelques fois par an. Aucun objectif de croissance ni de monétisatio
 | Mobile natif | Capacitor 8 (com.provo.app), dossier android/ |
 | Qualité | ESLint 10, aucune suite de tests automatisés |
 
-Aucune dépendance payante. Tous les services externes sont gratuits et sans clé :
-Nominatim, Overpass, Open-Meteo, OSRM, Wikipédia, Frankfurter, Google News RSS via
-rss2json, tuiles OSM, et des proxys CORS de secours interrogés en parallèle.
+Services externes gratuits et sans clé : Nominatim, **Photon**
+(`photon.komoot.io`, second recours de `searchPlaces` quand Nominatim ne rend
+rien — même fond OSM, index approximatif, mais ni horaires ni tarifs), Overpass,
+Open-Meteo, OSRM, Wikipédia, Frankfurter, Google News RSS via rss2json, tuiles
+OSM, et des proxys CORS de secours interrogés en parallèle.
+
+**Une seule dépendance payante, optionnelle** (depuis le 2026-08-03) :
+l'API Anthropic, appelée par la fonction Edge pour lire les légendes TikTok que
+les règles n'ont pas su interpréter. Modèle `claude-haiku-4-5-20251001`,
+~0,001 € par lien. Elle ne s'active que si le secret `ANTHROPIC_API_KEY` (ou
+`ANTHROPIC_API_KEY_TB`) est posé dans Supabase › Edge Functions › Secrets ;
+sans lui, `classifyWithLLM` rend `null` et la chaîne à base de règles reprend
+la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
 
 ## Architecture à connaître
 
 - `src/hooks/useTrips.js` : modèle de données, persistance, synchro, collaboration.
   C'est le fichier le plus critique du projet.
+- `src/hooks/useTripAnchor.js` : point d'ancrage géographique d'un voyage (les
+  coordonnées de sa **destination**, jamais celles de la première activité).
+  Toute recherche de lieu s'y situe. Cache dans `localStorage` sous
+  `provo_dest_coords` — troisième clé du projet avec `provo_trips` et
+  `provo_settings`.
 - `src/utils/enrich.js` : complétion automatique des fiches.
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
@@ -187,6 +202,20 @@ Conséquences à connaître sans les redécouvrir :
 Volumétrie au 2026-07-29 : `trips` 4, `profiles` 3, `shared_trips` 2,
 `trip_members` 0. La collaboration par code d'invitation n'a donc jamais servi ;
 le partage par `shared_trips` (bouton « Partager ») si.
+
+## Budget de temps de la fonction Edge — relevé le 2026-08-03
+
+Chaque appel externe porte son propre `withTimeout`, mais rien ne borne la
+somme. Additionnés dans le pire cas, en séquence :
+
+| Chemin | Détail | Pire cas |
+|---|---|---|
+| TikTok | `resolve` 10 s + oEmbed 3 × 8 s + modèle 12 s + `geocode` 9 s + hashtags 3 × 9 s | **~82 s** |
+| Google Maps | `resolve` 10 s (+10 s si interstitiel de consentement) + `reverseGeocodeRaw` 8 s + 2 × `nominatimSearch` 9 s | **~46 s** |
+
+Côté client, `extractViaEdge` n'impose aucun plafond ; ailleurs le dépôt
+applique pourtant un `Promise.race` de 4 500 ms (`AddActivitySheet.jsx:308`).
+Ne pas redécouvrir ce calcul : il est la preuve du constat A-012.
 
 ## Contraintes de l'auditeur automatique
 
