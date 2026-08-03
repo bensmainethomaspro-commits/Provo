@@ -578,6 +578,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setSheetOpen(true);
   };
 
+  // Une épingle qu'on ne peut que regarder oblige à refermer la carte et à
+  // retrouver l'activité dans la bonne liste pour corriger une adresse. La
+  // bulle ouvre directement la fiche, où qu'elle soit rangée.
+  const openActivityFromMap = (actId) => {
+    for (const d of trip.days) {
+      const activity = d.activities.find(a => a.id === actId);
+      if (activity) {
+        setEditingActivity({ activity, location: { type: 'day', dayId: d.id } });
+        return;
+      }
+    }
+    const inReserve = (trip.reserve || []).find(a => a.id === actId);
+    if (inReserve) setEditingActivity({ activity: inReserve, location: { type: 'reserve' } });
+  };
+
   const handleDuplicate = (activityId, targetDayId) =>
     duplicateToDay(tripId, activityId, targetDayId);
 
@@ -1053,7 +1068,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
           <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
-            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} />
+            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} onOpenActivity={openActivityFromMap} />
           </Suspense>
         )}
       </div>

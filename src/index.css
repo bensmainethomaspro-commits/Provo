@@ -6177,28 +6177,6 @@ button.budget-inline:active { transform: scale(0.98); }
    alors orphelin en début de ligne. Elle s'en passe. */
 .activity-card__address::before { content: none !important; margin: 0 !important; }
 
-/* ─── Installation sur iPhone ─────────────────────────────────────────────
-   iOS n'expose pas `beforeinstallprompt` : le bouton « Installer » ne pouvait
-   rien y déclencher et restait donc caché. Il explique désormais le chemin. */
-.install-ios__intro { font-size: 14px; line-height: 1.5; color: var(--text-muted); margin-bottom: 18px; }
-.install-ios__steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 12px; }
-.install-ios__steps li {
-  display: flex; align-items: flex-start; gap: 12px;
-  font-size: 15px; line-height: 1.45; color: var(--text);
-}
-.install-ios__num {
-  flex-shrink: 0;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--accent); color: #fff;
-  font-size: 13px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-}
-.install-ios__glyph { font-size: 17px; }
-.install-ios__note {
-  font-size: 12.5px; line-height: 1.45; color: var(--text-muted);
-  background: var(--surface-sunken); border-radius: 12px; padding: 10px 12px;
-}
-
 /* ─── Position en direct ──────────────────────────────────────────────────
    « À combien je suis ? » se répond sur la fiche de l'activité, pas dans un
    autre écran. Éteinte par défaut : autorisation système et batterie. */
@@ -6223,3 +6201,23 @@ button.budget-inline:active { transform: scale(0.98); }
   font-size: 12.5px; font-weight: 600; color: var(--accent);
   margin-top: 2px;
 }
+
+/* ─── Carte : ouvrir la fiche depuis l'épingle ────────────────────────────
+   Une bulle qui n'affiche qu'un titre oblige à refermer la carte et à
+   retrouver l'activité dans la bonne liste pour la corriger. */
+.leaflet-popup-content { margin: 12px 14px; font-family: inherit; }
+.leaflet-popup-content strong { font-size: 14.5px; color: #1a1a2e; }
+.map-popup__edit {
+  display: block; width: 100%; margin-top: 10px;
+  min-height: 44px; padding: 0 12px; border: none; border-radius: 10px;
+  background: var(--accent); color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-popup__edit:active { opacity: 0.82; }
+
+/* Leaflet empile ses calques jusqu'à z-index 800 — bien au-dessus des fiches
+   (200). Ouvrir une activité depuis une épingle laissait donc les épingles et
+   les boutons de zoom traverser la fiche. Un contexte d'empilement local
+   enferme toute cette hiérarchie sous la carte elle-même. */
+.map-wrap { position: relative; z-index: 0; }
