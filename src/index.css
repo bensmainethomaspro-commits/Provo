@@ -6725,3 +6725,35 @@ button.budget-inline:active { transform: scale(0.98); }
   object-fit: cover; border-radius: 12px;
   margin: 0 0 12px; background: var(--surface-sunken);
 }
+
+/* ─── Recherche en cours sur les fiches ───────────────────────────────────
+   Une seconde par lieu, plusieurs lieux : sans retour, on croit l'app figée.
+   Et on doit pouvoir arrêter — c'est un service payant qui tourne. */
+.fouille-toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  width: min(94%, 452px); z-index: 180;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 14px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+.fouille-toast__bar {
+  position: absolute; left: 14px; right: 14px; top: 5px;
+  height: 3px; border-radius: 99px; background: var(--surface-sunken); overflow: hidden;
+}
+.fouille-toast__bar > span {
+  display: block; height: 100%; border-radius: 99px;
+  background: var(--accent); transition: width 0.3s ease;
+}
+.fouille-toast__txt {
+  flex: 1; min-width: 0; margin-top: 6px;
+  font-size: 12.5px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fouille-toast__stop {
+  flex-shrink: 0; margin-top: 6px; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: transparent; color: var(--text-muted);
+  font-family: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+}
