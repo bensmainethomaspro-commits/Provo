@@ -6648,3 +6648,25 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .reserve-filter__pill--ouvert { font-weight: 700; }
 .reserve-vide { padding: 26px 12px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+/* L'ajout d'une dépense est le geste le plus fréquent de son écran : il vient
+   en tête, pas après les totaux et les soldes. */
+.expenses-add-top { width: 100%; margin: 0 0 16px; min-height: 48px; font-size: 15px; }
+
+/* Glisser-déposer dans la Réserve. La poignée n'apparaît qu'en liste à plat :
+   groupée ou triée, la position manuelle ne se voit plus, donc la déplacer ne
+   voudrait rien dire. */
+.reserve-card__grip {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 22px; min-height: 44px;
+  border: none; background: transparent;
+  font-size: 15px; color: var(--text-light); cursor: grab;
+  z-index: 2; line-height: 1;
+  /* Le navigateur ne doit pas interpréter le geste comme un défilement. */
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.reserve-card__grip:active { cursor: grabbing; }
+.reserve-card[data-reorder-id] { position: relative; padding-left: 18px; }
+.reserve-card--drag { opacity: 0.4; }
+/* Où la carte va atterrir : un trait, pas un déplacement fantôme. */
+.reserve-card--cible { box-shadow: 0 -3px 0 -1px var(--accent), var(--shadow-sm); }

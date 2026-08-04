@@ -25,6 +25,7 @@ import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
+import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur } from '../utils/deepEnrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
@@ -188,7 +189,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
-    addToReserve, addToDay, reorderActivity, reorderInReserve,
+    addToReserve, addToDay, reorderActivity, reorderInReserve, moveInReserve,
     setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
@@ -247,6 +248,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [reserveSort, setReserveSort] = useState('default');
   // Sur place, la question est « qu'est-ce qui est ouvert, près de moi ».
   const [ouvertSeul, setOuvertSeul] = useState(false);
+  // Le regroupement par catégorie masque l'ordre manuel : les deux ne peuvent
+  // pas cohabiter. On le rend donc débrayable, et c'est en liste à plat que le
+  // glisser-déposer prend son sens.
+  const [grouper, setGrouper] = useState(true);
+  const reorder = useReorderDrag(
+    useCallback((id, cibleId) => moveInReserve(tripId, id, cibleId), [moveInReserve, tripId])
+  );
   const geoReserve = useLiveLocation();
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
@@ -1053,6 +1061,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     onClick={() => setOuvertSeul(v => !v)}
                     aria-pressed={ouvertSeul}
                   >🟢 Ouvert</button>
+                  <button
+                    className={`reserve-filter__pill${grouper ? ' reserve-filter__pill--active' : ''}`}
+                    onClick={() => setGrouper(v => !v)}
+                    aria-pressed={grouper}
+                    title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
+                  >{grouper ? '⊞ Groupé' : '☰ Liste'}</button>
                   {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
                     const count = trip.reserve.filter(a => a.category === cat.id).length;
                     return (
@@ -1100,13 +1114,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                   // Regroupement par catégorie : c'est le premier tri de l'œil.
                   // Il ne s'applique que quand on regarde TOUT — filtrer sur une
                   // seule catégorie rendrait les en-têtes absurdes.
-                  const groupes = reserveFilter === 'all'
+                  const groupes = (grouper && reserveFilter === 'all')
                     ? CATEGORIES
                         .map(cat => ({ cat, items: retenues.filter(a => a.category === cat.id) }))
                         .filter(g => g.items.length)
                     : [{ cat: null, items: retenues }];
                   const sansCat = retenues.filter(a => !CATEGORIES.some(c => c.id === a.category));
-                  if (reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
+                  if (grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
+                  // Réordonner n'a de sens que sur une liste à plat, dans son
+                  // ordre propre : groupée ou triée, la position manuelle ne se
+                  // voit plus, donc la déplacer ne veut rien dire.
+                  const reordonnable = !grouper && reserveSort === 'default' && reserveFilter === 'all' && !q;
 
                   if (!retenues.length) {
                     return (
@@ -1128,7 +1146,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                         </div>
                       )}
                       {g.items.map((activity, i, arr) => (
-                  <div key={activity.id} className={`reserve-card${dejaPlanifiee(activity, trip.days) ? ' reserve-card--planifiee' : ''}`}>
+                  <div
+                    key={activity.id}
+                    data-reorder-id={reordonnable ? activity.id : undefined}
+                    className={`reserve-card${dejaPlanifiee(activity, trip.days) ? ' reserve-card--planifiee' : ''}`
+                      + (reorder.dragId === activity.id ? ' reserve-card--drag' : '')
+                      + (reorder.surId === activity.id && reorder.dragId !== activity.id ? ' reserve-card--cible' : '')}
+                  >
+                    {reordonnable && (
+                      <button
+                        className="reserve-card__grip"
+                        onPointerDown={(e) => reorder.demarrer(activity.id, e)}
+                        aria-label={`Déplacer ${activity.title}`}
+                      >⠿</button>
+                    )}
                     {/* Ce qu'il faut savoir avant de piocher, en une ligne
                         discrète : ouvert ou non, à quelle distance, et ce qui
                         manquera sur place. */}
