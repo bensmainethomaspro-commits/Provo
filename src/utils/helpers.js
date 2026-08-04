@@ -237,30 +237,27 @@ export function formatPrice(amount) {
 }
 
 /**
- * Ce que coûte une journée, et ce qui est déjà engagé.
+ * Ce que la journée devrait coûter — une PRÉVISION, rien d'autre.
  *
- * Le coût engagé exigeait auparavant de marquer chaque activité « faite ».
- * C'est un travail que l'app demandait sans rien en faire d'utile : si une
- * activité est encore au programme, on va la faire et on va la payer. Elle
- * compte, sans qu'on ait à le confirmer. Ce qu'on ne fera pas, on le sort du
- * programme — c'est ce que dit déjà le statut « nogo ».
+ * Le programme ne décompte rien. Un prix noté sur une activité est une
+ * estimation, pas un paiement : ce qui est réellement dépensé, c'est ce qu'on
+ * saisit dans l'onglet Dépenses, et seulement cela. Faire l'inverse ferait
+ * apparaître des dépassements de budget pour de l'argent que personne n'a
+ * sorti.
  *
- * Les repas sont l'exception. Ils sont ajoutés d'office à chaque journée avec
- * un prix indicatif : les décompter reviendrait à annoncer une dépense que
- * personne n'a décidée. Ils restent dans la prévision, jamais dans l'engagé.
+ * Les repas comptent dans cette prévision — c'est même leur seule raison
+ * d'avoir un prix : ils sont ajoutés d'office à chaque journée pour qu'on
+ * sache à quoi s'attendre.
  */
 export function budgetStats(activities) {
   const active = activities.filter(a => a.status !== 'nogo');
   const prix = (a) => parseFloat(a.price) || 0;
-  // Prévision : tout ce qui est au programme, repas compris.
   const total = active.reduce((s, a) => s + prix(a), 0);
-  const spent = active.filter(a => !a.isMeal).reduce((s, a) => s + prix(a), 0);
   return {
     total,
-    spent,
-    remaining: total - spent,
-    // Part de la prévision qui vient des repas — utile pour l'expliquer.
+    // Part de la prévision qui vient des repas, pour pouvoir l'expliquer.
     repas: active.filter(a => a.isMeal).reduce((s, a) => s + prix(a), 0),
+    horsRepas: active.filter(a => !a.isMeal).reduce((s, a) => s + prix(a), 0),
   };
 }
 

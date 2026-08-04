@@ -6599,7 +6599,17 @@ button.budget-inline:active { transform: scale(0.98); }
   display: inline-block; width: 8px; height: 8px;
   border-radius: 50%; margin-right: 8px;
   vertical-align: 1px; flex-shrink: 0;
+  /* Les couleurs de catégorie sont calibrées pour des épingles de carte, sur
+     fond de tuiles. Reprises telles quelles sur des listes claires, elles
+     criaient — le rouge des restaurants surtout, et les restaurants sont ce
+     qu'on met le plus en réserve. */
+  filter: saturate(0.7);
+  opacity: 0.85;
 }
+/* Groupée, la liste porte déjà la catégorie en en-tête : répéter la pastille
+   sur chaque fiche n'ajoute rien et multiplie la couleur. */
+.reserve-groupe:has(.reserve-groupe__titre) .activity-card__dot { display: none; }
+.reserve-groupe__dot { filter: saturate(0.7); opacity: 0.85; }
 
 /* ─── Réserve : ce qu'il faut savoir avant de piocher ─────────────────────
    Une ligne, trois signaux au plus. Un indicateur qui parle tout le temps ne
