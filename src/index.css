@@ -6706,3 +6706,12 @@ button.budget-inline:active { transform: scale(0.98); }
   content: ''; position: absolute; left: 16px; right: 0; top: -2px;
   height: 2px; border-radius: 2px; background: var(--accent);
 }
+
+/* La photo proposée : assez grande pour juger si c'est bien le lieu, pas plus.
+   Une image morte se retire d'elle-même plutôt que d'afficher une icône
+   cassée dans une fiche qu'on demande de valider. */
+.enrich-photo {
+  display: block; width: 100%; height: 140px;
+  object-fit: cover; border-radius: 12px;
+  margin: 0 0 12px; background: var(--surface-sunken);
+}

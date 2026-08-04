@@ -109,7 +109,36 @@ function texteLisible(html: string): string {
     .trim();
 }
 
-async function lirePage(url: URL): Promise<string | null> {
+/**
+ * L'image que l'établissement a choisie pour se représenter.
+ *
+ * Une vignette Wikipédia donne l'immeuble, parfois rien du tout — inutilisable
+ * pour un café. `og:image` est la photo que le lieu met en avant lui-même :
+ * c'est la seule source fiable à cette échelle.
+ */
+function imageDeLaPage(html: string, base: URL): string | null {
+  const balises = [
+    /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+  ];
+  for (const re of balises) {
+    const m = re.exec(html);
+    if (!m) continue;
+    try {
+      // Les sites donnent souvent un chemin relatif.
+      const u = new URL(m[1].trim(), base);
+      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
+      if (PRIVE.test(u.hostname)) continue;
+      // Un pixel de suivi ou un logo minuscule ne représente pas le lieu.
+      if (/(1x1|pixel|spacer|blank)\.(gif|png)$/i.test(u.pathname)) continue;
+      return u.toString();
+    } catch { /* URL illisible : on essaie la balise suivante */ }
+  }
+  return null;
+}
+
+async function lirePage(url: URL): Promise<{ texte: string; image: string | null } | null> {
   const { signal, clear } = withTimeout(12000);
   try {
     const r = await fetch(url.toString(), {
@@ -123,8 +152,11 @@ async function lirePage(url: URL): Promise<string | null> {
     if (!/text\/html|application\/xhtml/i.test(type)) return null;
     // Une page de 5 Mo n'apporte rien de plus que ses 400 premiers ko.
     const brut = (await r.text()).slice(0, 400_000);
+    // L'image se lit AVANT le nettoyage : les balises `meta` disparaissent
+    // avec le reste du balisage.
+    const image = imageDeLaPage(brut, new URL(r.url || url.toString()));
     const texte = texteLisible(brut);
-    return texte.length > 80 ? texte : null;
+    return texte.length > 80 ? { texte, image } : (image ? { texte: "", image } : null);
   } catch {
     clear();
     return null;
@@ -236,20 +268,28 @@ Deno.serve(async (req) => {
   if (!url) return json({ ...base, source: osm ? "osm" : "aucune", raison: "pas_de_site" });
 
   // 2 · La page.
-  const texte = await lirePage(url);
-  if (!texte) return json({ ...base, source: osm ? "osm" : "aucune", raison: "site_illisible" });
+  const page = await lirePage(url);
+  if (!page) return json({ ...base, source: osm ? "osm" : "aucune", raison: "site_illisible" });
+  const photo = page.image || "";
+
+  // Une page sans texte exploitable peut quand même avoir livré sa photo :
+  // c'est déjà mieux que rien, et ça évite un appel au modèle pour rien.
+  if (page.texte.length < 80) {
+    return json({ ...base, photo, source: "site", raison: "texte_illisible" });
+  }
 
   // 3 · L'extraction.
-  const lu = await extraire(nom, texte, categorie);
+  const lu = await extraire(nom, page.texte, categorie);
   if ("indisponible" in lu) {
-    return json({ ...base, source: "osm", raison: "modele_non_configure" });
+    return json({ ...base, photo, source: "osm", raison: "modele_non_configure" });
   }
   if ("erreur" in lu) {
-    return json({ ...base, source: "osm", raison: lu.erreur });
+    return json({ ...base, photo, source: "osm", raison: lu.erreur });
   }
 
   return json({
     ...base,
+    photo,
     // Le site prime sur OSM pour les horaires : il est à jour, OSM pas toujours.
     horaires: lu.horaires || base.horaires,
     prixMin: lu.prixMin,

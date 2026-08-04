@@ -99,6 +99,15 @@ export function enrichirEnProfondeur(activite) {
       apercu.site = r.site;
     }
 
+    // La photo que l'établissement a choisie pour se représenter. Une vignette
+    // Wikipédia donne l'immeuble, parfois rien — inutilisable pour un café.
+    // Elle se confirme comme le reste : une image hors sujet se remarque tout
+    // de suite, mais c'est à l'utilisateur de le dire.
+    if (!activite.photoUrl && r.photo) {
+      patch.photoUrl = r.photo;
+      apercu.photo = r.photo;
+    }
+
     if (!Object.keys(patch).length) return null;
     return { patch, apercu, source: r.source || 'inconnue', confiance: r.confiance || '' };
   });
