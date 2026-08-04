@@ -26,7 +26,7 @@ import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
-import { enrichirEnProfondeur } from '../utils/deepEnrich';
+import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
@@ -212,6 +212,11 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // ça tourne en continu, même hors ligne. Un lieu à 800 km de la destination
   // est presque toujours une erreur de géocodage — mais on le signale, on ne
   // le corrige pas : c'est la recherche en ligne, à la demande, qui propose.
+  const ficheseIncompletes = useMemo(
+    () => (trip ? aEnrichir(trip).length : 0),
+    [trip]
+  );
+
   const analysePlaces = useMemo(
     () => (trip ? analyserVoyage(trip, anchor) : { ecartes: [], incompletes: [], total: 0 }),
     [trip, anchor]
@@ -248,6 +253,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [showPlaceCheck, setShowPlaceCheck] = useState(false);
   // Propositions issues de la lecture du site des lieux, en attente d'accord.
   const [enrichProps, setEnrichProps] = useState([]);
+  const [fouilleEnCours, setFouilleEnCours] = useState(null);
   const [checkBannerDismissed, setCheckBannerDismissed] = useState(false);
   const [showOptimConfirm, setShowOptimConfirm] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
@@ -624,6 +630,23 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setEditingActivity(null);
   };
 
+  // L'agent ne travaillait qu'à l'ajout. Or une information se périme : un
+  // restaurant change ses horaires, un musée ses tarifs. On repasse donc sur
+  // l'existant — à la demande, et jamais sans montrer ce qu'on a trouvé.
+  const fouiller = async () => {
+    const liste = aEnrichir(tripRef.current);
+    if (!liste.length) return;
+    const ctrl = new AbortController();
+    setFouilleEnCours({ fait: 0, total: liste.length, titre: null, ctrl });
+    const { propositions, marques } = await fouillerLesFiches(liste, {
+      arret: ctrl.signal,
+      onProgres: (p) => setFouilleEnCours(e => (e ? { ...e, ...p } : e)),
+    });
+    marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
+    setFouilleEnCours(null);
+    if (propositions.length) setEnrichProps(propositions);
+  };
+
   const openAddSheet = (dayId = null) => {
     setSheetDefaultDayId(dayId);
     setSheetOpen(true);
@@ -670,6 +693,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     // rien n'est écrit sans accord.
     const trouve = await enrichirEnProfondeur({ ...aJour, id: activityId });
     if (!trouve) return;
+    // Cherché sans rien trouver : on le retient quand même, sinon la fiche
+    // repasserait dans le circuit à la prochaine ouverture.
+    if (!trouve.patch) { updateActivity(tripId, location, activityId, trouve.marque); return; }
     setEnrichProps(list => (
       list.some(p => p.id === activityId) ? list : [...list, {
         id: activityId,
@@ -782,6 +808,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     ⚖️ Comparer des activités
                   </button>
                 )}
+                <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); fouiller(); }}>
+                  ✨ Compléter les fiches
+                  {ficheseIncompletes > 0 && (
+                    <span className="trip-header-menu__count">{ficheseIncompletes}</span>
+                  )}
+                </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowPlaceCheck(true); setTripMenuOpen(false); }}>
                   📍 Vérifier les lieux
                   {analysePlaces.nouveaux > 0 && (
@@ -1298,6 +1330,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
       />
+
+      {fouilleEnCours && (
+        <div className="fouille-toast">
+          <span className="fouille-toast__bar">
+            <span style={{ width: `${fouilleEnCours.total ? (fouilleEnCours.fait / fouilleEnCours.total) * 100 : 0}%` }} />
+          </span>
+          <span className="fouille-toast__txt">
+            {fouilleEnCours.titre ? `Recherche · ${fouilleEnCours.titre}` : 'Recherche…'}
+            {' '}({fouilleEnCours.fait}/{fouilleEnCours.total})
+          </span>
+          <button className="fouille-toast__stop" onClick={() => { fouilleEnCours.ctrl.abort(); setFouilleEnCours(null); }}>
+            Arrêter
+          </button>
+        </div>
+      )}
 
       {enrichProps.length > 0 && (
         <Suspense fallback={null}>

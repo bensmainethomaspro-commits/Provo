@@ -32,6 +32,14 @@ function moiIcon() {
   });
 }
 
+/** Montre tout ce qu'il y a à voir. Rend `false` s'il n'y a rien à cadrer. */
+function cadrer(map, bounds) {
+  if (!map || !bounds?.length) return false;
+  if (bounds.length === 1) map.setView(bounds[0], 14);
+  else map.fitBounds(bounds, { padding: [24, 24] });
+  return true;
+}
+
 function homeIcon() {
   return L.divIcon({
     className: '',
@@ -45,6 +53,14 @@ function homeIcon() {
 export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity, onPiocher }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  // Les épingles vivent dans leur propre calque : on peut les redessiner sans
+  // toucher à la carte, donc sans reprendre la main sur le zoom.
+  const couchesRef = useRef(null);
+  const recadreRef = useRef(false);
+  // Ce qu'il faut pour recadrer sans tout reconstruire, et le seul cas où on
+  // s'y autorise encore : tant que l'utilisateur n'a pas touché la carte.
+  const boundsRef = useRef(null);
+  const toucheeRef = useRef(false);
   const [accomTrouve, setAccomTrouve] = useState(null);
   // « Où suis-je par rapport à tout ça ? » se répond sur la carte, pas dans une
   // liste de distances. Éteinte par défaut : autorisation système et batterie.
@@ -86,7 +102,17 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999, enReserve: true })),
   ];
 
-  const hasContent = geoActs.length > 0 || (accom && accom.lat != null);
+  const hasContent = geoActs.length > 0 || !!(accom && accom.lat != null);
+
+  // Ce que la carte dessine, résumé en texte. Le comparer par contenu et non
+  // par identité est ce qui empêche la carte de se reconstruire pour rien :
+  // à chaque rendu, `geoActs` et `accom` sont des objets neufs, alors que ce
+  // qu'ils décrivent n'a pas bougé d'un mètre.
+  const dessin = JSON.stringify([
+    geoActs.map(a => [a.id, a.lat, a.lon, a.category, a.title, a.address || '', a.dayLabel, !!a.enReserve]),
+    !!roadTripMode, tripColor || '',
+    accom && accom.lat != null ? [accom.lat, accom.lon, accom.address || ''] : null,
+  ]);
 
   // Ce qu'on veut savoir en regardant la carte : lequel est à portée.
   const plusProche = geo.position && geoActs.length
@@ -95,10 +121,12 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         .sort((a, b) => a.km - b.km)[0]
     : null;
 
+  // La carte elle-même ne se crée qu'une fois. Tout ce qui la reconstruisait
+  // remettait le cadrage à zéro : on zoomait, le GPS envoyait un point, et la
+  // vue repartait de zéro — la carte devenait inutilisable dès qu'on marchait.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !hasContent) return;
-    if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
 
     const map = L.map(container);
     mapRef.current = map;
@@ -108,12 +136,50 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
       maxZoom: 19,
     }).addTo(map);
 
+    couchesRef.current = L.layerGroup().addTo(map);
+    recadreRef.current = false;
+    toucheeRef.current = false;
+
+    // Dès que le doigt se pose sur la carte, la vue lui appartient : plus aucun
+    // recadrage automatique ne viendra la lui reprendre.
+    const prendreLaMain = () => { toucheeRef.current = true; };
+    container.addEventListener('pointerdown', prendreLaMain, true);
+    container.addEventListener('wheel', prendreLaMain, { capture: true, passive: true });
+
+    // La zone de carte change de hauteur en cours de route — la ligne « le plus
+    // proche » apparaît dès que la position arrive. Sans cet avertissement,
+    // Leaflet garde l'ancienne taille et place ses tuiles à côté ; et le cadrage
+    // calculé pour l'ancienne hauteur rognerait les épingles du bord.
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize({ debounceMoveend: true });
+      if (!toucheeRef.current) cadrer(map, boundsRef.current);
+    });
+    ro.observe(container);
+
+    return () => {
+      ro.disconnect();
+      container.removeEventListener('pointerdown', prendreLaMain, true);
+      container.removeEventListener('wheel', prendreLaMain, { capture: true });
+      map.remove();
+      mapRef.current = null;
+      couchesRef.current = null;
+      moiRef.current = null;
+    };
+  }, [hasContent]);
+
+  // Les épingles, elles, se redessinent quand leur contenu change.
+  useEffect(() => {
+    const map = mapRef.current;
+    const couche = couchesRef.current;
+    if (!map || !couche) return;
+    couche.clearLayers();
+
     const bounds = [];
     geoActs.forEach((a, idx) => {
       // Une épingle sans issue oblige à retrouver l'activité dans une autre
       // liste pour la corriger. La bulle ouvre désormais sa fiche.
       const marker = L.marker([a.lat, a.lon], { icon: markerIcon(a.category) })
-        .addTo(map)
+        .addTo(couche)
         .bindPopup(
           `<strong>${esc(a.title)}</strong>`
           + `<br><small style="color:#888">${esc(a.dayLabel)}`
@@ -134,15 +200,14 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         const ouvrir = el?.querySelector('.map-popup__edit');
         if (ouvrir) ouvrir.onclick = () => { map.closePopup(); ouvrirRef.current?.(a.id); };
         const prendre = el?.querySelector('.map-popup__pick');
-        // Déplacer l'idée change `reserve` et `days` : la carte se redessine, la
-        // bulle disparaît. Toute confirmation écrite ici serait donc invisible.
-        // C'est le bandeau d'annulation de l'app qui confirme — et il permet en
-        // plus de revenir en arrière.
+        // Déplacer l'idée change `reserve` et `days` : les épingles se
+        // redessinent, la bulle disparaît. Toute confirmation écrite ici serait
+        // donc invisible. C'est le bandeau d'annulation de l'app qui confirme —
+        // et il permet en plus de revenir en arrière.
         if (prendre) prendre.onclick = () => { map.closePopup(); piocherRef.current?.(a.id); };
       });
 
       if (roadTripMode) {
-        L.divIcon({ className: '' });
         L.marker([a.lat, a.lon], {
           icon: L.divIcon({
             className: '',
@@ -151,7 +216,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
             iconAnchor: [10, 10],
           }),
           zIndexOffset: 100,
-        }).addTo(map);
+        }).addTo(couche);
       }
       bounds.push([a.lat, a.lon]);
     });
@@ -163,22 +228,26 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         weight: 3,
         opacity: 0.75,
         dashArray: '8 6',
-      }).addTo(map);
+      }).addTo(couche);
     }
 
     // Accommodation marker (🏠) from trip settings
     if (accom && accom.lat != null) {
       L.marker([accom.lat, accom.lon], { icon: homeIcon(), zIndexOffset: 200 })
-        .addTo(map)
+        .addTo(couche)
         .bindPopup(`<strong>🏠 Hébergement</strong>${accom.address ? `<br><small style="color:#888">${accom.address}</small>` : ''}`);
       bounds.push([accom.lat, accom.lon]);
     }
 
-    if (bounds.length === 1) map.setView(bounds[0], 14);
-    else map.fitBounds(bounds, { padding: [24, 24] });
+    boundsRef.current = bounds;
 
-    return () => { map.remove(); mapRef.current = null; moiRef.current = null; };
-  }, [days, reserve, roadTripMode, tripColor, accom]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Le cadrage automatique n'a lieu qu'à l'ouverture de la carte. Ensuite la
+    // vue appartient à l'utilisateur : ajouter une idée depuis une bulle ne doit
+    // pas lui reprendre son zoom. Revenir sur l'onglet recadre à nouveau.
+    if (!recadreRef.current) {
+      recadreRef.current = cadrer(map, bounds);
+    }
+  }, [dessin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // La position bouge en continu : la redessiner par le même effet que les
   // épingles reconstruirait la carte entière à chaque pas, et perdrait le

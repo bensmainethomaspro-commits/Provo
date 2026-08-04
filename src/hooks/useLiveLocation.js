@@ -31,7 +31,15 @@ export function useLiveLocation() {
   useEffect(() => {
     // L'absence de géolocalisation est déjà exposée par `disponible` : la
     // signaler ici en plus reviendrait à écrire dans l'état pendant l'effet.
-    if (!active || !navigator.geolocation) { arreter(); return; }
+    if (!active || !navigator.geolocation) {
+      arreter();
+      // Éteindre doit vraiment éteindre. Garder la dernière position laissait
+      // le point bleu et les distances à l'écran, figés sur un lieu où l'on
+      // n'est plus — pire que pas de position du tout.
+      setPosition(null);
+      setErreur(null);
+      return;
+    }
     watchRef.current = navigator.geolocation.watchPosition(
       (p) => {
         setErreur(null);
