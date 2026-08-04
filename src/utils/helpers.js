@@ -236,11 +236,32 @@ export function formatPrice(amount) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
 }
 
+/**
+ * Ce que coûte une journée, et ce qui est déjà engagé.
+ *
+ * Le coût engagé exigeait auparavant de marquer chaque activité « faite ».
+ * C'est un travail que l'app demandait sans rien en faire d'utile : si une
+ * activité est encore au programme, on va la faire et on va la payer. Elle
+ * compte, sans qu'on ait à le confirmer. Ce qu'on ne fera pas, on le sort du
+ * programme — c'est ce que dit déjà le statut « nogo ».
+ *
+ * Les repas sont l'exception. Ils sont ajoutés d'office à chaque journée avec
+ * un prix indicatif : les décompter reviendrait à annoncer une dépense que
+ * personne n'a décidée. Ils restent dans la prévision, jamais dans l'engagé.
+ */
 export function budgetStats(activities) {
   const active = activities.filter(a => a.status !== 'nogo');
-  const total = active.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  const spent = active.filter(a => a.status === 'done').reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  return { total, spent, remaining: total - spent };
+  const prix = (a) => parseFloat(a.price) || 0;
+  // Prévision : tout ce qui est au programme, repas compris.
+  const total = active.reduce((s, a) => s + prix(a), 0);
+  const spent = active.filter(a => !a.isMeal).reduce((s, a) => s + prix(a), 0);
+  return {
+    total,
+    spent,
+    remaining: total - spent,
+    // Part de la prévision qui vient des repas — utile pour l'expliquer.
+    repas: active.filter(a => a.isMeal).reduce((s, a) => s + prix(a), 0),
+  };
 }
 
 // ─── Time cascade ─────────────────────────────────────────
