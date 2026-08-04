@@ -608,6 +608,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setEditingActivity(null);
   };
 
+  // Déplacer une activité devant une autre, dans la même journée.
+  const reordonnerJour = useCallback((dayId, id, cibleId) => {
+    const jour = tripRef.current?.days.find(d => d.id === dayId);
+    if (!jour || id === cibleId) return;
+    // `setDayActivitiesOrder` attend les activités elles-mêmes, pas leurs
+    // identifiants : lui passer des chaînes remplaçait la journée par une
+    // liste de textes — toutes les activités perdues.
+    const arr = [...jour.activities];
+    const from = arr.findIndex(a => a.id === id);
+    if (from < 0) return;
+    const [item] = arr.splice(from, 1);
+    const to = cibleId ? arr.findIndex(a => a.id === cibleId) : arr.length;
+    arr.splice(to < 0 ? arr.length : to, 0, item);
+    setDayActivitiesOrder(tripId, dayId, arr);
+  }, [tripId, setDayActivitiesOrder]);
+
   const openAddSheet = (dayId = null) => {
     setSheetDefaultDayId(dayId);
     setSheetOpen(true);
@@ -981,6 +997,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareMode={compareMode}
                 onReorderDay={undoableReorderDay}
                 weatherByDate={weather?.byDate}
+                onReordonner={reordonnerJour}
               />
             ) : (
               <TimelineView
@@ -994,6 +1011,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onToggleCompare={toggleCompare}
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
+                onReordonner={reordonnerJour}
               />
             )}
 

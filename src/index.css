@@ -6670,3 +6670,30 @@ button.budget-inline:active { transform: scale(0.98); }
 .reserve-card--drag { opacity: 0.4; }
 /* Où la carte va atterrir : un trait, pas un déplacement fantôme. */
 .reserve-card--cible { box-shadow: 0 -3px 0 -1px var(--accent), var(--shadow-sm); }
+
+/* ─── Jours passés ────────────────────────────────────────────────────────
+   Un jour écoulé n'est pas à cacher — on y revient pour retrouver un nom, une
+   dépense. Mais il ne doit plus attirer l'œil : le carrousel s'ouvre sur
+   aujourd'hui, et ce qui précède reste à gauche, en retrait. */
+.tl-day--passe { opacity: 0.55; filter: saturate(0.7); }
+.tl-day--passe:hover, .tl-day--passe:focus-within { opacity: 0.85; }
+/* Aujourd'hui se repère sans avoir à lire la date. */
+.tl-day--auj { box-shadow: 0 0 0 2px var(--accent), var(--shadow-md); }
+
+/* Réordonner une journée au doigt. Même poignée que dans la Réserve : un
+   seul geste à apprendre pour toute l'app. */
+.tl-act-wrap { position: relative; padding-left: 16px; }
+.tl-act-grip {
+  position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+  width: 20px; min-height: 44px;
+  border: none; background: transparent;
+  font-size: 13px; color: var(--text-light); cursor: grab;
+  z-index: 2; line-height: 1;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.tl-act-grip:active { cursor: grabbing; }
+.tl-act-wrap--drag { opacity: 0.4; }
+.tl-act-wrap--cible::before {
+  content: ''; position: absolute; left: 16px; right: 0; top: -2px;
+  height: 2px; border-radius: 2px; background: var(--accent);
+}
