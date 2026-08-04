@@ -6566,3 +6566,19 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .map-proche__dist { margin-left: auto; font-weight: 650; color: var(--accent-deep, var(--accent)); }
 .map-proche--err { color: var(--red, #b91c1c); font-size: 12.5px; }
+
+/* Piocher depuis la carte : l'action principale passe devant « ouvrir ». */
+.map-popup__pick {
+  display: block; width: 100%; margin-top: 10px;
+  min-height: 44px; padding: 0 12px; border: none; border-radius: 10px;
+  background: var(--green, #15803d); color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-popup__pick:active { opacity: 0.82; }
+/* Quand les deux boutons cohabitent, « ouvrir » devient le geste secondaire. */
+.map-popup__pick + .map-popup__edit,
+.map-popup__pick ~ .map-popup__edit {
+  background: transparent; color: var(--accent-deep, var(--accent));
+  border: 1px solid var(--border-strong);
+}

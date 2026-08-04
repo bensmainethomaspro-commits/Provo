@@ -42,7 +42,7 @@ function homeIcon() {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity }) {
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity, onPiocher }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [accomTrouve, setAccomTrouve] = useState(null);
@@ -50,6 +50,13 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
   // liste de distances. Éteinte par défaut : autorisation système et batterie.
   const geo = useLiveLocation();
   const moiRef = useRef(null);
+  // Les rappels changent d'identité à chaque rendu du parent. Les mettre dans
+  // les dépendances de l'effet reconstruirait la carte en continu — zoom perdu,
+  // bulles refermées. Ils passent donc par des refs, tenus à jour hors rendu.
+  const piocherRef = useRef(onPiocher);
+  const ouvrirRef = useRef(onOpenActivity);
+  useEffect(() => { piocherRef.current = onPiocher; ouvrirRef.current = onOpenActivity; },
+    [onPiocher, onOpenActivity]);
 
   // L'hébergement est localisé une fois, à la saisie, et rangé sur le voyage.
   // La carte n'a donc plus rien à demander au réseau : elle affiche l'épingle
@@ -76,7 +83,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     ...days.flatMap((d, i) => d.activities
       .filter(a => a.lat && a.lon)
       .map(a => ({ ...a, dayLabel: `Jour ${i + 1}`, dayIdx: i }))),
-    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999 })),
+    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999, enReserve: true })),
   ];
 
   const hasContent = geoActs.length > 0 || (accom && accom.lat != null);
@@ -111,17 +118,28 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
           `<strong>${esc(a.title)}</strong>`
           + `<br><small style="color:#888">${esc(a.dayLabel)}`
           + `${a.address ? ' · ' + esc(a.address) : ''}</small>`
-          + (onOpenActivity
-            ? `<br><button type="button" class="map-popup__edit" data-act-id="${esc(a.id)}">Ouvrir la fiche</button>`
+          // Le geste central du produit : on est quelque part, on voit ce qui
+          // est autour, on le prend. Chercher dans une liste après avoir vu le
+          // lieu sur la carte n'a aucun sens.
+          + (a.enReserve && piocherRef.current
+            ? `<br><button type="button" class="map-popup__pick">Ajouter à aujourd'hui</button>`
+            : '')
+          + (ouvrirRef.current
+            ? `<br><button type="button" class="map-popup__edit">Ouvrir la fiche</button>`
             : '')
         );
 
-      if (onOpenActivity) {
-        marker.on('popupopen', (e) => {
-          const btn = e.popup.getElement()?.querySelector('.map-popup__edit');
-          if (btn) btn.onclick = () => { map.closePopup(); onOpenActivity(a.id); };
-        });
-      }
+      marker.on('popupopen', (e) => {
+        const el = e.popup.getElement();
+        const ouvrir = el?.querySelector('.map-popup__edit');
+        if (ouvrir) ouvrir.onclick = () => { map.closePopup(); ouvrirRef.current?.(a.id); };
+        const prendre = el?.querySelector('.map-popup__pick');
+        // Déplacer l'idée change `reserve` et `days` : la carte se redessine, la
+        // bulle disparaît. Toute confirmation écrite ici serait donc invisible.
+        // C'est le bandeau d'annulation de l'app qui confirme — et il permet en
+        // plus de revenir en arrière.
+        if (prendre) prendre.onclick = () => { map.closePopup(); piocherRef.current?.(a.id); };
+      });
 
       if (roadTripMode) {
         L.divIcon({ className: '' });
