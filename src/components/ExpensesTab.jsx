@@ -318,14 +318,6 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   return (
     <div className="expenses-tab">
-      {/* Ajouter une dépense est le geste le plus fréquent de cet écran — on le
-          fait plusieurs fois par jour, souvent debout. Il était en bas, après
-          les totaux et les soldes : il fallait défiler pour l'atteindre. */}
-      {!showForm && (
-        <button className="btn btn--primary expenses-add-top" onClick={openForm}>
-          + Ajouter une dépense
-        </button>
-      )}
       {!hasTravelers && expenses.length === 0 && !showForm && (
         <div className="expenses-hint">
           💡 Vous êtes plusieurs ? Ajoute des voyageurs dans <strong>⚙️ Paramètres du voyage</strong> pour répartir les dépenses. Sinon, ajoute directement une dépense ci-dessous.
@@ -378,6 +370,16 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             </div>
           )}
         </div>
+      )}
+
+      {/* Le bouton vient après le total : on lit d'abord où on en est, on
+          ajoute ensuite. Hors de la condition sur le nombre de dépenses —
+          c'est justement quand il n'y en a aucune qu'il faut pouvoir en
+          ajouter une. */}
+      {!showForm && (
+        <button className="btn btn--primary expenses-add-top" onClick={openForm}>
+          + Ajouter une dépense
+        </button>
       )}
 
       {/* Section tabs */}

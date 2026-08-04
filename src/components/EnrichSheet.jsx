@@ -53,6 +53,18 @@ export default function EnrichSheet({ propositions, onAppliquer, onIgnorer, onCl
                 <span className="check-card__where">{p.ou}</span>
               </div>
 
+              {/* La photo se juge d'un coup d'œil : elle passe devant le
+                  reste, et un lieu mal identifié saute aux yeux. */}
+              {p.apercu.photo && (
+                <img
+                  className="enrich-photo"
+                  src={p.apercu.photo}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              )}
               <dl className="check-card__adds">
                 {p.apercu.horaires && (
                   <div className="check-card__add"><dt>Horaires</dt><dd>{p.apercu.horaires}</dd></div>

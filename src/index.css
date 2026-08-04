@@ -6599,7 +6599,17 @@ button.budget-inline:active { transform: scale(0.98); }
   display: inline-block; width: 8px; height: 8px;
   border-radius: 50%; margin-right: 8px;
   vertical-align: 1px; flex-shrink: 0;
+  /* Les couleurs de catégorie sont calibrées pour des épingles de carte, sur
+     fond de tuiles. Reprises telles quelles sur des listes claires, elles
+     criaient — le rouge des restaurants surtout, et les restaurants sont ce
+     qu'on met le plus en réserve. */
+  filter: saturate(0.7);
+  opacity: 0.85;
 }
+/* Groupée, la liste porte déjà la catégorie en en-tête : répéter la pastille
+   sur chaque fiche n'ajoute rien et multiplie la couleur. */
+.reserve-groupe:has(.reserve-groupe__titre) .activity-card__dot { display: none; }
+.reserve-groupe__dot { filter: saturate(0.7); opacity: 0.85; }
 
 /* ─── Réserve : ce qu'il faut savoir avant de piocher ─────────────────────
    Une ligne, trois signaux au plus. Un indicateur qui parle tout le temps ne
@@ -6651,7 +6661,16 @@ button.budget-inline:active { transform: scale(0.98); }
 
 /* L'ajout d'une dépense est le geste le plus fréquent de son écran : il vient
    en tête, pas après les totaux et les soldes. */
-.expenses-add-top { width: 100%; margin: 0 0 16px; min-height: 48px; font-size: 15px; }
+.expenses-add-top {
+  /* Il était haut de 100 px et occupait le premier écran à lui seul. En tête
+     de page, il n'a pas besoin de crier pour être vu. */
+  width: 100%; margin: 12px 0 14px;
+  min-height: 46px; padding: 0 16px;
+  font-size: 14.5px;
+}
+/* Les trois vues remontent d'autant, et se visent mieux. */
+.expenses-sections { margin-bottom: 14px; }
+.expenses-section-btn { min-height: 40px; }
 
 /* Glisser-déposer dans la Réserve. La poignée n'apparaît qu'en liste à plat :
    groupée ou triée, la position manuelle ne se voit plus, donc la déplacer ne
@@ -6696,4 +6715,13 @@ button.budget-inline:active { transform: scale(0.98); }
 .tl-act-wrap--cible::before {
   content: ''; position: absolute; left: 16px; right: 0; top: -2px;
   height: 2px; border-radius: 2px; background: var(--accent);
+}
+
+/* La photo proposée : assez grande pour juger si c'est bien le lieu, pas plus.
+   Une image morte se retire d'elle-même plutôt que d'afficher une icône
+   cassée dans une fiche qu'on demande de valider. */
+.enrich-photo {
+  display: block; width: 100%; height: 140px;
+  object-fit: cover; border-radius: 12px;
+  margin: 0 0 12px; background: var(--surface-sunken);
 }

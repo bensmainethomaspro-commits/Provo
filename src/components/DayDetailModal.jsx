@@ -55,16 +55,10 @@ export default function DayDetailModal({
               onChange={e => onStartTimeChange(day.id, e.target.value)} />
           </div>
 
-          {/* Le total de la journée est déjà dans l'en-tête : le répéter ici en
-              deux pastilles de couleurs différentes n'ajoutait rien. Seule la
-              part déjà dépensée mérite d'être distinguée, quand il y en a une. */}
-          {stats.spent > 0 && (
-            <div className="budget-row" style={{ marginBottom: 12 }}>
-              <span className="budget-pill budget-pill--spent">
-                Déjà payé · {formatPrice(stats.spent)}
-              </span>
-            </div>
-          )}
+          {/* Le total de la journée est déjà dans l'en-tête. Il y avait ici un
+              « Déjà payé » calculé sur le programme : c'était faux. Une activité
+              au programme n'est pas une dépense — ce qui est payé se saisit dans
+              l'onglet Dépenses, et seulement là. */}
 
           <LogicAlerts activities={day.activities} />
 

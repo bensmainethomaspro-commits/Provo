@@ -217,6 +217,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     [trip, anchor]
   );
 
+  // Déplacer une activité devant une autre, dans la même journée.
+  const reordonnerJour = useCallback((dayId, id, cibleId) => {
+    const jour = tripRef.current?.days.find(d => d.id === dayId);
+    if (!jour || id === cibleId) return;
+    // `setDayActivitiesOrder` attend les activités elles-mêmes, pas leurs
+    // identifiants : lui passer des chaînes remplaçait la journée par une
+    // liste de textes — toutes les activités perdues.
+    const arr = [...jour.activities];
+    const from = arr.findIndex(a => a.id === id);
+    if (from < 0) return;
+    const [item] = arr.splice(from, 1);
+    const to = cibleId ? arr.findIndex(a => a.id === cibleId) : arr.length;
+    arr.splice(to < 0 ? arr.length : to, 0, item);
+    setDayActivitiesOrder(tripId, dayId, arr);
+  }, [tripId, setDayActivitiesOrder]);
+
   const { settings, setSetting } = useSettings();
   const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
@@ -608,22 +624,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     setEditingActivity(null);
   };
 
-  // Déplacer une activité devant une autre, dans la même journée.
-  const reordonnerJour = useCallback((dayId, id, cibleId) => {
-    const jour = tripRef.current?.days.find(d => d.id === dayId);
-    if (!jour || id === cibleId) return;
-    // `setDayActivitiesOrder` attend les activités elles-mêmes, pas leurs
-    // identifiants : lui passer des chaînes remplaçait la journée par une
-    // liste de textes — toutes les activités perdues.
-    const arr = [...jour.activities];
-    const from = arr.findIndex(a => a.id === id);
-    if (from < 0) return;
-    const [item] = arr.splice(from, 1);
-    const to = cibleId ? arr.findIndex(a => a.id === cibleId) : arr.length;
-    arr.splice(to < 0 ? arr.length : to, 0, item);
-    setDayActivitiesOrder(tripId, dayId, arr);
-  }, [tripId, setDayActivitiesOrder]);
-
   const openAddSheet = (dayId = null) => {
     setSheetDefaultDayId(dayId);
     setSheetOpen(true);
@@ -872,15 +872,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
           <span className="tab-btn__label">Planning</span>
           {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
-        <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
-          <span className="tab-btn__icon">📦</span>
-          <span className="tab-btn__label">Réserve</span>
-          {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
-        </button>
         <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
           <span className="tab-btn__icon">💸</span>
           <span className="tab-btn__label">Dépenses</span>
           {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
+        </button>
+        <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
+          <span className="tab-btn__icon">📦</span>
+          <span className="tab-btn__label">Réserve</span>
+          {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
           <span className="tab-btn__icon">🗺️</span>

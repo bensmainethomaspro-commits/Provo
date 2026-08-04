@@ -236,11 +236,29 @@ export function formatPrice(amount) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
 }
 
+/**
+ * Ce que la journée devrait coûter — une PRÉVISION, rien d'autre.
+ *
+ * Le programme ne décompte rien. Un prix noté sur une activité est une
+ * estimation, pas un paiement : ce qui est réellement dépensé, c'est ce qu'on
+ * saisit dans l'onglet Dépenses, et seulement cela. Faire l'inverse ferait
+ * apparaître des dépassements de budget pour de l'argent que personne n'a
+ * sorti.
+ *
+ * Les repas comptent dans cette prévision — c'est même leur seule raison
+ * d'avoir un prix : ils sont ajoutés d'office à chaque journée pour qu'on
+ * sache à quoi s'attendre.
+ */
 export function budgetStats(activities) {
   const active = activities.filter(a => a.status !== 'nogo');
-  const total = active.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  const spent = active.filter(a => a.status === 'done').reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  return { total, spent, remaining: total - spent };
+  const prix = (a) => parseFloat(a.price) || 0;
+  const total = active.reduce((s, a) => s + prix(a), 0);
+  return {
+    total,
+    // Part de la prévision qui vient des repas, pour pouvoir l'expliquer.
+    repas: active.filter(a => a.isMeal).reduce((s, a) => s + prix(a), 0),
+    horsRepas: active.filter(a => !a.isMeal).reduce((s, a) => s + prix(a), 0),
+  };
 }
 
 // ─── Time cascade ─────────────────────────────────────────
