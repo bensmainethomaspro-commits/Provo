@@ -106,10 +106,13 @@ const EXPENSE_CATEGORIES = [
   { id: 'transport', emoji: '🚗', label: 'Transport' },
   { id: 'hebergement', emoji: '🏨', label: 'Hébergement' },
   { id: 'repas', emoji: '🍽️', label: 'Repas' },
+  { id: 'verre', emoji: '🍻', label: 'Verre' },
   { id: 'activite', emoji: '🎯', label: 'Activité' },
   { id: 'shopping', emoji: '🛍️', label: 'Shopping' },
   { id: 'autre', emoji: '💳', label: 'Autre' },
 ];
+
+const CAT_DEFAUT = EXPENSE_CATEGORIES.find(c => c.id === 'autre');
 
 const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
@@ -175,7 +178,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const travelers = trip.tripTravelers || [];
   const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
-  const allActivities = trip.days.flatMap(d => d.activities);
+  // Une dépense se rattache aussi bien à une idée de la Réserve : on paie
+  // souvent un billet ou un acompte avant d'avoir casé l'activité dans un jour.
+  const allActivities = [...trip.days.flatMap(d => d.activities), ...(trip.reserve || [])];
   const activitiesByDay = trip.days.map((d, i) => ({ day: d, dayIdx: i })).filter(({ day }) => day.activities.length > 0);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ ...BLANK });
@@ -313,6 +318,14 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   return (
     <div className="expenses-tab">
+      {/* Ajouter une dépense est le geste le plus fréquent de cet écran — on le
+          fait plusieurs fois par jour, souvent debout. Il était en bas, après
+          les totaux et les soldes : il fallait défiler pour l'atteindre. */}
+      {!showForm && (
+        <button className="btn btn--primary expenses-add-top" onClick={openForm}>
+          + Ajouter une dépense
+        </button>
+      )}
       {!hasTravelers && expenses.length === 0 && !showForm && (
         <div className="expenses-hint">
           💡 Vous êtes plusieurs ? Ajoute des voyageurs dans <strong>⚙️ Paramètres du voyage</strong> pour répartir les dépenses. Sinon, ajoute directement une dépense ci-dessous.
@@ -527,7 +540,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             const share = n > 0 ? eurAmt / n : eurAmt;
             const catMeta = exp.isSettlement
               ? { emoji: '🤝', label: 'Remboursement' }
-              : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5]);
+              // Le repli se cherchait par index : insérer une catégorie avant
+              // « Autre » l'aurait silencieusement remplacé par la nouvelle.
+              : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || CAT_DEFAUT);
             return (
               <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
                 <div className="expense-item">
@@ -662,7 +677,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
             </div>
           )}
-          {activitiesByDay.length > 0 && (
+          {(activitiesByDay.length > 0 || (trip.reserve || []).length > 0) && (
             <div className="form-group">
               <label className="form-label">Lier à une activité <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>— optionnel</span></label>
               <select className="form-select" value={form.activityId} onChange={e => set('activityId', e.target.value)}>
@@ -674,6 +689,13 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                     ))}
                   </optgroup>
                 ))}
+                {(trip.reserve || []).length > 0 && (
+                  <optgroup label="📦 Réserve">
+                    {trip.reserve.map(a => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           )}
@@ -685,11 +707,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             </button>
           </div>
         </div>
-      ) : (
-        <button className="btn btn--primary" style={{ width: '100%', marginTop: 8 }} onClick={openForm}>
-          + Ajouter une dépense
-        </button>
-      )}
+      ) : null}
     </div>
   );
 }

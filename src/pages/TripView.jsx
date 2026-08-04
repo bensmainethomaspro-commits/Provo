@@ -20,9 +20,12 @@ import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, formatDate, CATEGORIES, detectCountryTheme, haversineKm } from '../utils/helpers';
+import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
+import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
+import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
+import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur } from '../utils/deepEnrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
@@ -186,7 +189,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
-    addToReserve, addToDay, reorderActivity, reorderInReserve,
+    addToReserve, addToDay, reorderActivity, reorderInReserve, moveInReserve,
     setDayStartTime, deleteTrip, duplicateToDay, updateTrip,
     setDayNotes, addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
@@ -243,6 +246,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [reserveFilter, setReserveFilter] = useState('all');
   const [reserveSearch, setReserveSearch] = useState('');
   const [reserveSort, setReserveSort] = useState('default');
+  // Sur place, la question est « qu'est-ce qui est ouvert, près de moi ».
+  const [ouvertSeul, setOuvertSeul] = useState(false);
+  // Le regroupement par catégorie masque l'ordre manuel : les deux ne peuvent
+  // pas cohabiter. On le rend donc débrayable, et c'est en liste à plat que le
+  // glisser-déposer prend son sens.
+  const [grouper, setGrouper] = useState(true);
+  const reorder = useReorderDrag(
+    useCallback((id, cibleId) => moveInReserve(tripId, id, cibleId), [moveInReserve, tripId])
+  );
+  const geoReserve = useLiveLocation();
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
@@ -594,6 +607,22 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     updateActivity(tripId, editingActivity.location, editingActivity.activity.id, updates);
     setEditingActivity(null);
   };
+
+  // Déplacer une activité devant une autre, dans la même journée.
+  const reordonnerJour = useCallback((dayId, id, cibleId) => {
+    const jour = tripRef.current?.days.find(d => d.id === dayId);
+    if (!jour || id === cibleId) return;
+    // `setDayActivitiesOrder` attend les activités elles-mêmes, pas leurs
+    // identifiants : lui passer des chaînes remplaçait la journée par une
+    // liste de textes — toutes les activités perdues.
+    const arr = [...jour.activities];
+    const from = arr.findIndex(a => a.id === id);
+    if (from < 0) return;
+    const [item] = arr.splice(from, 1);
+    const to = cibleId ? arr.findIndex(a => a.id === cibleId) : arr.length;
+    arr.splice(to < 0 ? arr.length : to, 0, item);
+    setDayActivitiesOrder(tripId, dayId, arr);
+  }, [tripId, setDayActivitiesOrder]);
 
   const openAddSheet = (dayId = null) => {
     setSheetDefaultDayId(dayId);
@@ -968,6 +997,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 compareMode={compareMode}
                 onReorderDay={undoableReorderDay}
                 weatherByDate={weather?.byDate}
+                onReordonner={reordonnerJour}
               />
             ) : (
               <TimelineView
@@ -981,6 +1011,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onToggleCompare={toggleCompare}
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
+                onReordonner={reordonnerJour}
               />
             )}
 
@@ -1033,6 +1064,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     <option value="alpha">A–Z</option>
                     <option value="duration">Durée</option>
                     <option value="price">Prix</option>
+                    {geoReserve.position && <option value="proche">Le plus proche</option>}
                   </select>
                 </div>
                 <div className="reserve-filter">
@@ -1040,6 +1072,19 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
                     onClick={() => setReserveFilter('all')}
                   >Tout ({trip.reserve.length})</button>
+                  {/* Un lieu dont on ignore les horaires n'est jamais masqué :
+                      le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
+                  <button
+                    className={`reserve-filter__pill reserve-filter__pill--ouvert${ouvertSeul ? ' reserve-filter__pill--active' : ''}`}
+                    onClick={() => setOuvertSeul(v => !v)}
+                    aria-pressed={ouvertSeul}
+                  >🟢 Ouvert</button>
+                  <button
+                    className={`reserve-filter__pill${grouper ? ' reserve-filter__pill--active' : ''}`}
+                    onClick={() => setGrouper(v => !v)}
+                    aria-pressed={grouper}
+                    title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
+                  >{grouper ? '⊞ Groupé' : '☰ Liste'}</button>
                   {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
                     const count = trip.reserve.filter(a => a.category === cat.id).length;
                     return (
@@ -1058,9 +1103,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 />
                 {(() => {
                   const q = reserveSearch.toLowerCase();
-                  return trip.reserve
+                  const pos = geoReserve.position;
+                  const dist = (a) => (pos && a.lat != null && a.lon != null)
+                    ? haversineKm(pos.lat, pos.lon, a.lat, a.lon) : null;
+
+                  const retenues = trip.reserve
                     .filter(a => {
                       if (reserveFilter !== 'all' && a.category !== reserveFilter) return false;
+                      if (ouvertSeul && ouvertMaintenant(a.openingHours) === false) return false;
                       if (q) return a.title.toLowerCase().includes(q) || (a.address || '').toLowerCase().includes(q) || (a.notes || '').toLowerCase().includes(q);
                       return true;
                     })
@@ -1068,10 +1118,89 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       if (reserveSort === 'alpha') return a.title.localeCompare(b.title, 'fr');
                       if (reserveSort === 'duration') return ((a.durationHours||0)*60+(a.durationMinutes||0)) - ((b.durationHours||0)*60+(b.durationMinutes||0));
                       if (reserveSort === 'price') return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
+                      if (reserveSort === 'proche') {
+                        // Sans coordonnées, on ne peut pas classer : ces idées
+                        // vont en fin de liste plutôt que de fausser l'ordre.
+                        const da = dist(a), db = dist(b);
+                        if (da == null) return db == null ? 0 : 1;
+                        if (db == null) return -1;
+                        return da - db;
+                      }
                       return 0;
-                    })
-                    .map((activity, i, arr) => (
-                  <div key={activity.id} className="reserve-card">
+                    });
+
+                  // Regroupement par catégorie : c'est le premier tri de l'œil.
+                  // Il ne s'applique que quand on regarde TOUT — filtrer sur une
+                  // seule catégorie rendrait les en-têtes absurdes.
+                  const groupes = (grouper && reserveFilter === 'all')
+                    ? CATEGORIES
+                        .map(cat => ({ cat, items: retenues.filter(a => a.category === cat.id) }))
+                        .filter(g => g.items.length)
+                    : [{ cat: null, items: retenues }];
+                  const sansCat = retenues.filter(a => !CATEGORIES.some(c => c.id === a.category));
+                  if (grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
+                  // Réordonner n'a de sens que sur une liste à plat, dans son
+                  // ordre propre : groupée ou triée, la position manuelle ne se
+                  // voit plus, donc la déplacer ne veut rien dire.
+                  const reordonnable = !grouper && reserveSort === 'default' && reserveFilter === 'all' && !q;
+
+                  if (!retenues.length) {
+                    return (
+                      <p className="reserve-vide">
+                        {ouvertSeul
+                          ? "Rien d'ouvert en ce moment parmi tes idées."
+                          : 'Aucune idée ne correspond.'}
+                      </p>
+                    );
+                  }
+
+                  return groupes.map(g => (
+                    <div key={g.cat?.id || 'autres'} className="reserve-groupe">
+                      {g.cat && (
+                        <div className="reserve-groupe__titre">
+                          <span className="reserve-groupe__dot" style={{ background: CATEGORY_COLORS[g.cat.id] }} />
+                          {g.cat.emoji} {g.cat.label}
+                          <span className="reserve-groupe__n">{g.items.length}</span>
+                        </div>
+                      )}
+                      {g.items.map((activity, i, arr) => (
+                  <div
+                    key={activity.id}
+                    data-reorder-id={reordonnable ? activity.id : undefined}
+                    className={`reserve-card${dejaPlanifiee(activity, trip.days) ? ' reserve-card--planifiee' : ''}`
+                      + (reorder.dragId === activity.id ? ' reserve-card--drag' : '')
+                      + (reorder.surId === activity.id && reorder.dragId !== activity.id ? ' reserve-card--cible' : '')}
+                  >
+                    {reordonnable && (
+                      <button
+                        className="reserve-card__grip"
+                        onPointerDown={(e) => reorder.demarrer(activity.id, e)}
+                        aria-label={`Déplacer ${activity.title}`}
+                      >⠿</button>
+                    )}
+                    {/* Ce qu'il faut savoir avant de piocher, en une ligne
+                        discrète : ouvert ou non, à quelle distance, et ce qui
+                        manquera sur place. */}
+                    {(() => {
+                      const ouv = ouvertMaintenant(activity.openingHours);
+                      const km = dist(activity);
+                      const m = manques(activity);
+                      const planifiee = dejaPlanifiee(activity, trip.days);
+                      if (ouv === null && km == null && !m.length && !planifiee) return null;
+                      return (
+                        <div className="reserve-etat">
+                          {ouv === true && <span className="reserve-etat__ouvert">Ouvert</span>}
+                          {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
+                          {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
+                          {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
+                          {m.length > 0 && (
+                            <span className="reserve-etat__manque" title={`Manque : ${m.join(', ')}`}>
+                              {m.length} info{m.length > 1 ? 's' : ''} à compléter
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <ActivityCard
                       activity={activity}
                       context="reserve"
@@ -1094,7 +1223,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                       onAssign={(dayId) => undoableAssignFromReserve(dayId, activity.id)}
                     />
                   </div>
-                  ))
+                      ))}
+                    </div>
+                  ));
                 })()}
               </>
             )}
@@ -1144,7 +1275,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         {/* ── MAP TAB ── */}
         {tab === 'map' && (
           <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
-            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} accommodationLat={trip.accommodationLat} accommodationLon={trip.accommodationLon} onOpenActivity={openActivityFromMap} />
+            <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} accommodationLat={trip.accommodationLat} accommodationLon={trip.accommodationLon} onOpenActivity={openActivityFromMap}
+              onPiocher={todayDay ? (actId) => undoableAssignFromReserve(todayDay.id, actId) : null} />
           </Suspense>
         )}
       </div>

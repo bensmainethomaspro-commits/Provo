@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
+import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -170,7 +170,19 @@ export default function ActivityCard({
             )}
             <div className="activity-card__emoji">{meta.emoji}</div>
             <div className="activity-card__main">
-              <div className="activity-card__title">{activity.title}</div>
+              <div className="activity-card__title">
+                {/* La carte est colorée par catégorie, les listes ne l'étaient
+                    pas : l'œil ne pouvait pas trier. Un point de 8 px rebranche
+                    les deux, sans la lourdeur des barres colorées. */}
+                {!activity.isMeal && (
+                  <span
+                    className="activity-card__dot"
+                    style={{ background: CATEGORY_COLORS[activity.category] || 'var(--accent)' }}
+                    aria-hidden="true"
+                  />
+                )}
+                {activity.title}
+              </div>
               <div className="activity-card__meta">
                 {/* Les métadonnées se lisent, elles ne se décorent pas : l'émoji
                     devant chaque valeur ajoutait quatre pictogrammes colorés par

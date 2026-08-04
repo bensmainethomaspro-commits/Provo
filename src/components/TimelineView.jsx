@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { formatDuration, getDayLabel, formatDateShort, totalBudget, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
+import { useReorderDrag } from '../hooks/useReorderDrag';
+import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
 
 // Appui long avant de déclencher le glisser : assez court pour rester fluide,
 // assez long pour ne pas se déclencher pendant un défilement.
@@ -129,10 +130,12 @@ function TlActivity({
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weather }) {
+function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weather, passe, aujourdhui, refJour, onReordonner }) {
+  // Changer l'ordre d'une journée se faisait par le menu ⋯ de chaque activité,
+  // un cran à la fois. Le geste naturel, c'est de la prendre et de la poser.
+  const reorder = useReorderDrag((id, cibleId) => onReordonner?.(day.id, id, cibleId));
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
-  const budget = totalBudget(day.activities);
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
 
   const handleDragOver = (e) => {
@@ -151,7 +154,8 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
 
   return (
     <div
-      className={`tl-day${isDragOver ? ' tl-day--drop' : ''}`}
+      ref={refJour}
+      className={`tl-day${isDragOver ? ' tl-day--drop' : ''}${passe ? ' tl-day--passe' : ''}${aujourdhui ? ' tl-day--auj' : ''}`}
       data-drop-zone="true"
       data-zone-type="day"
       data-day-id={day.id}
@@ -165,7 +169,9 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
           <div className="tl-day__label">{getDayLabel(dayIndex, totalDays)}</div>
           <div className="tl-day__date">{formatDateShort(day.date)}</div>
           <div className="tl-day__stats">
-            {budget > 0 && <span>💶 {formatPrice(budget)}</span>}
+            {/* Le coût par jour a été retiré : il occupait la ligne la plus
+                lue de la carte sans jamais servir à décider — le budget se
+                suit sur sa pastille et dans l'onglet Dépenses. */}
             {weather && <span>{weather.icon} {weather.max}°/{weather.min}°</span>}
             {day.notes && <span className="tl-day__note-flag" title="Notes du jour">📝</span>}
             {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
@@ -178,8 +184,20 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
           <div className="tl-day__no-act">Aucune activité</div>
         ) : (
           day.activities.map(a => (
-            <TlActivity
+            <div
               key={a.id}
+              data-reorder-id={onReordonner ? a.id : undefined}
+              className={`tl-act-wrap${reorder.dragId === a.id ? ' tl-act-wrap--drag' : ''}`
+                + (reorder.surId === a.id && reorder.dragId !== a.id ? ' tl-act-wrap--cible' : '')}
+            >
+              {onReordonner && (
+                <button
+                  className="tl-act-grip"
+                  onPointerDown={(e) => reorder.demarrer(a.id, e)}
+                  aria-label={`Déplacer ${a.title}`}
+                >⠿</button>
+              )}
+            <TlActivity
               activity={a}
               slot={slots[a.id]}
               dayId={day.id}
@@ -191,6 +209,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
               onToggleCompare={() => onToggleCompare?.(a.id)}
               onTouchDragStart={onTouchDragStart}
             />
+            </div>
           ))
         )}
       </div>
@@ -198,9 +217,30 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weatherByDate }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weatherByDate, onReordonner }) {
+  const wrapRef = useRef(null);
+  const aujRef = useRef(null);
+  const cale = useRef(false);
+
+  const jourJ = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  const idxAuj = days.findIndex(d => d.date === jourJ);
+
+  // En voyage, le jour utile est aujourd'hui — pas le premier jour, qui est
+  // souvent déjà passé. Les jours écoulés restent à gauche, consultables.
+  useEffect(() => {
+    if (cale.current || idxAuj < 0) return;
+    const el = aujRef.current, wrap = wrapRef.current;
+    if (!el || !wrap) return;
+    cale.current = true;
+    // Sans animation : un défilement au chargement donne l'impression d'un bug.
+    wrap.scrollLeft = el.offsetLeft - wrap.offsetLeft;
+  }, [idxAuj, days.length]);
+
   return (
-    <div className="timeline-view-wrap">
+    <div className="timeline-view-wrap" ref={wrapRef}>
       {days.map((day, i) => (
         <TlDayCard
           key={day.id}
@@ -217,6 +257,10 @@ export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, 
           onToggleCompare={onToggleCompare}
           onTouchDragStart={onTouchDragStart}
           weather={weatherByDate?.[day.date]}
+          passe={idxAuj >= 0 && i < idxAuj}
+          aujourdhui={i === idxAuj}
+          refJour={i === idxAuj ? aujRef : undefined}
+          onReordonner={onReordonner}
         />
       ))}
     </div>

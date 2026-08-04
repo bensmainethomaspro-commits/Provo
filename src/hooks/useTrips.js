@@ -509,6 +509,25 @@ export function useTrips() {
     }));
   }, []);
 
+  /**
+   * Déplace une idée devant une autre. Les flèches ne déplacent que d'un cran :
+   * remonter la 12e en tête demandait onze taps. Le glisser-déposer a besoin
+   * d'une insertion à une position quelconque, pas d'un échange.
+   */
+  const moveInReserve = useCallback((tripId, activityId, targetId) => {
+    setTrips(p => p.map(t => {
+      if (t.id !== tripId || activityId === targetId) return t;
+      const arr = [...t.reserve];
+      const from = arr.findIndex(a => a.id === activityId);
+      if (from < 0) return t;
+      const [item] = arr.splice(from, 1);
+      // `targetId` nul = dépôt en fin de liste.
+      const to = targetId ? arr.findIndex(a => a.id === targetId) : arr.length;
+      arr.splice(to < 0 ? arr.length : to, 0, item);
+      return { ...t, reserve: arr };
+    }));
+  }, []);
+
   const deleteActivity = useCallback((tripId, location, activityId) => {
     setTrips(p => p.map(t => {
       if (t.id !== tripId) return t;
@@ -805,7 +824,7 @@ export function useTrips() {
     addToReserve, addToDay,
     setActivityStatus, updateActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
-    reorderActivity, reorderInReserve,
+    reorderActivity, reorderInReserve, moveInReserve,
     deleteActivity, setDayStartTime, importTrip, duplicateToDay,
     duplicateTrip, setDayNotes,
     addPackingItem, togglePackingItem, deletePackingItem,

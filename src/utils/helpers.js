@@ -262,13 +262,19 @@ export function getTimeSlots(activities, startTime = '09:00') {
     if (a.status === 'nogo') { slots[a.id] = null; continue; }
     const dur = (a.durationHours || 0) * 60 + (a.durationMinutes || 0);
     if (a.fixedStart) {
+      // Une heure saisie par l'utilisateur est un fait, pas une suggestion.
+      // `Math.max` la remplaçait par le curseur dès qu'elle tombait plus tôt
+      // que l'activité précédente : on changeait l'heure d'une activité et
+      // rien ne bougeait à l'écran.
       const fixedMin = timeToMin(a.fixedStart);
-      current = Math.max(current, fixedMin);
-      slots[a.id] = { start: minToTime(current), end: minToTime(current + dur), fixed: true };
+      slots[a.id] = { start: minToTime(fixedMin), end: minToTime(fixedMin + dur), fixed: true };
+      // Les activités libres qui suivent repartent d'après celle-ci, sans
+      // jamais reculer.
+      current = Math.max(current, fixedMin + dur);
     } else {
       slots[a.id] = { start: minToTime(current), end: minToTime(current + dur) };
+      current += dur;
     }
-    current += dur;
   }
   return slots;
 }

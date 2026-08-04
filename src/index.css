@@ -6199,6 +6199,15 @@ button.budget-inline:active { transform: scale(0.98); }
 /* L'adresse passe souvent à la ligne : son point de séparation se retrouvait
    alors orphelin en début de ligne. Elle s'en passe. */
 .activity-card__address::before { content: none !important; margin: 0 !important; }
+/* Retirer le point de séparation avait laissé « 45 minVienne, Autriche » :
+   une adresse n'est pas une donnée de même nature que la durée ou le prix,
+   elle mérite sa propre ligne. */
+.activity-card__address {
+  /* Dans un conteneur flex, `width: 100%` ne suffit pas : l'élément se
+     rétracte au lieu de passer à la ligne. C'est `min-width` qui l'y force. */
+  flex: 0 1 100%; min-width: 100%; margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ─── Position en direct ──────────────────────────────────────────────────
    « À combien je suis ? » se répond sur la fiche de l'activité, pas dans un
@@ -6504,3 +6513,187 @@ button.budget-inline:active { transform: scale(0.98); }
 /* La provenance change la confiance qu'on peut mettre dans l'information :
    la taire reviendrait à faire accepter les yeux fermés. */
 .enrich-source { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+/* ─── Ma position sur la carte ────────────────────────────────────────────
+   « Où suis-je par rapport à tout ça ? » se répond en regardant, pas en
+   lisant une liste de distances. Le point bleu est celui que tout le monde
+   reconnaît ; le halo dit qu'il est vivant. */
+.map-moi { position: relative; width: 22px; height: 22px; }
+.map-moi__point {
+  position: absolute; inset: 5px;
+  border-radius: 50%; background: #1B7DB5;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+}
+.map-moi__halo {
+  position: absolute; inset: 0;
+  border-radius: 50%; background: rgba(27,125,181,0.30);
+  animation: moiPulse 2.4s ease-out infinite;
+}
+@keyframes moiPulse {
+  0%   { transform: scale(0.6); opacity: 0.85; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+/* Un halo qui bat en permanence fatigue, et coûte de la batterie. */
+@media (prefers-reduced-motion: reduce) {
+  .map-moi__halo { animation: none; opacity: 0.5; }
+}
+
+.map-pill { display: flex; align-items: center; gap: 10px; }
+.map-pill__count { flex: 1; min-width: 0; }
+.map-moi-btn {
+  flex-shrink: 0; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: var(--surface-raised); color: var(--text-muted);
+  font-family: inherit; font-size: 12.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+/* La pastille reste fine ; le doigt touche 44 px. */
+.map-moi-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px); border-radius: inherit;
+}
+.map-moi-btn--on {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+
+/* Le plus proche : la carte montre OÙ, cette ligne dit À QUELLE DISTANCE. */
+.map-proche {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin: 0;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px; color: var(--text);
+}
+.map-proche__label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.map-proche__dist { margin-left: auto; font-weight: 650; color: var(--accent-deep, var(--accent)); }
+.map-proche--err { color: var(--red, #b91c1c); font-size: 12.5px; }
+
+/* Piocher depuis la carte : l'action principale passe devant « ouvrir ». */
+.map-popup__pick {
+  display: block; width: 100%; margin-top: 10px;
+  min-height: 44px; padding: 0 12px; border: none; border-radius: 10px;
+  background: var(--green, #15803d); color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-popup__pick:active { opacity: 0.82; }
+/* Quand les deux boutons cohabitent, « ouvrir » devient le geste secondaire. */
+.map-popup__pick + .map-popup__edit,
+.map-popup__pick ~ .map-popup__edit {
+  background: transparent; color: var(--accent-deep, var(--accent));
+  border: 1px solid var(--border-strong);
+}
+
+/* ─── Pastille de catégorie ───────────────────────────────────────────────
+   La carte était colorée par catégorie, les listes non : impossible de trier
+   du regard. Un point, pas une barre — la couleur situe, elle ne crie pas. */
+.activity-card__dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 8px;
+  vertical-align: 1px; flex-shrink: 0;
+}
+
+/* ─── Réserve : ce qu'il faut savoir avant de piocher ─────────────────────
+   Une ligne, trois signaux au plus. Un indicateur qui parle tout le temps ne
+   parle plus : « à compléter » reste gris et discret, jamais alarmant. */
+.reserve-etat {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  /* La carte a `overflow: hidden` et des coins arrondis : une ligne collée
+     aux bords s'y fait rogner. Elle suit donc la gouttière interne. */
+  padding: 9px 14px 0;
+  font-size: 11.5px; color: var(--text-muted);
+  min-width: 0;
+}
+.reserve-etat > * { min-width: 0; }
+.reserve-etat__ouvert {
+  color: var(--green, #15803d); font-weight: 700;
+}
+.reserve-etat__ouvert::before { content: '● '; }
+.reserve-etat__ferme { color: var(--text-light); font-weight: 600; }
+.reserve-etat__ferme::before { content: '○ '; }
+.reserve-etat__km { font-weight: 650; color: var(--accent-deep, var(--accent)); }
+.reserve-etat__plan { font-style: italic; }
+.reserve-etat__manque { margin-left: auto; opacity: 0.75; }
+
+/* Déjà au programme : un liseré, rien de plus. L'idée reste utilisable —
+   on peut vouloir y retourner. */
+.reserve-card--planifiee { position: relative; }
+.reserve-card--planifiee::before {
+  content: ''; position: absolute; left: 0; top: 22px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: color-mix(in srgb, var(--green, #15803d) 55%, transparent);
+}
+
+/* Regroupement par catégorie : le premier tri de l'œil. */
+.reserve-groupe { margin-bottom: 6px; }
+.reserve-groupe__titre {
+  display: flex; align-items: center; gap: 7px;
+  margin: 14px 2px 8px;
+  font-size: 11.5px; font-weight: 750; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.reserve-groupe__dot { width: 7px; height: 7px; border-radius: 50%; }
+.reserve-groupe__n {
+  margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface-sunken); color: var(--text-muted);
+  font-size: 11px; letter-spacing: 0;
+}
+.reserve-filter__pill--ouvert { font-weight: 700; }
+.reserve-vide { padding: 26px 12px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+/* L'ajout d'une dépense est le geste le plus fréquent de son écran : il vient
+   en tête, pas après les totaux et les soldes. */
+.expenses-add-top { width: 100%; margin: 0 0 16px; min-height: 48px; font-size: 15px; }
+
+/* Glisser-déposer dans la Réserve. La poignée n'apparaît qu'en liste à plat :
+   groupée ou triée, la position manuelle ne se voit plus, donc la déplacer ne
+   voudrait rien dire. */
+.reserve-card__grip {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 22px; min-height: 44px;
+  border: none; background: transparent;
+  font-size: 15px; color: var(--text-light); cursor: grab;
+  z-index: 2; line-height: 1;
+  /* Le navigateur ne doit pas interpréter le geste comme un défilement. */
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.reserve-card__grip:active { cursor: grabbing; }
+.reserve-card[data-reorder-id] { position: relative; padding-left: 18px; }
+.reserve-card--drag { opacity: 0.4; }
+/* Où la carte va atterrir : un trait, pas un déplacement fantôme. */
+.reserve-card--cible { box-shadow: 0 -3px 0 -1px var(--accent), var(--shadow-sm); }
+
+/* ─── Jours passés ────────────────────────────────────────────────────────
+   Un jour écoulé n'est pas à cacher — on y revient pour retrouver un nom, une
+   dépense. Mais il ne doit plus attirer l'œil : le carrousel s'ouvre sur
+   aujourd'hui, et ce qui précède reste à gauche, en retrait. */
+.tl-day--passe { opacity: 0.55; filter: saturate(0.7); }
+.tl-day--passe:hover, .tl-day--passe:focus-within { opacity: 0.85; }
+/* Aujourd'hui se repère sans avoir à lire la date. */
+.tl-day--auj { box-shadow: 0 0 0 2px var(--accent), var(--shadow-md); }
+
+/* Réordonner une journée au doigt. Même poignée que dans la Réserve : un
+   seul geste à apprendre pour toute l'app. */
+.tl-act-wrap { position: relative; padding-left: 16px; }
+.tl-act-grip {
+  position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
+  width: 20px; min-height: 44px;
+  border: none; background: transparent;
+  font-size: 13px; color: var(--text-light); cursor: grab;
+  z-index: 2; line-height: 1;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+.tl-act-grip:active { cursor: grabbing; }
+.tl-act-wrap--drag { opacity: 0.4; }
+.tl-act-wrap--cible::before {
+  content: ''; position: absolute; left: 16px; right: 0; top: -2px;
+  height: 2px; border-radius: 2px; background: var(--accent);
+}

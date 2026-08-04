@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { CATEGORY_COLORS, getCategoryMeta, fetchPlaceData } from '../utils/helpers';
+import { CATEGORY_COLORS, getCategoryMeta, fetchPlaceData, haversineKm } from '../utils/helpers';
+import { useLiveLocation, formatDistance, formatMarche } from '../hooks/useLiveLocation';
 
 // L'échappement évite qu'un titre contenant des chevrons casse la bulle —
 // le contenu est injecté en HTML brut par Leaflet.
@@ -20,6 +21,17 @@ function markerIcon(category) {
   });
 }
 
+// Le point bleu du système : reconnaissable partout, et sa taille dit la
+// précision plutôt que de la cacher.
+function moiIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div class="map-moi"><span class="map-moi__halo"></span><span class="map-moi__point"></span></div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+}
+
 function homeIcon() {
   return L.divIcon({
     className: '',
@@ -30,10 +42,21 @@ function homeIcon() {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity }) {
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity, onPiocher }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [accomTrouve, setAccomTrouve] = useState(null);
+  // « Où suis-je par rapport à tout ça ? » se répond sur la carte, pas dans une
+  // liste de distances. Éteinte par défaut : autorisation système et batterie.
+  const geo = useLiveLocation();
+  const moiRef = useRef(null);
+  // Les rappels changent d'identité à chaque rendu du parent. Les mettre dans
+  // les dépendances de l'effet reconstruirait la carte en continu — zoom perdu,
+  // bulles refermées. Ils passent donc par des refs, tenus à jour hors rendu.
+  const piocherRef = useRef(onPiocher);
+  const ouvrirRef = useRef(onOpenActivity);
+  useEffect(() => { piocherRef.current = onPiocher; ouvrirRef.current = onOpenActivity; },
+    [onPiocher, onOpenActivity]);
 
   // L'hébergement est localisé une fois, à la saisie, et rangé sur le voyage.
   // La carte n'a donc plus rien à demander au réseau : elle affiche l'épingle
@@ -60,10 +83,17 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     ...days.flatMap((d, i) => d.activities
       .filter(a => a.lat && a.lon)
       .map(a => ({ ...a, dayLabel: `Jour ${i + 1}`, dayIdx: i }))),
-    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999 })),
+    ...reserve.filter(a => a.lat && a.lon).map(a => ({ ...a, dayLabel: 'Réserve', dayIdx: 999, enReserve: true })),
   ];
 
   const hasContent = geoActs.length > 0 || (accom && accom.lat != null);
+
+  // Ce qu'on veut savoir en regardant la carte : lequel est à portée.
+  const plusProche = geo.position && geoActs.length
+    ? geoActs
+        .map(a => ({ ...a, km: haversineKm(geo.position.lat, geo.position.lon, a.lat, a.lon) }))
+        .sort((a, b) => a.km - b.km)[0]
+    : null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -88,17 +118,28 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
           `<strong>${esc(a.title)}</strong>`
           + `<br><small style="color:#888">${esc(a.dayLabel)}`
           + `${a.address ? ' · ' + esc(a.address) : ''}</small>`
-          + (onOpenActivity
-            ? `<br><button type="button" class="map-popup__edit" data-act-id="${esc(a.id)}">Ouvrir la fiche</button>`
+          // Le geste central du produit : on est quelque part, on voit ce qui
+          // est autour, on le prend. Chercher dans une liste après avoir vu le
+          // lieu sur la carte n'a aucun sens.
+          + (a.enReserve && piocherRef.current
+            ? `<br><button type="button" class="map-popup__pick">Ajouter à aujourd'hui</button>`
+            : '')
+          + (ouvrirRef.current
+            ? `<br><button type="button" class="map-popup__edit">Ouvrir la fiche</button>`
             : '')
         );
 
-      if (onOpenActivity) {
-        marker.on('popupopen', (e) => {
-          const btn = e.popup.getElement()?.querySelector('.map-popup__edit');
-          if (btn) btn.onclick = () => { map.closePopup(); onOpenActivity(a.id); };
-        });
-      }
+      marker.on('popupopen', (e) => {
+        const el = e.popup.getElement();
+        const ouvrir = el?.querySelector('.map-popup__edit');
+        if (ouvrir) ouvrir.onclick = () => { map.closePopup(); ouvrirRef.current?.(a.id); };
+        const prendre = el?.querySelector('.map-popup__pick');
+        // Déplacer l'idée change `reserve` et `days` : la carte se redessine, la
+        // bulle disparaît. Toute confirmation écrite ici serait donc invisible.
+        // C'est le bandeau d'annulation de l'app qui confirme — et il permet en
+        // plus de revenir en arrière.
+        if (prendre) prendre.onclick = () => { map.closePopup(); piocherRef.current?.(a.id); };
+      });
 
       if (roadTripMode) {
         L.divIcon({ className: '' });
@@ -136,8 +177,27 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     if (bounds.length === 1) map.setView(bounds[0], 14);
     else map.fitBounds(bounds, { padding: [24, 24] });
 
-    return () => { map.remove(); mapRef.current = null; };
+    return () => { map.remove(); mapRef.current = null; moiRef.current = null; };
   }, [days, reserve, roadTripMode, tripColor, accom]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // La position bouge en continu : la redessiner par le même effet que les
+  // épingles reconstruirait la carte entière à chaque pas, et perdrait le
+  // zoom. Le marqueur se déplace donc seul.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const p = geo.position;
+    if (!p) {
+      if (moiRef.current) { moiRef.current.remove(); moiRef.current = null; }
+      return;
+    }
+    if (moiRef.current) {
+      moiRef.current.setLatLng([p.lat, p.lon]);
+    } else {
+      moiRef.current = L.marker([p.lat, p.lon], { icon: moiIcon(), zIndexOffset: 500 })
+        .addTo(map).bindPopup('<strong>Tu es ici</strong>');
+    }
+  }, [geo.position]);
 
   if (!hasContent) {
     return (
@@ -152,10 +212,34 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
   return (
     <div className="map-wrap">
       <div className="map-pill">
-        {geoActs.length} lieu{geoActs.length > 1 ? 'x' : ''} sur la carte
-        {accom && accom.lat != null && <span> · 🏠 Hébergement</span>}
-        {roadTripMode && <span className="map-pill__road"> · 🛣️ Road trip</span>}
+        <span className="map-pill__count">
+          {geoActs.length} lieu{geoActs.length > 1 ? 'x' : ''} sur la carte
+          {accom && accom.lat != null && <span> · 🏠 Hébergement</span>}
+          {roadTripMode && <span className="map-pill__road"> · 🛣️ Road trip</span>}
+        </span>
+        {geo.disponible && (
+          <button
+            className={`map-moi-btn${geo.active ? ' map-moi-btn--on' : ''}`}
+            onClick={geo.basculer}
+            aria-pressed={geo.active}
+            title={geo.active ? 'Masquer ma position' : 'Voir ma position'}
+          >
+            ◎ {geo.active ? 'Ma position' : 'Me situer'}
+          </button>
+        )}
       </div>
+      {/* Le plus proche, dit en une phrase : sur la carte on voit où, pas à
+          quelle distance. */}
+      {geo.position && plusProche && (
+        <div className="map-proche">
+          <span className="map-proche__label">Le plus proche</span>
+          <strong>{plusProche.title}</strong>
+          <span className="map-proche__dist">
+            {formatDistance(plusProche.km)} · {formatMarche(plusProche.km)}
+          </span>
+        </div>
+      )}
+      {geo.erreur && <div className="map-proche map-proche--err">{geo.erreur}</div>}
       <div ref={containerRef} className="map-canvas" />
     </div>
   );
