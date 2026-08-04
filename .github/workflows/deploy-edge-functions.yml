@@ -37,11 +37,22 @@ jobs:
         with:
           version: latest
 
-      - name: Déployer extract-place
+      - name: Déployer toutes les fonctions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           # Référence du projet : déjà publique (elle est dans l'URL de l'API
           # utilisée par le client), ce n'est pas un secret.
-          supabase functions deploy extract-place \
-            --project-ref usztistixgzdrvjzplqx
+          #
+          # Le nom des fonctions était écrit en dur : ajouter « enrich-place »
+          # ne déployait donc rien, et l'app appelait une fonction inexistante
+          # sans que rien ne le signale. On parcourt le dossier.
+          echo "Fonctions trouvées :"
+          ls -1 supabase/functions
+          for d in supabase/functions/*/; do
+            nom=$(basename "$d")
+            [ -f "$d/index.ts" ] || { echo "· $nom ignorée (pas d'index.ts)"; continue; }
+            echo "::group::Déploiement de $nom"
+            supabase functions deploy "$nom" --project-ref usztistixgzdrvjzplqx
+            echo "::endgroup::"
+          done
