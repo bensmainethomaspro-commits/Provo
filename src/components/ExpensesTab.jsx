@@ -106,10 +106,13 @@ const EXPENSE_CATEGORIES = [
   { id: 'transport', emoji: '🚗', label: 'Transport' },
   { id: 'hebergement', emoji: '🏨', label: 'Hébergement' },
   { id: 'repas', emoji: '🍽️', label: 'Repas' },
+  { id: 'verre', emoji: '🍻', label: 'Verre' },
   { id: 'activite', emoji: '🎯', label: 'Activité' },
   { id: 'shopping', emoji: '🛍️', label: 'Shopping' },
   { id: 'autre', emoji: '💳', label: 'Autre' },
 ];
+
+const CAT_DEFAUT = EXPENSE_CATEGORIES.find(c => c.id === 'autre');
 
 const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
@@ -527,7 +530,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             const share = n > 0 ? eurAmt / n : eurAmt;
             const catMeta = exp.isSettlement
               ? { emoji: '🤝', label: 'Remboursement' }
-              : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || EXPENSE_CATEGORIES[5]);
+              // Le repli se cherchait par index : insérer une catégorie avant
+              // « Autre » l'aurait silencieusement remplacé par la nouvelle.
+              : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || CAT_DEFAUT);
             return (
               <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
                 <div className="expense-item">

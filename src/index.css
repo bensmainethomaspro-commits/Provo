@@ -6504,3 +6504,65 @@ button.budget-inline:active { transform: scale(0.98); }
 /* La provenance change la confiance qu'on peut mettre dans l'information :
    la taire reviendrait à faire accepter les yeux fermés. */
 .enrich-source { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+
+/* ─── Ma position sur la carte ────────────────────────────────────────────
+   « Où suis-je par rapport à tout ça ? » se répond en regardant, pas en
+   lisant une liste de distances. Le point bleu est celui que tout le monde
+   reconnaît ; le halo dit qu'il est vivant. */
+.map-moi { position: relative; width: 22px; height: 22px; }
+.map-moi__point {
+  position: absolute; inset: 5px;
+  border-radius: 50%; background: #1B7DB5;
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+}
+.map-moi__halo {
+  position: absolute; inset: 0;
+  border-radius: 50%; background: rgba(27,125,181,0.30);
+  animation: moiPulse 2.4s ease-out infinite;
+}
+@keyframes moiPulse {
+  0%   { transform: scale(0.6); opacity: 0.85; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+/* Un halo qui bat en permanence fatigue, et coûte de la batterie. */
+@media (prefers-reduced-motion: reduce) {
+  .map-moi__halo { animation: none; opacity: 0.5; }
+}
+
+.map-pill { display: flex; align-items: center; gap: 10px; }
+.map-pill__count { flex: 1; min-width: 0; }
+.map-moi-btn {
+  flex-shrink: 0; min-height: 34px; padding: 0 12px;
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  background: var(--surface-raised); color: var(--text-muted);
+  font-family: inherit; font-size: 12.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+/* La pastille reste fine ; le doigt touche 44 px. */
+.map-moi-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px); border-radius: inherit;
+}
+.map-moi-btn--on {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+
+/* Le plus proche : la carte montre OÙ, cette ligne dit À QUELLE DISTANCE. */
+.map-proche {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 14px; margin: 0;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px; color: var(--text);
+}
+.map-proche__label {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.map-proche__dist { margin-left: auto; font-weight: 650; color: var(--accent-deep, var(--accent)); }
+.map-proche--err { color: var(--red, #b91c1c); font-size: 12.5px; }
