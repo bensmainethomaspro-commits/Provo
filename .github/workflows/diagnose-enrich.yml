@@ -1,0 +1,94 @@
+name: Diagnostic — enrichissement d'un lieu
+
+# L'environnement de développement ne joint pas le domaine Supabase : on ne
+# peut donc pas y vérifier que « enrich-place » fonctionne vraiment. Un runner
+# GitHub sort par une IP de centre de données, comme la fonction elle-même.
+#
+# Ce diagnostic dit exactement où la chaîne casse : fonction absente, clé non
+# configurée, site du lieu introuvable, ou modèle qui n'extrait rien.
+
+on:
+  workflow_dispatch:
+    inputs:
+      nom:
+        description: 'Nom du lieu'
+        required: true
+        default: 'Café Central'
+      lat:
+        description: 'Latitude'
+        required: true
+        default: '48.2103'
+      lon:
+        description: 'Longitude'
+        required: true
+        default: '16.3656'
+      categorie:
+        description: 'Catégorie Provo'
+        required: false
+        default: 'resto'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      FN: https://usztistixgzdrvjzplqx.supabase.co/functions/v1/enrich-place
+      # Clé publiable : elle est déjà dans le bundle du site, ce n'est pas un secret.
+      KEY: sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD
+      ORIGIN: https://provo-tbens.vercel.app
+    steps:
+      - name: A · La fonction est-elle déployée ?
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X OPTIONS "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type,apikey")
+          echo "Préflight CORS : $code"
+          if [ "$code" = "404" ]; then
+            echo "::error::Fonction absente. Lance « Déployer les fonctions Supabase »."
+            exit 1
+          fi
+
+      - name: B · Réponse complète
+        run: |
+          reponse=$(curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Authorization: Bearer $KEY" \
+            -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+                  --arg n '${{ inputs.nom }}' \
+                  --arg c '${{ inputs.categorie }}' \
+                  --argjson la '${{ inputs.lat }}' \
+                  --argjson lo '${{ inputs.lon }}' \
+                  '{name:$n, category:$c, lat:$la, lon:$lo}')")
+          echo "$reponse" | jq . || echo "$reponse"
+          echo "$reponse" > /tmp/r.json
+
+      - name: C · Ce que ça veut dire
+        run: |
+          r=$(cat /tmp/r.json)
+          source=$(echo "$r" | jq -r '.source // "?"')
+          raison=$(echo "$r" | jq -r '.raison // ""')
+          site=$(echo "$r"   | jq -r '.site   // ""')
+          modele=$(echo "$r" | jq -r '.modele // false')
+
+          echo "source = $source | site = ${site:-aucun} | modèle utilisé = $modele"
+          case "$raison" in
+            modele_non_configure)
+              echo "::warning::Le site a été trouvé mais la clé Anthropic n'est pas posée."
+              echo "Supabase › Edge Functions › Secrets › ANTHROPIC_API_KEY" ;;
+            pas_de_site)
+              echo "::warning::Aucun site officiel connu pour ce lieu (tag OSM « website » absent)."
+              echo "C'est une limite de la donnée, pas une panne : l'app retombe sur OpenStreetMap." ;;
+            site_illisible)
+              echo "::warning::Le site existe mais n'a pas pu être lu (JavaScript seul, 403, ou non-HTML)." ;;
+            modele_*)
+              echo "::error::Le modèle a échoué : $raison" ;;
+            "")
+              if [ "$modele" = "true" ]; then
+                echo "✅ Chaîne complète fonctionnelle."
+                echo "$r" | jq -r '"horaires    : \(.horaires // "—")\nprix        : \(.prixMin // "—") – \(.prixMax // "—") \(.devise // "")\ndescription : \(.description // "—")\nconfiance   : \(.confiance // "—")"'
+              else
+                echo "::warning::Réponse sans échec déclaré mais sans passage par le modèle."
+              fi ;;
+          esac

@@ -6499,3 +6499,8 @@ button.budget-inline:active { transform: scale(0.98); }
 .lodging-state { margin: 8px 2px 0; font-size: 12.5px; line-height: 1.45; color: var(--text-muted); }
 .lodging-state--ok { color: var(--green, #15803d); font-weight: 600; }
 .lodging-state--ko { color: var(--red, #b91c1c); }
+
+.enrich-intro { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--text-muted); }
+/* La provenance change la confiance qu'on peut mettre dans l'information :
+   la taire reviendrait à faire accepter les yeux fermés. */
+.enrich-source { margin: 0 0 12px; font-size: 12px; color: var(--text-muted); font-style: italic; }

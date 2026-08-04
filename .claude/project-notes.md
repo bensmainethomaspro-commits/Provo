@@ -187,3 +187,34 @@ Le déploiement de la fonction Edge est automatique :
 `.github/workflows/deploy-edge-functions.yml` se déclenche sur `main` dès que
 `supabase/functions/**` change. Un correctif de l'extracteur poussé sur une
 branche n'est donc **pas** en ligne tant qu'il n'est pas fusionné.
+
+## Enrichissement par le site du lieu (`enrich-place` + `deepEnrich.js`)
+
+OpenStreetMap connaît bien les monuments, mal les commerces : un café y aura
+rarement ses horaires et jamais son ticket moyen. Or c'est justement ce qu'on
+veut savoir avant d'y aller. Le site de l'établissement, lui, le dit — mais le
+navigateur ne peut pas le lire (CORS), d'où la fonction Edge.
+
+Chaîne : site officiel via le tag OSM `website` → téléchargement de la page →
+extraction par le modèle (horaires, fourchette de prix, description en deux
+phrases) → **pop-up de confirmation**, jamais d'écriture directe.
+
+Déclenchement **automatique à l'ajout** d'une activité, en arrière-plan, une à
+la fois. La pop-up s'ouvre quand il y a quelque chose à proposer.
+
+Points de conception à ne pas défaire :
+
+- **La provenance est affichée** (« D'après cafe-example.at »). Une information
+  dont on ignore la source se fait accepter les yeux fermés.
+- **Un prix deviné est refusé.** `confiance: "basse"` vide les champs prix et
+  description : une fourchette fausse finit dans le budget de quelqu'un.
+- **Seuls les trous sont remplis** : ce que l'utilisateur a saisi n'est jamais
+  écrasé, même par une source plus récente.
+- **Garde-fou SSRF** dans la fonction : la fonction télécharge une URL qu'elle
+  n'a pas choisie. Protocoles limités à http/https, adresses privées et noms
+  sans point refusés.
+- Sans clé Anthropic configurée, la réponse retombe sur OSM avec
+  `raison: "modele_non_configure"` — jamais un échec silencieux.
+
+La clé se pose côté Supabase (`Edge Functions → Secrets`), sous
+`ANTHROPIC_API_KEY` ou `ANTHROPIC_API_KEY_TB` : les deux noms sont acceptés.

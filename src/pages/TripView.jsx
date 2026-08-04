@@ -23,12 +23,16 @@ import TripSettingsSheet from '../components/TripSettingsSheet';
 import { budgetStats, formatPrice, formatDate, CATEGORIES, detectCountryTheme, haversineKm } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
+import { enrichirEnProfondeur } from '../utils/deepEnrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
 // Le contrôle des lieux ne sert qu'à la demande : inutile de l'embarquer
 // dans le paquet principal.
 const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
+// La pop-up d'enrichissement n'apparaît qu'après une recherche réussie :
+// inutile de l'embarquer dans le paquet principal.
+const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
 function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
   const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
@@ -223,6 +227,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [showRecap, setShowRecap] = useState(false);
   const [detailDay, setDetailDay] = useState(null);
   const [showPlaceCheck, setShowPlaceCheck] = useState(false);
+  // Propositions issues de la lecture du site des lieux, en attente d'accord.
+  const [enrichProps, setEnrichProps] = useState([]);
   const [checkBannerDismissed, setCheckBannerDismissed] = useState(false);
   const [showOptimConfirm, setShowOptimConfirm] = useState(false);
   const [reserveDragOver, setReserveDragOver] = useState(false);
@@ -618,11 +624,34 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const autoEnrich = async (activity, activityId, location) => {
     if (!activityId || activity.isMeal) return;
     const complete = activity.address && activity.openingHours && activity.lat;
-    if (complete) return;
-    const found = await lookupPlace(activity.title, trip.destination,
-      { lat: anchor?.lat, lon: anchor?.lon });
-    const patch = missingFieldsFrom(activity, found);
-    if (patch) updateActivity(tripId, location, activityId, patch);
+    let aJour = activity;
+    if (!complete) {
+      const found = await lookupPlace(activity.title, trip.destination,
+        { lat: anchor?.lat, lon: anchor?.lon });
+      const patch = missingFieldsFrom(activity, found);
+      if (patch) {
+        updateActivity(tripId, location, activityId, patch);
+        aJour = { ...activity, ...patch };
+      }
+    }
+
+    // Les bases ouvertes s'arrêtent là. Le site du lieu, lui, donne les
+    // horaires réels, une gamme de prix et de quoi décrire l'endroit — c'est
+    // ce qui évite d'avoir à chercher sur place. La recherche part en fond ;
+    // rien n'est écrit sans accord.
+    const trouve = await enrichirEnProfondeur({ ...aJour, id: activityId });
+    if (!trouve) return;
+    setEnrichProps(list => (
+      list.some(p => p.id === activityId) ? list : [...list, {
+        id: activityId,
+        emplacement: location,
+        titre: aJour.title,
+        ou: location.type === 'reserve'
+          ? 'Réserve'
+          : `Jour ${trip.days.findIndex(d => d.id === location.dayId) + 1}`,
+        ...trouve,
+      }]
+    ));
   };
 
   // ─── Drag & Drop ─────────────────────────────────────
@@ -1137,6 +1166,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
       />
+
+      {enrichProps.length > 0 && (
+        <Suspense fallback={null}>
+          <EnrichSheet
+            propositions={enrichProps}
+            onAppliquer={(location, actId, patch) => updateActivity(tripId, location, actId, patch)}
+            onIgnorer={(actId) => setEnrichProps(l => l.filter(p => p.id !== actId))}
+            onClose={() => setEnrichProps([])}
+          />
+        </Suspense>
+      )}
 
       {showPlaceCheck && (
         <Suspense fallback={null}>
