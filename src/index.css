@@ -6199,6 +6199,15 @@ button.budget-inline:active { transform: scale(0.98); }
 /* L'adresse passe souvent à la ligne : son point de séparation se retrouvait
    alors orphelin en début de ligne. Elle s'en passe. */
 .activity-card__address::before { content: none !important; margin: 0 !important; }
+/* Retirer le point de séparation avait laissé « 45 minVienne, Autriche » :
+   une adresse n'est pas une donnée de même nature que la durée ou le prix,
+   elle mérite sa propre ligne. */
+.activity-card__address {
+  /* Dans un conteneur flex, `width: 100%` ne suffit pas : l'élément se
+     rétracte au lieu de passer à la ligne. C'est `min-width` qui l'y force. */
+  flex: 0 1 100%; min-width: 100%; margin-top: 3px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ─── Position en direct ──────────────────────────────────────────────────
    « À combien je suis ? » se répond sur la fiche de l'activité, pas dans un
@@ -6582,3 +6591,60 @@ button.budget-inline:active { transform: scale(0.98); }
   background: transparent; color: var(--accent-deep, var(--accent));
   border: 1px solid var(--border-strong);
 }
+
+/* ─── Pastille de catégorie ───────────────────────────────────────────────
+   La carte était colorée par catégorie, les listes non : impossible de trier
+   du regard. Un point, pas une barre — la couleur situe, elle ne crie pas. */
+.activity-card__dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 8px;
+  vertical-align: 1px; flex-shrink: 0;
+}
+
+/* ─── Réserve : ce qu'il faut savoir avant de piocher ─────────────────────
+   Une ligne, trois signaux au plus. Un indicateur qui parle tout le temps ne
+   parle plus : « à compléter » reste gris et discret, jamais alarmant. */
+.reserve-etat {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  /* La carte a `overflow: hidden` et des coins arrondis : une ligne collée
+     aux bords s'y fait rogner. Elle suit donc la gouttière interne. */
+  padding: 9px 14px 0;
+  font-size: 11.5px; color: var(--text-muted);
+  min-width: 0;
+}
+.reserve-etat > * { min-width: 0; }
+.reserve-etat__ouvert {
+  color: var(--green, #15803d); font-weight: 700;
+}
+.reserve-etat__ouvert::before { content: '● '; }
+.reserve-etat__ferme { color: var(--text-light); font-weight: 600; }
+.reserve-etat__ferme::before { content: '○ '; }
+.reserve-etat__km { font-weight: 650; color: var(--accent-deep, var(--accent)); }
+.reserve-etat__plan { font-style: italic; }
+.reserve-etat__manque { margin-left: auto; opacity: 0.75; }
+
+/* Déjà au programme : un liseré, rien de plus. L'idée reste utilisable —
+   on peut vouloir y retourner. */
+.reserve-card--planifiee { position: relative; }
+.reserve-card--planifiee::before {
+  content: ''; position: absolute; left: 0; top: 22px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0;
+  background: color-mix(in srgb, var(--green, #15803d) 55%, transparent);
+}
+
+/* Regroupement par catégorie : le premier tri de l'œil. */
+.reserve-groupe { margin-bottom: 6px; }
+.reserve-groupe__titre {
+  display: flex; align-items: center; gap: 7px;
+  margin: 14px 2px 8px;
+  font-size: 11.5px; font-weight: 750; letter-spacing: 0.4px;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.reserve-groupe__dot { width: 7px; height: 7px; border-radius: 50%; }
+.reserve-groupe__n {
+  margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface-sunken); color: var(--text-muted);
+  font-size: 11px; letter-spacing: 0;
+}
+.reserve-filter__pill--ouvert { font-weight: 700; }
+.reserve-vide { padding: 26px 12px; text-align: center; color: var(--text-muted); font-size: 14px; }
