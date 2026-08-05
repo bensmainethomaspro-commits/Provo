@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { formatPrice, CATEGORIES, formatDateShort } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
@@ -289,32 +289,39 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // Settlements are money transfers between travelers, not group spending:
   // they count in the debt/balance math (that's how they cancel a debt) but
   // must not inflate totals or the category breakdown.
-  const realExpenses = expenses.filter(e => !e.isSettlement);
-  const totalSpent = realExpenses.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  // Tous ces calculs parcourent la liste des dépenses plusieurs fois. Ils ne
+  // dépendent que d'elle et des voyageurs — les refaire à chaque frappe dans
+  // le formulaire, ou à chaque relevé GPS, se paie sur un gros voyage.
+  const {
+    totalSpent, debts, balances, byCategory, travelerTotals,
+  } = useMemo(() => {
+    const reelles = expenses.filter(e => !e.isSettlement);
+    const total = reelles.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    return {
+      totalSpent: total,
+      debts: calcDebts(expenses, travelers),
+      balances: calcBalances(expenses, travelers),
+      byCategory: EXPENSE_CATEGORIES.map(cat => ({
+        ...cat,
+        total: reelles
+          .filter(e => e.expenseCategory === cat.id)
+          .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0),
+      })).filter(c => c.total > 0),
+      travelerTotals: travelers.map(t => {
+        const paid = expenses
+          .filter(e => e.payerId === t.id)
+          .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+        const share = expenses.reduce((s, e) => {
+          if (!(e.participantIds || []).includes(t.id)) return s;
+          return s + (e.eurAmount ?? e.amount) / ((e.participantIds || []).length || 1);
+        }, 0);
+        return { ...t, paid, share, balance: paid - share };
+      }),
+    };
+  }, [expenses, travelers]);
+
   const tripBudget = parseFloat(trip.initialBudget) || 0;
   const budgetOver = tripBudget > 0 && totalSpent > tripBudget;
-  const debts = calcDebts(expenses, travelers);
-  const balances = calcBalances(expenses, travelers);
-
-  // Category breakdown
-  const byCategory = EXPENSE_CATEGORIES.map(cat => {
-    const total = realExpenses
-      .filter(e => e.expenseCategory === cat.id)
-      .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
-    return { ...cat, total };
-  }).filter(c => c.total > 0);
-
-  // Per-traveler totals
-  const travelerTotals = travelers.map(t => {
-    const paid = expenses
-      .filter(e => e.payerId === t.id)
-      .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
-    const share = expenses.reduce((s, e) => {
-      if (!e.participantIds.includes(t.id)) return s;
-      return s + (e.eurAmount ?? e.amount) / (e.participantIds.length || 1);
-    }, 0);
-    return { ...t, paid, share, balance: paid - share };
-  });
 
   return (
     <div className="expenses-tab">

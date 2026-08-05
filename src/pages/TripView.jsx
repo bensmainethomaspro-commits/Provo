@@ -17,6 +17,8 @@ import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
+import { useEtatRetenu } from '../hooks/useEtatRetenu';
+import { toucher } from '../utils/toucher';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
@@ -268,15 +270,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     const stored = localStorage.getItem('provo_viewMode');
     return stored === 'agenda' ? 'agenda' : 'timeline'; // 'list' removed → fallback timeline
   });
-  const [reserveFilter, setReserveFilter] = useState('all');
+  // La vue de la Réserve se retient d'un passage à l'autre : la refaire à
+  // chaque aller-retour est un impôt sur l'écran le plus utilisé.
+  const [reserveFilter, setReserveFilter] = useEtatRetenu(`${tripId}_filtre`, 'all');
   const [reserveSearch, setReserveSearch] = useState('');
-  const [reserveSort, setReserveSort] = useState('default');
+  const [reserveSort, setReserveSort] = useEtatRetenu(`${tripId}_tri`, 'default');
   // Sur place, la question est « qu'est-ce qui est ouvert, près de moi ».
-  const [ouvertSeul, setOuvertSeul] = useState(false);
+  const [ouvertSeul, setOuvertSeul] = useEtatRetenu(`${tripId}_ouvert`, false);
   // Le regroupement par catégorie masque l'ordre manuel : les deux ne peuvent
   // pas cohabiter. On le rend donc débrayable, et c'est en liste à plat que le
   // glisser-déposer prend son sens.
-  const [grouper, setGrouper] = useState(true);
+  const [grouper, setGrouper] = useEtatRetenu(`${tripId}_groupe`, true);
   const reorder = useReorderDrag(
     useCallback((id, cibleId) => moveInReserve(tripId, id, cibleId), [moveInReserve, tripId])
   );
@@ -652,6 +656,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // Lire le presse-papier demande un geste explicite de l'utilisateur : Safari
   // affiche sa propre confirmation, et c'est très bien — personne ne veut
   // qu'une page lise ce qu'il a copié sans le savoir.
+  // Le prénom derrière un identifiant de compte. Les voyageurs liés à un
+  // compte le portent dans `profileId` ; sinon on ne sait pas, et on se tait.
+  const auteurDe = (uid) => {
+    const v = (trip?.tripTravelers || []).find(t => t.profileId === uid);
+    return v ? `${v.emoji || '👤'} ${v.name}` : null;
+  };
+
   const collerUnLien = async () => {
     let texte = '';
     // Refus de l'utilisateur, ou API absente : on ouvre quand même la feuille.
@@ -671,6 +682,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
       const idee = (avant?.reserve || []).find(a => a.id === actId);
       const jour = (avant?.days || []).find(d => d.id === dayId);
       moveFromReserveToDay(tripId, dayId, actId);
+      toucher('valide');
       if (!idee || !jour) return;
       const signaux = signauxAjout(idee, jour, { feries });
       if (!signaux.length) return;
@@ -1294,6 +1306,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                           {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
                           {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
                           {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
+                          {/* Qui l'a proposée. Muet quand on voyage seul, et
+                              muet pour ses propres idées : « proposé par moi »
+                              sur chaque fiche n'apprendrait rien. */}
+                          {activity.proposePar && activity.proposePar !== userId && (
+                            <span className="reserve-etat__auteur">
+                              {auteurDe(activity.proposePar)}
+                            </span>
+                          )}
                           {m.length > 0 && (
                             <span className="reserve-etat__manque" title={`Manque : ${m.join(', ')}`}>
                               {m.length} info{m.length > 1 ? 's' : ''} à compléter

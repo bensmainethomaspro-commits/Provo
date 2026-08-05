@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getCategoryMeta, formatDate, getTimeSlots, getDayLabel, isClosedOnDate, totalMinutes, formatDuration, haversineKm } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
+import { toucher } from '../utils/toucher';
 import { useLiveLocation, formatDistance, formatMarche } from '../hooks/useLiveLocation';
 import Confetti from './Confetti';
 import ConfirmDialog from './ConfirmDialog';
@@ -102,9 +103,34 @@ function TodayReorderList({ items, slots, onCommit, onDone, onSkip, maPosition }
             )}
           </div>
         </div>
+        {/* Devant un guichet, un billet rangé au fond d'une fiche est un billet
+            qu'on ne trouve pas. Il vit ici, sur l'écran qu'on a déjà ouvert. */}
+        {((act.pdfs || []).length > 0 || act.address) && (
+          <div className="today-act-card__acces">
+            {(act.pdfs || []).slice(0, 1).map((p, i) => (
+              <a key={i} href={p.data} target="_blank" rel="noopener noreferrer"
+                className="today-acces-btn today-acces-btn--billet"
+                onClick={e => e.stopPropagation()}>
+                🎟️ Billet
+              </a>
+            ))}
+            {act.address && (
+              <a
+                href={act.lat != null && act.lon != null
+                  ? `https://maps.google.com/maps?daddr=${act.lat},${act.lon}`
+                  : `https://maps.google.com/maps?daddr=${encodeURIComponent(act.address)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="today-acces-btn"
+                onClick={e => e.stopPropagation()}>
+                🧭 Y aller
+              </a>
+            )}
+          </div>
+        )}
+
         <div className="today-act-card__actions">
-          <button className="today-act-card__btn today-act-card__btn--skip" onClick={() => onSkip(act.id)}>❌</button>
-          <button className="today-act-card__btn today-act-card__btn--done" onClick={() => onDone(act.id)}>✅</button>
+          <button className="today-act-card__btn today-act-card__btn--skip" onClick={() => { toucher('refus'); onSkip(act.id); }}>❌</button>
+          <button className="today-act-card__btn today-act-card__btn--done" onClick={() => { toucher('valide'); onDone(act.id); }}>✅</button>
         </div>
       </div>
     );

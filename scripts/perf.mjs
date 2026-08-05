@@ -38,17 +38,20 @@ const TAILLES = [
 
 const nav = await chromium.launch({ executablePath: chrome });
 console.log('taille'.padEnd(18) + 'activités'.padEnd(11) + 'ouverture'.padEnd(12)
-  + 'Planning'.padEnd(11) + 'Réserve'.padEnd(11) + 'Dépenses'.padEnd(11) + 'filtre');
-console.log('─'.repeat(84));
+  + 'Planning'.padEnd(11) + 'Réserve'.padEnd(11) + 'Dépenses'.padEnd(11)
+  + 'filtre'.padEnd(11) + 'point GPS');
+console.log('─'.repeat(95));
 
 for (const { nom, t } of TAILLES) {
   const ctx = await nav.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2,
-    hasTouch: true, isMobile: true, locale: 'fr-FR' });
+    hasTouch: true, isMobile: true, locale: 'fr-FR',
+    permissions: ['geolocation'], geolocation: { latitude: 48.2082, longitude: 16.3738 } });
   const p = await ctx.newPage();
   await p.route('**/*', r => r.request().url().startsWith(U) ? r.fallback() : r.abort());
   await p.addInitScript(([tr, s]) => {
     localStorage.setItem('provo_trips', tr); localStorage.setItem('provo_settings', s);
     localStorage.setItem('provo_theme', 'light'); localStorage.setItem('provo_onboarded', '1');
+    localStorage.setItem('provo_geo_active', '1');   // en voyage, on marche avec
   }, [JSON.stringify([t]), JSON.stringify(SETTINGS)]);
   // Un Chromium de bureau n'est pas un iPhone : on bride le processeur pour
   // approcher ce que l'utilisateur sent vraiment sur son téléphone.
@@ -84,10 +87,22 @@ for (const { nom, t } of TAILLES) {
     if (await f.count()) await f.click();
   });
 
+  // Ce qui compte en voyage : le GPS envoie un point toutes les secondes ou
+  // deux pendant qu'on marche. Si chaque point coûte cher, l'app rame en
+  // permanence, pas seulement à l'ouverture.
+  await onglet(/Réserve/i)();
+  await p.waitForTimeout(600);
+  const t0 = Date.now();
+  for (let i = 1; i <= 5; i++) {
+    await ctx.setGeolocation({ latitude: 48.2082 + i * 0.0004, longitude: 16.3738 + i * 0.0004 });
+    await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  }
+  const parPoint = Math.round((Date.now() - t0) / 5);
+
   const nbActs = t.days.reduce((s, d) => s + d.activities.length, 0);
   const c = (n) => `${n} ms`.padEnd(11);
   console.log(nom.padEnd(18) + String(nbActs).padEnd(11) + c(ouverture) + c(planning)
-    + c(reserve) + c(depenses) + `${filtre} ms`);
+    + c(reserve) + c(depenses) + c(filtre) + `${parPoint} ms`);
   await ctx.close();
 }
 await nav.close();

@@ -6845,3 +6845,80 @@ button.budget-inline:active { transform: scale(0.98); }
   transform: translate(-50%, -50%);
   width: max(100%, 44px); height: max(100%, 44px);
 }
+
+/* ─── Le billet et la route, sur l'écran du jour ──────────────────────────
+   Devant un guichet, un billet rangé au fond d'une fiche est un billet qu'on
+   ne trouve pas : quatre gestes pour l'atteindre, dont un défilement. Ces deux
+   boutons sont là où l'on regarde déjà. */
+.today-act-card__acces {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.today-acces-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--surface-raised); color: var(--text);
+  font-size: 14.5px; font-weight: 650; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.today-acces-btn:active { opacity: 0.8; }
+/* Le billet passe devant : c'est lui qu'on cherche dans l'urgence. */
+.today-acces-btn--billet {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+[data-theme="dark"] .today-acces-btn--billet { color: var(--accent); }
+
+/* Qui a proposé l'idée. À plusieurs, une Réserve sans auteurs devient une
+   liste anonyme où l'on ne sait plus quoi discuter avec qui. */
+.reserve-etat__auteur {
+  font-size: 11.5px; font-weight: 650;
+  color: var(--accent-deep, var(--accent));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 2px 8px; border-radius: 999px;
+}
+[data-theme="dark"] .reserve-etat__auteur { color: var(--accent); }
+
+/* ─── Les longues listes ne se dessinent qu'à l'approche ──────────────────
+   Mesuré sur un voyage de 30 jours : la Réserve rendait 17 648 px de contenu
+   pour un écran de 844, les Dépenses 18 150 px. Vingt et un écrans dessinés
+   d'un coup, dont vingt qu'on ne regarde pas — d'où 800 ms avant que l'onglet
+   réponde.
+
+   `content-visibility: auto` laisse le navigateur sauter la mise en page de ce
+   qui est hors champ. `contain-intrinsic-size` lui donne une hauteur estimée,
+   sans laquelle la barre de défilement sauterait à chaque approche.
+
+   Aucune bibliothèque, aucun changement de code : là où la propriété n'existe
+   pas, tout se dessine comme avant. */
+.reserve-card,
+.expense-item {
+  content-visibility: auto;
+}
+.reserve-card { contain-intrinsic-size: auto 132px; }
+.expense-item { contain-intrinsic-size: auto 76px; }
+
+/* ─── Cibles de moins de 44 px, mesurées par /verif-ui ────────────────────
+   Modifier et supprimer une dépense (27 × 22 et 25 × 20 px), l'adresse sur
+   l'écran du jour (42 px de haut), et le détail des dettes (60 × 18). Ce sont
+   des actions courantes ; la pastille reste fine, la zone touchée fait 44 px
+   et rien ne bouge à l'écran. */
+/* Modifier et Supprimer sont côte à côte : agrandir leur zone par un halo les
+   ferait se recouvrir, et le doigt toucherait le mauvais. Il leur faut donc
+   une vraie taille, pas une zone invisible. */
+.expense-item__edit,
+.expense-item__delete {
+  min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+/* Isolé, celui-ci peut garder sa zone étendue. */
+.debts-card__detail-btn { position: relative; }
+.debts-card__detail-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
+/* L'adresse est un lien vers l'itinéraire : sur place, on le vise en marchant. */
+.today-act-card__addr { min-height: 44px; display: inline-flex; align-items: center; }
