@@ -273,7 +273,12 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
       <div className="map-empty">
         <div className="map-empty__icon">🗺️</div>
         <p>Aucune activité géolocalisée.</p>
-        <p className="map-empty__hint">Importe des lieux via le bouton Google Maps pour les voir ici.</p>
+        {/* Nommer un bouton qui n'existe pas fait chercher pour rien : le
+            chemin réel est le ＋ de l'en-tête, puis le champ « adresse, nom du
+            lieu, ou lien » — où un lien Google Maps se colle directement. */}
+        <p className="map-empty__hint">
+          Ajoute un lieu avec le bouton ＋ en haut : un nom, une adresse, ou un lien collé.
+        </p>
       </div>
     );
   }

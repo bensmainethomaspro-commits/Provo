@@ -278,7 +278,9 @@ const TITRE_LONG = { ...TRIP, reserve: [{
 // fermée aujourd'hui, loin du reste, dans une journée déjà chargée.
 const A_SIGNALER = { ...TRIP,
   days: [{ id: 'd1', date: jour(0), startTime: '09:00', notes: '',
-    activities: Array.from({ length: 4 }, (_, i) => ({
+    // Cinq fois 2 h 30 depuis 09:00 : la journée finit déjà à 21:30. Avec deux
+    // heures de plus elle déborderait à 23:30 — c'est ce qui doit être signalé.
+    activities: Array.from({ length: 5 }, (_, i) => ({
       id: `p${i}`, title: `Visite ${i + 1}`, category: 'visite', status: 'todo',
       durationHours: 2, durationMinutes: 30, lat: 48.2082, lon: 16.3738, travelerIds: [],
     })) }, ...TRIP.days.slice(1)],
@@ -942,11 +944,16 @@ const PARCOURS = [
       t.verifier("l'idée est bien placée — rien n'est bloqué",
         v.days[0].activities.length === avant + 1, `${avant} → ${v.days[0].activities.length}`);
 
-      const ecran = (await t.texte()).replace(/\n/g, ' · ');
+      // Le pop-up d'abord : c'est la forme que le produit impose (« force de
+      // proposition, uniquement en pop-up »).
+      t.verifier('un pop-up de proposition apparaît', await t.visible('.sheet--proposition'));
+      const ecran = (await t.p.evaluate(() =>
+        document.querySelector('.sheet--proposition')?.innerText || document.body.innerText))
+        .replace(/\n/g, ' · ');
       const signale = {
-        ferme: /ferm[ée]|pas ouvert|horaires/i.test(ecran),
-        temps: /ne rentre pas|d[ée]passe|surcharg|temps restant|trop long/i.test(ecran),
-        loin: /loin|\d+\s*km|trajet|éloign/i.test(ecran),
+        ferme: /ferm[ée]/i.test(ecran),
+        temps: /finirait|ne rentre pas|d[ée]passe|trop long/i.test(ecran),
+        loin: /\d+\s*km|loin|éloign/i.test(ecran),
       };
       const dits = Object.entries(signale).filter(([, v]) => v).map(([k]) => k);
       if (!dits.length)
@@ -955,6 +962,12 @@ const PARCOURS = [
           + "l'utilisateur doit vérifier lui-même, ce que le produit existe pour éviter");
       else if (dits.length < 3)
         t.friction(`seuls ${dits.join(' et ')} sont signalés`, `manquent : ${['ferme','temps','loin'].filter(k => !signale[k]).join(', ')}`);
+      else t.verifier('les trois signaux sont donnés', true, ecran.slice(0, 120));
+
+      // Et il doit rester possible de revenir en arrière depuis le pop-up.
+      t.verifier("le pop-up propose d'annuler l'ajout",
+        await t.p.evaluate(() => [...document.querySelectorAll('.sheet--proposition button')]
+          .some(b => /annuler/i.test(b.innerText))));
     } },
 
 ];

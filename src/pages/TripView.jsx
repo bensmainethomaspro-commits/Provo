@@ -24,6 +24,8 @@ import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, dete
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
+import { signauxAjout } from '../utils/propositions';
+import PropositionSheet from '../components/PropositionSheet';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
@@ -283,6 +285,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [undoDone, setUndoDone] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
+  // avant — elle ne bloque pas le geste.
+  const [proposition, setProposition] = useState(null);
   const [tripMembers, setTripMembers] = useState([]);
   const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
@@ -345,10 +350,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // Enrobe n'importe quelle action pour la rendre annulable.
   // `tripRef` plutôt que `trip` : utilisable avant le retour anticipé et jamais
   // périmé dans un gestionnaire d'événement.
+  // L'instantané pris pour l'annulation est exactement « l'état d'avant » : on
+  // le passe en dernier argument plutôt que de laisser chaque action relire la
+  // ref. Les callbacks qui n'en ont pas besoin l'ignorent.
   const withUndo = useCallback((msg, fn) => (...args) => {
     const snapshot = tripRef.current;
     if (snapshot) pushUndo(snapshot, msg);
-    return fn(...args);
+    return fn(...args, snapshot);
   }, [pushUndo]);
 
   const handleUndo = () => {
@@ -614,7 +622,19 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const undoableMoveDayToDay = withUndo('Activité déplacée',
     (srcDayId, tgtDayId, actId) => moveDayToDay(tripId, srcDayId, tgtDayId, actId));
   const undoableAssignFromReserve = withUndo('Idée placée dans la journée',
-    (dayId, actId) => moveFromReserveToDay(tripId, dayId, actId));
+    (dayId, actId, avant) => {
+      // Les signaux se lisent sur l'état d'AVANT : après le déplacement, l'idée
+      // a quitté la réserve et la journée n'est plus la même. On les affiche
+      // une fois l'idée posée — l'app signale, elle n'empêche pas.
+      const idee = (avant?.reserve || []).find(a => a.id === actId);
+      const jour = (avant?.days || []).find(d => d.id === dayId);
+      moveFromReserveToDay(tripId, dayId, actId);
+      if (!idee || !jour) return;
+      const signaux = signauxAjout(idee, jour);
+      if (!signaux.length) return;
+      const idx = avant.days.findIndex(d => d.id === dayId);
+      setProposition({ titre: idee.title, jour: `Jour ${idx + 1}`, signaux });
+    });
   const undoableSweep = withUndo('Journée renvoyée en réserve',
     (dayId) => sweepDayToReserve(tripId, dayId));
   const undoableReorderDay = withUndo('Jour déplacé',
@@ -1357,6 +1377,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         </Suspense>
       )}
 
+      {proposition && (
+        <PropositionSheet
+          titre={proposition.titre}
+          jour={proposition.jour}
+          signaux={proposition.signaux}
+          onGarder={() => setProposition(null)}
+          onAnnuler={() => { setProposition(null); handleUndo(); }}
+        />
+      )}
+
       {showPlaceCheck && (
         <Suspense fallback={null}>
           <PlaceCheckSheet
@@ -1483,7 +1513,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         />
       )}
 
-      <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
+      {/* Le pop-up de proposition porte déjà « Annuler l'ajout » : laisser le
+          bandeau derrière afficherait deux fois la même sortie. */}
+      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
         <span className="undo-toast__msg">{undoDone ? '↩ ' : ''}{undoMsg}</span>
         {!undoDone && (
           <>

@@ -6757,3 +6757,37 @@ button.budget-inline:active { transform: scale(0.98); }
   background: transparent; color: var(--text-muted);
   font-family: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
 }
+
+/* ─── Ce que l'app a remarqué ─────────────────────────────────────────────
+   Elle a déjà posé l'activité ; ce pop-up dit ce qu'on n'aurait pas vu — lieu
+   fermé, journée qui déborde, autre bout de la ville. Il informe, il ne
+   corrige pas : deux issues seulement, garder ou annuler. */
+/* Exception assumée au plein écran des feuilles (voir « Full-screen sheets ») :
+   celle-ci n'est pas un formulaire, c'est un avis de trois lignes. Occuper tout
+   l'écran la ferait lire comme un blocage — or le principe est justement
+   qu'elle ne bloque rien. Elle épouse donc son contenu, en bas de l'écran.
+   `align-self` et `height` doivent être repris explicitement : la règle
+   générale les impose à tout `.sheet`. */
+.sheet--proposition {
+  align-self: flex-end;
+  height: auto;
+  max-height: 80dvh;
+  border-radius: 24px 24px 0 0;
+}
+.sheet--proposition .sheet__body { flex: 0 1 auto; }
+.proposition__intro {
+  margin: 0 0 14px; font-size: 14.5px; color: var(--text-muted); line-height: 1.45;
+}
+.proposition__intro strong { color: var(--text); }
+.proposition__liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.proposition__item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  font-size: 14.5px; line-height: 1.4; color: var(--text);
+}
+.proposition__icone { font-size: 17px; line-height: 1.25; flex-shrink: 0; }
+/* Ni rouge ni alarme : ce n'est pas une erreur, c'est un renseignement. */
+.proposition__note {
+  margin: 14px 0 0; font-size: 12.5px; color: var(--text-muted); text-align: center;
+}
