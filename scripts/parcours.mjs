@@ -103,15 +103,26 @@ function outils(p, journal) {
     async ouvrirVoyage() {
       await t.clic('.trip-card', { delai: 800 });
     },
-    async onglet(re) {
+    /**
+     * @param {RegExp} re
+     * @param {{facultatif?: boolean}} opts — `facultatif` pour les onglets qui
+     *   n'existent pas toujours : « Aujourd'hui » ne s'affiche que pendant le
+     *   voyage, et c'est voulu. Rend `false` au lieu d'interrompre.
+     */
+    async onglet(re, { facultatif = false } = {}) {
       let l = p.locator('.tab-btn', { hasText: re });
       if (!(await l.count())) {
-        await t.clic('.tab-btn', { texte: '⋯', delai: 400 });
+        const plus = p.locator('.tab-btn', { hasText: '⋯' });
+        if (await plus.count()) { await plus.first().click(); await p.waitForTimeout(400); }
         l = p.locator('button', { hasText: re });
       }
-      if (!(await l.count())) t.injouable(`onglet introuvable : ${re}`);
+      if (!(await l.count())) {
+        if (facultatif) return false;
+        t.injouable(`onglet introuvable : ${re}`);
+      }
       await l.first().click();
       await p.waitForTimeout(700);
+      return true;
     },
     async menu(texte) {
       await t.clic('button[aria-label="Options du voyage"]', { delai: 350 });
@@ -217,9 +228,69 @@ function integrite(v) {
 
 export { integrite };
 
+// ── Jeux de données particuliers ────────────────────────────────────────────
+// Le voyage de référence sert 90 % des parcours. Les 10 % restants sont
+// justement les plus révélateurs : une app se juge à ses états rares — rien à
+// afficher, voyage pas encore parti, une seule personne à payer.
+const jour = (k) => {
+  const d = new Date(); d.setDate(d.getDate() + k);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const joursVides = (n, decalage = 0) => Array.from({ length: n }, (_, i) => ({
+  id: `d${i + 1}`, date: jour(decalage + i), startTime: '09:00', notes: '', activities: [],
+}));
+
+const VIDE = { ...TRIP, days: joursVides(4), reserve: [], expenses: [], packingList: [], tripNotes: '' };
+
+const SOLO = { ...TRIP, travelers: 1, tripTravelers: [{ id: 't1', name: 'Thomas', emoji: '🧔' }],
+  expenses: [{ id: 'e1', description: 'Billets', amount: 60, eurAmount: 60, currency: 'EUR',
+    expenseCategory: 'transport', payerId: 't1', date: jour(0), participantIds: ['t1'] }] };
+
+const PAS_PARTI = { ...TRIP, startDate: jour(30), endDate: jour(35),
+  days: joursVides(6, 30).map((d, i) => ({ ...d, activities: TRIP.days[i]?.activities || [] })) };
+
+const TERMINE = { ...TRIP, startDate: jour(-20), endDate: jour(-15),
+  days: joursVides(6, -20).map((d, i) => ({ ...d, activities: TRIP.days[i]?.activities || [] })) };
+
+// Deux activités calées à la même heure : le conflit doit se voir.
+const CONFLIT = { ...TRIP, days: [{
+  id: 'd1', date: jour(0), startTime: '09:00', notes: '', activities: [
+    { id: 'c1', title: 'Visite guidée du centre', category: 'visite', status: 'todo',
+      durationHours: 2, durationMinutes: 0, fixedStart: '14:00', travelerIds: [] },
+    { id: 'c2', title: 'Concert au Musikverein', category: 'fun', status: 'todo',
+      durationHours: 2, durationMinutes: 0, fixedStart: '14:30', travelerIds: [] },
+  ] }, ...TRIP.days.slice(1)] };
+
+// Onze heures de programme dans une seule journée.
+const SURCHARGE = { ...TRIP, days: [{
+  id: 'd1', date: jour(0), startTime: '08:00', notes: '',
+  activities: Array.from({ length: 6 }, (_, i) => ({
+    id: `s${i}`, title: `Visite ${i + 1}`, category: 'visite', status: 'todo',
+    durationHours: 2, durationMinutes: 0, travelerIds: [],
+  })) }, ...TRIP.days.slice(1)] };
+
+const TITRE_LONG = { ...TRIP, reserve: [{
+  id: 'long', title: 'Restaurant Zum Schwarzen Kameel — Bognergasse 5, 1010 Wien, Autriche (réserver au moins trois semaines à l\'avance)',
+  category: 'resto', status: 'todo', durationHours: 1, durationMinutes: 30, travelerIds: [] },
+  ...TRIP.reserve] };
+
+// Une idée qui coche les trois signaux que le produit promet de donner :
+// fermée aujourd'hui, loin du reste, dans une journée déjà chargée.
+const A_SIGNALER = { ...TRIP,
+  days: [{ id: 'd1', date: jour(0), startTime: '09:00', notes: '',
+    activities: Array.from({ length: 4 }, (_, i) => ({
+      id: `p${i}`, title: `Visite ${i + 1}`, category: 'visite', status: 'todo',
+      durationHours: 2, durationMinutes: 30, lat: 48.2082, lon: 16.3738, travelerIds: [],
+    })) }, ...TRIP.days.slice(1)],
+  reserve: [{ id: 'ferme', title: 'Palais du Belvédère',
+    category: 'visite', status: 'todo', durationHours: 2, durationMinutes: 0,
+    // Fermé tous les jours de la semaine, et à 40 km du reste du programme.
+    openingHours: 'Mo-Su off', lat: 48.5500, lon: 16.3700, travelerIds: [] }] };
+
 // ── Les parcours ────────────────────────────────────────────────────────────
 // Chacun est une intention d'utilisateur, pas un test unitaire. `depart` dit
-// dans quel état l'app démarre : 'vierge' (aucun voyage) ou 'voyage'.
+// dans quel état l'app démarre : 'vierge' (aucun voyage), 'voyage' (le voyage
+// de référence), ou un voyage particulier fourni directement.
 const PARCOURS = [
 
   { groupe: 'Accueil', nom: 'Créer un voyage', depart: 'vierge',
@@ -652,6 +723,240 @@ const PARCOURS = [
       if (clairsEnSombre !== null && clairsEnSombre > 0)
         t.friction('des fonds restent blancs en mode sombre', `${clairsEnSombre} éléments`);
     } },
+  // ── Deuxième vague : les états rares, et les promesses du produit ─────────
+
+  { groupe: 'États vides', nom: 'Un voyage sans rien oriente vers la suite', depart: VIDE,
+    intention: "Voyage tout neuf : chaque onglet doit dire quoi faire, et le dire juste.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      for (const [nom, re] of [["Aujourd'hui", /Aujourd'hui/i], ['Planning', /Planning/i],
+                               ['Réserve', /Réserve/i], ['Dépenses', /Dépenses/i], ['Carte', /Carte/i]]) {
+        if (!(await t.onglet(re, { facultatif: true }))) continue;
+        const contenu = (await t.p.evaluate(() =>
+          document.querySelector('.tab-content')?.innerText || '')).trim();
+        t.verifier(`${nom} : l'écran vide dit quelque chose`, contenu.length > 15,
+          contenu.slice(0, 60).replace(/\n/g, ' · ') || '(rien)');
+
+        // Un conseil ne vaut que s'il désigne quelque chose d'atteignable. Une
+        // consigne qui nomme un bouton absent est pire que pas de consigne :
+        // l'utilisateur le cherche.
+        const nomme = contenu.match(/bouton ([A-ZÀ-Ü][\wÀ-ÿ '’-]{2,24})/);
+        if (nomme) {
+          const cible = nomme[1].trim();
+          const existe = await t.p.evaluate((c) => [...document.querySelectorAll('button, a, [role=button]')]
+            .some(b => b.offsetParent !== null
+              && ((b.innerText || '') + ' ' + (b.getAttribute('aria-label') || '') + ' ' + (b.title || ''))
+                 .toLowerCase().includes(c.toLowerCase())), cible);
+          t.verifier(`${nom} : le bouton « ${cible} » annoncé existe à l'écran`, existe);
+        }
+      }
+    } },
+
+  { groupe: 'Propositions', nom: 'Un conflit horaire est signalé', depart: CONFLIT,
+    intention: "Deux activités calées à la même heure : l'app doit le dire.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Planning/i);
+      const dansLaFrise = (await t.texte()).match(/conflit|chevauch/i);
+      await t.ouvrirLeJour();
+      const dansLeJour = (await t.texte()).match(/conflit|chevauch/i);
+      t.verifier('le chevauchement est signalé quelque part',
+        !!(dansLaFrise || dansLeJour),
+        `frise : ${dansLaFrise ? 'oui' : 'non'} · détail du jour : ${dansLeJour ? 'oui' : 'non'}`);
+    } },
+
+  { groupe: 'Propositions', nom: 'Une journée surchargée est signalée', depart: SURCHARGE,
+    intention: "Douze heures de programme : l'app doit prévenir.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Planning/i);
+      const frise = (await t.texte()).match(/surcharg/i);
+      await t.ouvrirLeJour();
+      const jour = (await t.texte()).match(/surcharg/i);
+      t.verifier('la surcharge est signalée quelque part', !!(frise || jour),
+        `frise : ${frise ? 'oui' : 'non'} · détail du jour : ${jour ? 'oui' : 'non'}`);
+      if (!frise && jour) t.friction("l'alerte n'existe que dans le détail du jour",
+        'la vue par défaut du planning ne la montre pas — il faut ouvrir le jour pour la voir');
+    } },
+
+  { groupe: 'Dépenses', nom: 'Seul en voyage : pas de partage absurde', depart: SOLO,
+    intention: "Voyager seul ne doit pas produire « tu te dois 30 € ».",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      const txt = await t.texte();
+      t.verifier('aucune dette envers soi-même', !/doit .* à .*Thomas.*Thomas/i.test(txt));
+      t.verifier('le total est affiché', /60/.test(txt));
+      const dettes = await t.combien('.debt-row');
+      t.verifier('aucune ligne « qui doit à qui »', dettes === 0, `${dettes} lignes`);
+    } },
+
+  { groupe: "Aujourd'hui", nom: "Voyage pas encore commencé", depart: PAS_PARTI,
+    intention: "Le voyage est dans un mois : l'écran du jour doit rester sensé.",
+    async faire(t) {
+      const accueil = (await t.texte()).replace(/\n/g, ' · ');
+      t.verifier("l'accueil annonce le départ à venir",
+        /départ|dans \d+ jour|J-\d+|à venir|bient[oô]t/i.test(accueil), accueil.slice(0, 110));
+      await t.ouvrirVoyage();
+      const ongletDuJour = await t.onglet(/Aujourd'hui/i, { facultatif: true });
+      const txt = (await t.texte()).replace(/\n/g, ' · ');
+      // L'onglet du jour n'a pas de sens avant le départ : son absence est un
+      // choix, pas un manque. Ce qui compterait, c'est un écran qui mentirait.
+      t.verifier("rien ne prétend qu'un jour est en cours",
+        !/Jour \d+ \/ \d+/.test(txt) || /départ|dans \d+ jour|à venir/i.test(txt),
+        `${ongletDuJour ? 'onglet présent' : 'onglet masqué (voulu)'} — ${txt.slice(0, 80)}`);
+      t.verifier('le voyage reste préparable (Planning et Réserve accessibles)',
+        await t.onglet(/Réserve/i, { facultatif: true }));
+    } },
+
+  { groupe: "Aujourd'hui", nom: 'Voyage terminé', depart: TERMINE,
+    intention: "Le voyage est fini : on doit pouvoir regarder en arrière, pas se voir « en cours ».",
+    async faire(t) {
+      const accueil = (await t.texte()).replace(/\n/g, ' · ');
+      t.verifier("le voyage fini est rangé à part sur l'accueil",
+        /historique|termin|pass[ée]|souvenir/i.test(accueil), accueil.slice(0, 110));
+      await t.ouvrirVoyage();
+      const ongletDuJour = await t.onglet(/Aujourd'hui/i, { facultatif: true });
+      const txt = (await t.texte()).replace(/\n/g, ' · ');
+      t.verifier("l'app ne propose pas une activité d'un voyage fini",
+        !ongletDuJour || /termin|fini|pass[ée]|bilan|souvenir/i.test(txt),
+        `${ongletDuJour ? 'onglet présent' : 'onglet masqué (voulu)'} — ${txt.slice(0, 80)}`);
+      await t.menu(/Bilan/);
+      t.verifier('le bilan reste accessible', await t.visible('.recap-hero, .trip-recap'));
+    } },
+
+  { groupe: 'Réserve', nom: 'Un titre à rallonge ne casse pas la fiche', depart: TITRE_LONG,
+    intention: "Un lieu importé porte souvent un nom interminable.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const debord = await t.p.evaluate(() => {
+        const c = document.querySelector('.reserve-card');
+        if (!c) return null;
+        const r = c.getBoundingClientRect();
+        return { carte: Math.round(r.width), fenetre: innerWidth,
+          page: Math.round(document.documentElement.scrollWidth) };
+      });
+      if (!debord) t.injouable('aucune fiche dans la Réserve');
+      t.verifier('la fiche tient dans la largeur', debord.carte <= debord.fenetre,
+        `${debord.carte} px pour ${debord.fenetre}`);
+      t.verifier('la page ne part pas en travers', debord.page <= debord.fenetre,
+        `${debord.page} px pour ${debord.fenetre}`);
+      const boutons = await t.p.evaluate(() => {
+        const c = document.querySelector('.reserve-card');
+        return [...c.querySelectorAll('button')].filter(b => {
+          const r = b.getBoundingClientRect();
+          return r.width > 0 && (r.right > innerWidth || r.left < 0);
+        }).length;
+      });
+      t.verifier('aucun bouton poussé hors écran', boutons === 0, `${boutons} boutons`);
+    } },
+
+  { groupe: 'Menu ⋯', nom: 'Une recherche sans résultat le dit', depart: 'voyage',
+    intention: "Chercher quelque chose qui n'existe pas ne doit pas laisser un blanc.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Rechercher/);
+      await t.saisir('.trip-search__input', 'zzzzqqq');
+      await t.p.waitForTimeout(700);
+      const n = await t.combien('.trip-search__row');
+      const txt = await t.p.evaluate(() => document.querySelector('.trip-search__body')?.innerText?.trim() || '');
+      t.verifier('aucun résultat trouvé', n === 0, `${n} lignes`);
+      t.verifier("l'absence de résultat est écrite", txt.length > 5, txt.slice(0, 60) || '(écran vide)');
+    } },
+
+  { groupe: 'Réserve', nom: 'Le filtre « Ouvert » ne cache pas les horaires inconnus', depart: 'voyage',
+    intention: "Sur place : ne voir que ce qui est ouvert, sans perdre ce qu'on ne sait pas.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const total = await t.combien('.reserve-card');
+      if (!(await t.clic('.reserve-filter__pill', { texte: /Ouvert/, delai: 800, obligatoire: false })))
+        t.injouable('pas de filtre « Ouvert »');
+      const ouverts = await t.combien('.reserve-card');
+      t.verifier('le filtre garde au moins une idée', ouverts > 0, `${total} → ${ouverts}`);
+      // Une fiche sans horaires connus n'est pas « fermée » : la masquer ferait
+      // disparaître des idées valables sans le dire.
+      const sansHoraires = (await t.voyage()).reserve.filter(a => !a.openingHours).length;
+      if (sansHoraires && ouverts + sansHoraires < total)
+        t.friction('des fiches sans horaires connus disparaissent du filtre',
+          `${sansHoraires} fiches sans horaires`);
+    } },
+
+  { groupe: 'Dépenses', nom: 'Les repas prévus ne comptent pas comme dépensés', depart: 'voyage',
+    intention: "Le programme prévoit, il ne décompte pas — seule une dépense saisie compte.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const v = await t.voyage();
+      const saisi = (v.expenses || []).reduce((s, e) => s + Number(e.eurAmount ?? e.amount ?? 0), 0);
+      const repasPrevus = v.days.flatMap(d => d.activities).filter(a => a?.isMeal)
+        .reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+      if (!repasPrevus) t.injouable('aucun repas chiffré dans le voyage de référence');
+      await t.onglet(/Dépenses/i);
+      const txt = await t.texte();
+      const montants = [...txt.matchAll(/(\d[\d\s]*(?:[.,]\d+)?)\s*€/g)]
+        .map(m => parseFloat(m[1].replace(/\s/g, '').replace(',', '.')));
+      t.verifier('le total dépensé correspond aux dépenses saisies',
+        montants.some(m => Math.abs(m - saisi) < 1),
+        `saisi ${saisi} € · montants à l'écran ${montants.slice(0, 5).join(', ')}`);
+      t.verifier('les repas prévus ne sont pas comptés comme dépensés',
+        !montants.some(m => Math.abs(m - (saisi + repasPrevus)) < 1),
+        `saisi+repas = ${saisi + repasPrevus} €`);
+    } },
+
+  { groupe: 'Réserve', nom: 'Une idée déjà au programme est signalée', depart: 'voyage',
+    intention: "Ne pas piocher deux fois la même chose sans s'en rendre compte.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      // Le voyage de référence contient déjà des titres répétés (Schönbrunn sur
+      // deux jours, les repas partout). Seuls les doublons APPARUS comptent.
+      const titres = (v) => v.days.flatMap(d => (d.activities || []).filter(Boolean).map(a => a.title));
+      const compter = (l) => l.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {});
+      const avant = compter(titres(await t.voyage()));
+      await t.clic('.reserve-assign__toggle', { delai: 700 });
+      await t.clic('.reserve-assign__day', { delai: 1200 });
+      const v = await t.voyage();
+      const apres = compter(titres(v));
+      const nouveaux = Object.entries(apres)
+        .filter(([titre, n]) => n > (avant[titre] || 0) + 1)
+        .map(([titre, n]) => `${titre} ×${n}`);
+      t.verifier('aucun doublon apparu au programme', nouveaux.length === 0,
+        nouveaux.join(', ') || 'aucun');
+      t.verifier("l'idée a bien quitté la Réserve",
+        v.reserve.length === TRIP.reserve.length - 1,
+        `${TRIP.reserve.length} → ${v.reserve.length}`);
+    } },
+
+  { groupe: 'Propositions', nom: "Piocher pour aujourd'hui : l'app signale ce qui compte", depart: A_SIGNALER,
+    intention: "Promesse du produit : elle prévient (fermé, ne rentre pas, c'est loin) — sans rien bloquer.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.reserve-assign__toggle', { delai: 700 });
+      const avant = (await t.voyage()).days[0].activities.length;
+      await t.clic('.reserve-assign__day', { delai: 1400 });
+
+      const v = await t.voyage();
+      // Le principe est explicite : elle propose, elle ne bloque jamais.
+      t.verifier("l'idée est bien placée — rien n'est bloqué",
+        v.days[0].activities.length === avant + 1, `${avant} → ${v.days[0].activities.length}`);
+
+      const ecran = (await t.texte()).replace(/\n/g, ' · ');
+      const signale = {
+        ferme: /ferm[ée]|pas ouvert|horaires/i.test(ecran),
+        temps: /ne rentre pas|d[ée]passe|surcharg|temps restant|trop long/i.test(ecran),
+        loin: /loin|\d+\s*km|trajet|éloign/i.test(ecran),
+      };
+      const dits = Object.entries(signale).filter(([, v]) => v).map(([k]) => k);
+      if (!dits.length)
+        t.friction("rien n'est signalé alors que les trois signaux sont réunis",
+          'lieu fermé toute la semaine · 40 km du reste du programme · journée déjà à 10 h — '
+          + "l'utilisateur doit vérifier lui-même, ce que le produit existe pour éviter");
+      else if (dits.length < 3)
+        t.friction(`seuls ${dits.join(' et ')} sont signalés`, `manquent : ${['ferme','temps','loin'].filter(k => !signale[k]).join(', ')}`);
+    } },
+
 ];
 
 // ── Exécution ───────────────────────────────────────────────────────────────
@@ -684,12 +989,14 @@ for (const parcours of choisis) {
   // Le réseau extérieur n'est ni nécessaire ni fiable ici. L'app doit marcher
   // hors ligne : c'est une promesse du produit, autant la tenir sous test.
   await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
-  await p.addInitScript(([t, s, vierge]) => {
-    localStorage.setItem('provo_trips', vierge ? '[]' : t);
+  const amorce = parcours.depart === 'vierge' ? []
+    : parcours.depart === 'voyage' ? [TRIP] : [parcours.depart];
+  await p.addInitScript(([t, s]) => {
+    localStorage.setItem('provo_trips', t);
     localStorage.setItem('provo_settings', s);
     localStorage.setItem('provo_theme', 'light');
     localStorage.setItem('provo_onboarded', '1');
-  }, [JSON.stringify([TRIP]), JSON.stringify(SETTINGS), parcours.depart === 'vierge']);
+  }, [JSON.stringify(amorce), JSON.stringify(SETTINGS)]);
 
   const journal = [];
   const t = outils(p, journal);
