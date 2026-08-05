@@ -142,8 +142,10 @@ Puis, **avant une livraison importante ou après une modification qui touche
 plusieurs écrans** :
 
 ```bash
-npm run parcours       # 26 parcours fonctionnels, hors ligne
-npm run verif-carte    # la carte : cadrage, zoom, position, bulles
+npm run parcours              # 50 parcours : hors ligne + services rejoués
+npm run parcours:hors-ligne   # seulement ce qui doit marcher sans réseau
+npm run parcours:reseau       # seulement les chaînes distantes
+npm run verif-carte           # la carte : cadrage, zoom, position, bulles
 ```
 
 `/parcours` est le seul des trois outils qui **appuie sur les boutons**. Il
@@ -153,10 +155,15 @@ s'abîment derrière. Il détecte aussi les **plantages** : quand l'app tombe,
 l'état fautif n'est jamais enregistré, donc aucun contrôle sur le stockage ne
 peut le voir.
 
-Le réseau extérieur y est coupé : deux exécutions doivent donner le même
-résultat, et l'app doit tenir sa promesse hors ligne. Restent donc à vérifier
-ailleurs l'enrichissement, la météo, l'import de liens et la synchronisation —
-voir `scripts/diag-*.mjs`.
+Les services distants sont **rejoués** (`scripts/reseau-stubs.mjs`), avec la
+panne au choix : 500, 429 qui répond du HTML, 200 au corps tronqué, injoignable,
+ou « a répondu mais n'a rien trouvé ». On ne peut pas demander à un vrai service
+de tomber en panne, et c'est là que sont les bugs. Chaque parcours réseau a un
+jumeau à l'attente inverse : les deux au vert prouvent que le stub pilote
+vraiment le comportement.
+
+Reste hors de portée : la **disponibilité réelle** des services et la forme
+actuelle de leurs réponses — voir `scripts/diag-*.mjs`, sur réseau réel.
 
 Devant un ✗ : **regarder le DOM réel avant de toucher au code de l'app.** À la
 mise au point, sept constats sur huit venaient du script lui-même (mauvais

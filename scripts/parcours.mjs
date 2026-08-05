@@ -24,6 +24,7 @@
 import { chromium } from 'playwright';
 import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { trip as TRIP, settings as SETTINGS } from './ui-fixture.mjs';
+import { brancherReseau } from './reseau-stubs.mjs';
 
 const trouverChromium = () => {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
@@ -43,6 +44,11 @@ const lire = (nom, defaut) => args.includes(nom) ? args[args.indexOf(nom) + 1] :
 const URL_BASE = lire('--url', 'http://localhost:4173');
 const SEUL = lire('--seul', null);
 const JSON_OUT = args.includes('--json');
+// Par défaut on joue les deux familles. `--hors-ligne` pour n'exercer que ce
+// qui doit marcher sans réseau, `--reseau` pour ne garder que les chaînes qui
+// en dépendent.
+const SEUL_HORS_LIGNE = args.includes('--hors-ligne');
+const SEUL_RESEAU = args.includes('--reseau');
 const CAPTURES = '/tmp/provo-parcours';
 
 // ── Boîte à outils offerte à chaque parcours ────────────────────────────────
@@ -970,6 +976,221 @@ const PARCOURS = [
           .some(b => /annuler/i.test(b.innerText))));
     } },
 
+  // ── Troisième vague : ce qui passe par le réseau ──────────────────────────
+  // Chaque parcours déclare son plan : `ok` pour la réponse de référence, ou le
+  // nom d'une panne. Ce que ces parcours vérifient n'est PAS que le service
+  // marche — c'est que l'app en fait quelque chose de juste, panne comprise.
+
+  { groupe: 'Réseau', nom: 'Importer un lieu depuis un lien', depart: 'voyage',
+    reseau: { extractPlace: 'ok' },
+    intention: "Coller un lien et récupérer le nom, l'adresse et les coordonnées.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://maps.app.goo.gl/abc123');
+      await t.clic('.import-row button', { delai: 2200, obligatoire: false });
+      const rempli = await t.p.evaluate(() => {
+        const q = (s) => document.querySelector(s)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'), adresse: q('input[placeholder="Lieu"]') };
+      });
+      t.verifier("le service d'extraction a bien été appelé", (t.appels().extractPlace || 0) > 0,
+        JSON.stringify(t.appels()));
+      t.verifier("le titre est rempli tout seul", /Central/i.test(rempli.titre), rempli.titre || '(vide)');
+      t.verifier("l'adresse est remplie tout seule", rempli.adresse.length > 5, rempli.adresse || '(vide)');
+    } },
+
+  { groupe: 'Réseau', nom: "Un lien qui échoue le dit et ne perd rien", depart: 'voyage',
+    reseau: { extractPlace: 'err500' },
+    intention: "Le service tombe : l'app doit le dire et laisser saisir à la main.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://maps.app.goo.gl/casse');
+      await t.clic('.import-row button', { delai: 2600, obligatoire: false });
+      const etat = await t.p.evaluate(() => ({
+        message: document.querySelector('.import-msg, .form-error')?.innerText?.trim() || '',
+        // Un bouton resté « en cours » laisse croire que ça travaille encore.
+        occupe: [...document.querySelectorAll('.import-row button')]
+          .some(b => b.disabled || /\.\.\.|…|Recherche|Chargement/i.test(b.innerText)),
+        saisieGardee: (document.querySelector('input[placeholder*="colle un lien"]')?.value || '').length > 0,
+      }));
+      t.verifier("l'échec est dit à l'écran", etat.message.length > 3, etat.message || '(rien)');
+      t.verifier("rien ne reste bloqué en « chargement »", !etat.occupe);
+      t.verifier('la saisie n\'est pas effacée', etat.saisieGardee);
+      // Et il doit rester possible de finir à la main.
+      await t.saisir('input[placeholder*="Déjeuner au marché"]', 'Café Central');
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      t.verifier("l'ajout manuel reste possible",
+        (await t.voyage()).reserve.some(a => a?.title === 'Café Central'));
+    } },
+
+  { groupe: 'Réseau', nom: 'Compléter une fiche : proposé, jamais appliqué seul', depart: 'voyage',
+    reseau: { enrichPlace: 'ok' },
+    intention: "L'agent trouve des informations et demande confirmation.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const avant = JSON.stringify(await t.voyage());
+      await t.menu(/Compléter les fiches/);
+      await t.p.waitForTimeout(3500);
+      t.verifier('le service a été interrogé', (t.appels().enrichPlace || 0) > 0,
+        `${t.appels().enrichPlace || 0} appels`);
+      const popup = await t.visible('.sheet--check, .enrich-photo, .check-card');
+      t.verifier('une confirmation est proposée', popup);
+      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      if (!popup) return;
+      const texte = await t.texte();
+      t.verifier('les informations trouvées sont montrées',
+        /horaires|prix|description/i.test(texte));
+      await t.clic('button', { texte: /Tout ajouter|Ajouter/, delai: 1400, obligatoire: false });
+      const apres = await t.voyage();
+      const enrichies = [...apres.days.flatMap(d => d.activities), ...apres.reserve]
+        .filter(a => a?.enrichAt).length;
+      t.verifier('après accord, les fiches sont complétées', enrichies > 0, `${enrichies} fiches`);
+    } },
+
+  { groupe: 'Réseau', nom: "Compléter sans rien trouver ne redemandera pas", depart: 'voyage',
+    reseau: { enrichPlace: 'vide' },
+    intention: "Rien trouvé n'est pas une panne : on l'a cherché, on s'en souvient.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Compléter les fiches/);
+      await t.p.waitForTimeout(3500);
+      const v = await t.voyage();
+      const marquees = [...v.days.flatMap(d => d.activities), ...v.reserve].filter(a => a?.enrichAt).length;
+      t.verifier('les fiches fouillées sont marquées', marquees > 0, `${marquees} fiches`);
+      t.verifier("aucun pop-up vide n'apparaît", !(await t.visible('.check-card')));
+      // Et le second passage ne doit plus rien coûter.
+      const appelsUn = t.appels().enrichPlace || 0;
+      await t.menu(/Compléter les fiches/);
+      await t.p.waitForTimeout(2500);
+      const appelsDeux = t.appels().enrichPlace || 0;
+      t.verifier('le second passage ne redépense rien', appelsDeux === appelsUn,
+        `${appelsUn} puis ${appelsDeux}`);
+    } },
+
+  { groupe: 'Réseau', nom: "Compléter hors ligne ne marque rien", depart: 'voyage',
+    reseau: { enrichPlace: 'coupe' },
+    intention: "Réseau coupé : ce n'est pas « rien trouvé », c'est « pas maintenant ».",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Compléter les fiches/);
+      await t.p.waitForTimeout(3500);
+      const v = await t.voyage();
+      const marquees = [...v.days.flatMap(d => d.activities), ...v.reserve].filter(a => a?.enrichAt).length;
+      // Marquer ici ferait renoncer définitivement à des fiches qu'on n'a
+      // jamais pu chercher.
+      t.verifier('aucune fiche n\'est marquée comme fouillée', marquees === 0, `${marquees} fiches`);
+      t.verifier("l'app ne tombe pas", !(await t.visible('.error-screen')));
+    } },
+
+  { groupe: 'Réseau', nom: 'La météo apparaît sur les jours', depart: 'voyage',
+    reseau: { meteo: 'ok' },
+    intention: "Savoir s'il pleuvra jeudi sans quitter le planning.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Planning/i);
+      await t.p.waitForTimeout(2200);
+      t.verifier('le service météo a été appelé', (t.appels().meteo || 0) > 0);
+      const vue = await t.p.evaluate(() => document.querySelector('.tab-content')?.innerText || '');
+      t.verifier('une température est affichée', /\d+\s*°/.test(vue),
+        (vue.match(/[^\n]*\d+\s*°[^\n]*/) || ['(aucune)'])[0].slice(0, 50));
+    } },
+
+  { groupe: 'Réseau', nom: 'Météo indisponible : rien ne casse, rien ne ment', depart: 'voyage',
+    reseau: { meteo: 'err500' },
+    intention: "Le service tombe : pas d'écran cassé, et surtout pas de fausse météo.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Planning/i);
+      await t.p.waitForTimeout(2200);
+      t.verifier("l'app ne tombe pas", !(await t.visible('.error-screen')));
+      const vue = await t.p.evaluate(() => document.querySelector('.tab-content')?.innerText || '');
+      t.verifier('aucune température inventée', !/\d+\s*°/.test(vue),
+        (vue.match(/[^\n]*\d+\s*°[^\n]*/) || ['(aucune, correct)'])[0].slice(0, 50));
+      t.verifier('le planning reste utilisable', (await t.combien('.tl-day')) > 0);
+    } },
+
+  { groupe: 'Réseau', nom: 'Une réponse mal formée ne casse pas l\'app', depart: 'voyage',
+    reseau: { meteo: 'malforme', nominatim: 'malforme', enrichPlace: 'malforme' },
+    intention: "Un service qui répond 200 avec du JSON tronqué est le pire cas.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      for (const re of [/Planning/i, /Réserve/i, /Carte/i, /Dépenses/i]) {
+        await t.onglet(re, { facultatif: true });
+        await t.p.waitForTimeout(600);
+        if (await t.visible('.error-screen')) {
+          t.verifier("l'app tient face à une réponse tronquée", false, `écran de secours sur ${re}`);
+          return;
+        }
+      }
+      t.verifier("l'app tient face à une réponse tronquée", true);
+      await t.menu(/Compléter les fiches/);
+      await t.p.waitForTimeout(2500);
+      t.verifier("l'enrichissement encaisse aussi", !(await t.visible('.error-screen')));
+    } },
+
+  { groupe: 'Réseau', nom: 'Les taux de change alimentent les dépenses', depart: 'voyage',
+    reseau: { taux: 'ok' },
+    intention: "Payer en francs suisses et voir le total en euros.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.p.waitForTimeout(1800);
+      await t.clic('.expenses-add-top', { delai: 800 });
+      const devises = await t.p.evaluate(() => [...document.querySelectorAll('select')]
+        .flatMap(s => [...s.options].map(o => o.value))
+        .filter(v => /^[A-Z]{3}$/.test(v)));
+      t.verifier('plusieurs devises sont proposées', new Set(devises).size > 1,
+        [...new Set(devises)].slice(0, 6).join(', ') || '(aucune)');
+      t.verifier('le service de taux a été appelé', (t.appels().taux || 0) > 0);
+    } },
+
+  { groupe: 'Réseau', nom: 'Taux indisponibles : la dépense reste saisissable', depart: 'voyage',
+    reseau: { taux: 'coupe' },
+    intention: "Sans taux, on doit quand même pouvoir noter ce qu'on a payé.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 900 });
+      await t.saisir('input.form-input', 'Taxi');
+      await t.p.locator('input[type="number"]').first().fill('18');
+      await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1200 });
+      t.verifier('la dépense est enregistrée malgré tout',
+        (await t.voyage()).expenses.some(e => e.description === 'Taxi'));
+      t.verifier("l'app ne tombe pas", !(await t.visible('.error-screen')));
+    } },
+
+  { groupe: 'Réseau', nom: 'Vérifier les lieux avec un géocodeur qui répond', depart: 'voyage',
+    reseau: { nominatim: 'ok' },
+    intention: "Repérer un lieu mal situé avant de partir.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Vérifier les lieux/);
+      await t.p.waitForTimeout(3000);
+      t.verifier('la vérification s\'ouvre', await t.visible('.sheet'));
+      const txt = await t.texte();
+      t.verifier('elle rend un verdict lisible', txt.length > 60);
+      // Le point dur déjà vécu : un lieu signalé puis abandonné sans un mot.
+      t.verifier("aucun lieu n'est laissé sans réponse",
+        !/undefined|null|NaN/.test(txt), (txt.match(/undefined|null|NaN/) || [''])[0]);
+    } },
+
+  { groupe: 'Réseau', nom: 'Géocodeur en panne : la vérification le dit', depart: 'voyage',
+    reseau: { nominatim: 'err429' },
+    intention: "Nominatim limite à une requête par seconde et répond alors du HTML.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Vérifier les lieux/);
+      await t.p.waitForTimeout(3000);
+      t.verifier("l'app ne tombe pas", !(await t.visible('.error-screen')));
+      const txt = await t.texte();
+      t.verifier('aucune correction inventée', !/Corriger|Remplacer/i.test(txt)
+        || /impossible|indisponible|réessay|plus tard/i.test(txt),
+        txt.slice(0, 100).replace(/\n/g, ' · '));
+    } },
+
 ];
 
 // ── Exécution ───────────────────────────────────────────────────────────────
@@ -984,9 +1205,10 @@ try {
 rmSync(CAPTURES, { recursive: true, force: true });
 mkdirSync(CAPTURES, { recursive: true });
 
-const choisis = SEUL
-  ? PARCOURS.filter(x => (x.nom + x.groupe).toLowerCase().includes(SEUL.toLowerCase()))
-  : PARCOURS;
+let choisis = PARCOURS;
+if (SEUL_HORS_LIGNE) choisis = choisis.filter(x => !x.reseau);
+if (SEUL_RESEAU) choisis = choisis.filter(x => x.reseau);
+if (SEUL) choisis = choisis.filter(x => (x.nom + x.groupe).toLowerCase().includes(SEUL.toLowerCase()));
 
 const navigateur = await chromium.launch({ executablePath: trouverChromium() });
 const rapport = [];
@@ -999,9 +1221,13 @@ for (const parcours of choisis) {
   const p = await ctx.newPage();
   const erreurs = [];
   p.on('pageerror', e => erreurs.push(String(e).split('\n')[0].slice(0, 180)));
-  // Le réseau extérieur n'est ni nécessaire ni fiable ici. L'app doit marcher
-  // hors ligne : c'est une promesse du produit, autant la tenir sous test.
-  await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
+  // Deux régimes, jamais mélangés dans un même parcours.
+  //  · sans `reseau` : le monde extérieur est coupé net. L'app promet de
+  //    marcher hors ligne — autant tenir cette promesse sous test.
+  //  · avec `reseau` : chaque service est rejoué, avec la panne demandée.
+  let reseau = null;
+  if (parcours.reseau) reseau = await brancherReseau(p, URL_BASE, parcours.reseau);
+  else await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
   const amorce = parcours.depart === 'vierge' ? []
     : parcours.depart === 'voyage' ? [TRIP] : [parcours.depart];
   await p.addInitScript(([t, s]) => {
@@ -1013,6 +1239,9 @@ for (const parcours of choisis) {
 
   const journal = [];
   const t = outils(p, journal);
+  // « Ce rouage a-t-il seulement tourné ? » — une chaîne qui n'appelle jamais
+  // son service échoue en silence, et l'écran ne le dit pas.
+  t.appels = () => (reseau ? reseau.appels() : {});
   let injoue = null;
   try {
     await p.goto(URL_BASE + '/', { waitUntil: 'domcontentloaded' });
@@ -1087,8 +1316,10 @@ if (JSON_OUT) {
     + ` · ${rapport.reduce((s, r) => s + r.frictions, 0)} friction(s)`
     + ` · ${nonJoues.length} non joué(s)`);
   if (nc) console.log(`Captures des écrans fautifs : ${CAPTURES}`);
-  console.log('\nNon couvert ici : tout ce qui exige le réseau (enrichissement, météo,');
-  console.log('import de liens, collaboration Supabase) — voir les scripts diag-*.mjs.');
+  const avecReseau = rapport.filter(r => r.reseau).length;
+  console.log(`\n${avecReseau} parcours rejouent les services distants (réponses et pannes simulées).`);
+  console.log('Ce qui reste hors de portée : la disponibilité réelle des services et la');
+  console.log('forme actuelle de leurs réponses — voir les scripts diag-*.mjs.');
 }
 
 process.exit(rapport.some(r => r.casses) ? 1 : 0);
