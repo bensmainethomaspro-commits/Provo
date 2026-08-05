@@ -138,6 +138,30 @@ la couleur derrière le texte dépend de l'endroit exact où il tombe. Ces cas
 sortent dans une liste séparée, non comptée en défaut. Un outil qui invente des
 défauts finit par ne plus être lu.
 
+Puis, **avant une livraison importante ou après une modification qui touche
+plusieurs écrans** :
+
+```bash
+npm run parcours       # 26 parcours fonctionnels, hors ligne
+npm run verif-carte    # la carte : cadrage, zoom, position, bulles
+```
+
+`/parcours` est le seul des trois outils qui **appuie sur les boutons**. Il
+rejoue des intentions d'utilisateur et vérifie à la fois l'écran et ce qui est
+réellement enregistré — un écran peut avoir l'air juste pendant que les données
+s'abîment derrière. Il détecte aussi les **plantages** : quand l'app tombe,
+l'état fautif n'est jamais enregistré, donc aucun contrôle sur le stockage ne
+peut le voir.
+
+Le réseau extérieur y est coupé : deux exécutions doivent donner le même
+résultat, et l'app doit tenir sa promesse hors ligne. Restent donc à vérifier
+ailleurs l'enrichissement, la météo, l'import de liens et la synchronisation —
+voir `scripts/diag-*.mjs`.
+
+Devant un ✗ : **regarder le DOM réel avant de toucher au code de l'app.** À la
+mise au point, sept constats sur huit venaient du script lui-même (mauvais
+sélecteurs), pas de l'application.
+
 ## Contrôle des lieux (`verifyPlaces.js`)
 
 Un géocodeur se trompe : « Vienna state opera » est déjà ressorti à Opera, en
