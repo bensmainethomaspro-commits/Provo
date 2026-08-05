@@ -30,11 +30,11 @@ trace de ce qu'on a sciemment écarté.
 | B2 · Grille unique | `.trip-controls` : une rangée, espaceurs explicites |
 | B3 · Cartes détachées | Contraste inversé entre thème clair et sombre |
 | B4 · Accent, pas mur | Palette bleu clair `--accent: #35A7DD` |
-| C1 · Phrase, pas données | « Sam doit 60 € à Alex » |
+| C1 · Phrase, pas données | « Sam doit 60 € à Alex » ; « la journée finirait à 23:30 » |
 | C2 · Chemin direct | Dépense sans activité associée |
-| C3 · Complétion auto | `src/utils/enrich.js` — Nominatim puis Overpass |
+| C3 · Complétion auto | `enrich.js` ; jours fériés (Nager.Date) ; lecture de ticket |
 | C4 · Point de vue connecté | Solde personnel via `profileId` |
-| D1 · Proposer en pop-up | Piochage, itinéraire plus court |
+| D1 · Proposer en pop-up | Piochage, itinéraire ; `PropositionSheet` (fermé, férié, déborde, loin) |
 | D2 · Bénéfice chiffré | « tu économises 1,8 km » |
 | D3 · Rien à signaler | Aucune pop-up si le piochage ne pose pas de problème |
 | D4 · Annulable | `withUndo` dans `TripView` |
@@ -80,6 +80,23 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
    et une réponse marquée `confiance: "basse"` ne peut ni nommer ni situer.
 
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
+
+## Décisions récentes
+
+- **L'onglet « Aujourd'hui » a été retiré** (août 2026). Le planning place déjà
+  le jour J au centre à l'ouverture ; un onglet séparé dédoublait la question.
+  `TodayMode.jsx` supprimé. Ce qui s'y faisait vit dans le menu ⋯
+  (« Que faire maintenant ? ») et sur la fiche d'activité.
+- **Les feuilles sont plein écran** (`align-self: stretch; height: 100dvh`).
+  Une seule exception assumée : `.sheet--proposition`, un avis de trois lignes
+  qui se lirait comme un blocage s'il occupait tout l'écran.
+- **`content-visibility: auto`** sur les listes longues plutôt qu'une
+  bibliothèque de virtualisation : mesuré à 17 648 px rendus pour un écran de
+  844. Là où la propriété n'existe pas, tout se dessine comme avant.
+- **Le retour haptique n'a aucun effet sur iPhone** — Safari n'implémente pas
+  `navigator.vibrate`. Bonus Android, jamais un canal d'information.
+- **Le Web Share Target n'existe pas sur iOS** (WebKit #194593). D'où le
+  bouton « Coller un lien » et la voie du raccourci iOS (`?ajout=`).
 
 ## Écarté sciemment
 
