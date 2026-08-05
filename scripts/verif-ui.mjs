@@ -219,9 +219,10 @@ const SONDES = `(() => {
 })()`;
 
 // ── Parcours ─────────────────────────────────────────────────────────────────
+// L'onglet « Aujourd'hui » a été retiré du produit : le laisser ici ferait
+// mesurer le Planning deux fois, sous un nom qui n'existe plus.
 const ECRANS = [
   { nom: 'Accueil', aller: async () => {} },
-  { nom: "Aujourd'hui", aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Aujourd'hui/i); } },
   { nom: 'Planning', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Planning/i); } },
   { nom: 'Réserve', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Réserve/i); } },
   { nom: 'Dépenses', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Dépenses/i); } },

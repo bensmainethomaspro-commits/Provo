@@ -6757,3 +6757,242 @@ button.budget-inline:active { transform: scale(0.98); }
   background: transparent; color: var(--text-muted);
   font-family: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
 }
+
+/* ─── Ce que l'app a remarqué ─────────────────────────────────────────────
+   Elle a déjà posé l'activité ; ce pop-up dit ce qu'on n'aurait pas vu — lieu
+   fermé, journée qui déborde, autre bout de la ville. Il informe, il ne
+   corrige pas : deux issues seulement, garder ou annuler. */
+/* Exception assumée au plein écran des feuilles (voir « Full-screen sheets ») :
+   celle-ci n'est pas un formulaire, c'est un avis de trois lignes. Occuper tout
+   l'écran la ferait lire comme un blocage — or le principe est justement
+   qu'elle ne bloque rien. Elle épouse donc son contenu, en bas de l'écran.
+   `align-self` et `height` doivent être repris explicitement : la règle
+   générale les impose à tout `.sheet`. */
+.sheet--proposition {
+  align-self: flex-end;
+  height: auto;
+  max-height: 80dvh;
+  border-radius: 24px 24px 0 0;
+}
+.sheet--proposition .sheet__body { flex: 0 1 auto; }
+.proposition__intro {
+  margin: 0 0 14px; font-size: 14.5px; color: var(--text-muted); line-height: 1.45;
+}
+.proposition__intro strong { color: var(--text); }
+.proposition__liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.proposition__item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  font-size: 14.5px; line-height: 1.4; color: var(--text);
+}
+.proposition__icone { font-size: 17px; line-height: 1.25; flex-shrink: 0; }
+/* Ni rouge ni alarme : ce n'est pas une erreur, c'est un renseignement. */
+.proposition__note {
+  margin: 14px 0 0; font-size: 12.5px; color: var(--text-muted); text-align: center;
+}
+
+/* ─── Coller un lien dans la Réserve ──────────────────────────────────────
+   Remplir le vivier est LE geste d'avant-voyage. Sur iPhone, le menu Partager
+   ne peut pas viser une app web (WebKit n'implémente pas le Web Share Target) :
+   coller est le chemin le plus court, et il marche partout. */
+.reserve-coller {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 44px; margin-bottom: 10px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-deep, var(--accent));
+  font-family: inherit; font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.reserve-coller:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+/* `--accent-deep` est un bleu foncé fait pour porter du blanc : posé comme
+   texte sur une surface sombre il tombe à 3,39:1. En thème sombre, c'est
+   l'accent clair qui doit écrire. */
+[data-theme="dark"] .reserve-coller { color: var(--accent); }
+
+/* ─── Les autres lieux d'un même lien ─────────────────────────────────────
+   Une légende de vidéo cite rarement un seul endroit. Ils sont déjà lus :
+   cochés par défaut, parce que décocher est plus rapide que cocher six fois. */
+.autres-lieux {
+  margin-top: 10px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface-raised);
+}
+.autres-lieux__titre {
+  margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+}
+.autres-lieux__liste { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.autres-lieux__item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; min-height: 44px; padding: 0 8px;
+  border: none; border-radius: 10px; background: transparent;
+  font-family: inherit; font-size: 14.5px; color: var(--text); text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.autres-lieux__item--on { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.autres-lieux__coche { font-size: 17px; color: var(--accent-deep, var(--accent)); flex-shrink: 0; }
+.autres-lieux__nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autres-lieux__valider { width: 100%; }
+
+/* ─── Le ⋯ d'une fiche : 33 × 20 px mesurés ───────────────────────────────
+   C'est la porte d'entrée vers modifier, supprimer et déplacer — les trois
+   actions les plus utiles d'une fiche — et un pouce ne vise pas 20 px. Même
+   technique que `.map-moi-btn` : la pastille reste fine, la zone touchée fait
+   44 px. Rien ne bouge à l'écran. */
+.activity-card__dots-btn { position: relative; }
+.activity-card__dots-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
+
+/* ─── Le billet et la route, sur l'écran du jour ──────────────────────────
+   Devant un guichet, un billet rangé au fond d'une fiche est un billet qu'on
+   ne trouve pas : quatre gestes pour l'atteindre, dont un défilement. Ces deux
+   boutons sont là où l'on regarde déjà. */
+.today-act-card__acces {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.today-acces-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; padding: 0 14px;
+  border: 1px solid var(--border-strong); border-radius: 12px;
+  background: var(--surface-raised); color: var(--text);
+  font-size: 14.5px; font-weight: 650; text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.today-acces-btn:active { opacity: 0.8; }
+/* Le billet passe devant : c'est lui qu'on cherche dans l'urgence. */
+.today-acces-btn--billet {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-raised));
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+[data-theme="dark"] .today-acces-btn--billet { color: var(--accent); }
+
+/* Qui a proposé l'idée. À plusieurs, une Réserve sans auteurs devient une
+   liste anonyme où l'on ne sait plus quoi discuter avec qui. */
+.reserve-etat__auteur {
+  font-size: 11.5px; font-weight: 650;
+  color: var(--accent-deep, var(--accent));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 2px 8px; border-radius: 999px;
+}
+[data-theme="dark"] .reserve-etat__auteur { color: var(--accent); }
+
+/* ─── Les longues listes ne se dessinent qu'à l'approche ──────────────────
+   Mesuré sur un voyage de 30 jours : la Réserve rendait 17 648 px de contenu
+   pour un écran de 844, les Dépenses 18 150 px. Vingt et un écrans dessinés
+   d'un coup, dont vingt qu'on ne regarde pas — d'où 800 ms avant que l'onglet
+   réponde.
+
+   `content-visibility: auto` laisse le navigateur sauter la mise en page de ce
+   qui est hors champ. `contain-intrinsic-size` lui donne une hauteur estimée,
+   sans laquelle la barre de défilement sauterait à chaque approche.
+
+   Aucune bibliothèque, aucun changement de code : là où la propriété n'existe
+   pas, tout se dessine comme avant. */
+.reserve-card,
+.expense-item {
+  content-visibility: auto;
+}
+.reserve-card { contain-intrinsic-size: auto 132px; }
+.expense-item { contain-intrinsic-size: auto 76px; }
+
+/* ─── Cibles de moins de 44 px, mesurées par /verif-ui ────────────────────
+   Modifier et supprimer une dépense (27 × 22 et 25 × 20 px), l'adresse sur
+   l'écran du jour (42 px de haut), et le détail des dettes (60 × 18). Ce sont
+   des actions courantes ; la pastille reste fine, la zone touchée fait 44 px
+   et rien ne bouge à l'écran. */
+/* Modifier et Supprimer sont côte à côte : agrandir leur zone par un halo les
+   ferait se recouvrir, et le doigt toucherait le mauvais. Il leur faut donc
+   une vraie taille, pas une zone invisible. */
+.expense-item__edit,
+.expense-item__delete {
+  min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+}
+/* Isolé, celui-ci peut garder sa zone étendue. */
+.debts-card__detail-btn { position: relative; }
+.debts-card__detail-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
+/* L'adresse est un lien vers l'itinéraire : sur place, on le vise en marchant. */
+.today-act-card__addr { min-height: 44px; display: inline-flex; align-items: center; }
+
+/* ─── « Que faire maintenant ? » ──────────────────────────────────────────
+   Ce ne sont pas des suggestions venues d'ailleurs : ce sont tes idées, celles
+   qui tiennent dans le temps restant. Une feuille courte, des cibles larges —
+   on la lit debout dans la rue. */
+.sheet--pioche { align-self: flex-end; height: auto; max-height: 80dvh; border-radius: 24px 24px 0 0; }
+.sheet--pioche .sheet__body { flex: 0 1 auto; }
+.pioche__intro, .pioche__vide {
+  margin: 0 0 12px; font-size: 14.5px; line-height: 1.45; color: var(--text-muted);
+}
+.pioche__liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pioche__item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 64px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface-raised); color: var(--text);
+  font-family: inherit; text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.pioche__item:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+.pioche__emoji { font-size: 24px; flex-shrink: 0; }
+.pioche__texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pioche__titre { font-size: 15.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pioche__meta { font-size: 12.5px; color: var(--text-muted); }
+.pioche__cta {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-size: 20px; font-weight: 700;
+}
+/* Ce qui a été écarté se dit : sans ça, une Réserve pleine qui ne propose que
+   deux idées ressemble à une panne. */
+.pioche__ecartees {
+  margin: 12px 0 0; font-size: 12.5px; color: var(--text-muted); text-align: center;
+}
+
+/* ─── La carte du voyage vécu, dans le bilan ──────────────────────────────
+   Elle ne montre que ce qui a eu lieu. Y mettre le programme non réalisé
+   raconterait le voyage qu'on avait prévu, pas celui qu'on a vécu.
+   Non manipulable : un bilan se regarde, et attraper le geste de défilement
+   de la feuille sous le doigt serait pénible. */
+.recap-carte { margin: 16px 0; }
+.recap-carte__titre {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+}
+.recap-carte__toile {
+  height: 220px; border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-raised);
+}
+.recap-carte .leaflet-container { background: var(--surface-raised); }
+
+/* ─── Photographier le ticket ─────────────────────────────────────────────
+   Le montant est déjà écrit sur le papier qu'on tient : le retaper est un
+   calcul de plus. Rien n'est enregistré sans relecture. */
+.recu { margin-bottom: 14px; }
+.recu__btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 48px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-deep, var(--accent));
+  font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+[data-theme="dark"] .recu__btn { color: var(--accent); }
+.recu__btn:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+.recu__msg { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+
+/* La journée visée pendant un glissement. Déplacer une activité au lendemain
+   passait par un menu, un cran à la fois : elle se prend et se pose. */
+.tl-day--cible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+}

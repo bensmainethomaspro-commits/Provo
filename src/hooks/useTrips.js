@@ -65,6 +65,10 @@ function generateUUID() {
 export function useTrips() {
   const [trips, setTrips] = useState(() => migrateMeals(load()));
   const [userId, setUserId] = useState(null);
+  // `addToReserve` est mémoïsé sur une liste de dépendances vide : sans ref, il
+  // capturerait l'identifiant du premier rendu, c'est-à-dire `null`.
+  const userIdRef = useRef(null);
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
   const [userEmail, setUserEmail] = useState(null);
   const [userProfile, setUserProfile] = useState({ name: null, emoji: null });
   const [authLoading, setAuthLoading] = useState(true);
@@ -344,7 +348,10 @@ export function useTrips() {
     // fiche une fois les informations récupérées en ligne.
     const id = genId();
     setTrips(p => p.map(t => t.id !== tripId ? t : {
-      ...t, reserve: [...t.reserve, { ...activity, id, status: 'todo' }]
+      // Qui a proposé l'idée : à plusieurs, la Réserve devient une liste
+      // commune où l'on ne sait plus qui a mis quoi — et une idée sans auteur
+      // ne se discute pas. Posé à l'ajout, jamais modifié ensuite.
+      ...t, reserve: [...t.reserve, { ...activity, id, status: 'todo', proposePar: userIdRef.current || null }]
     }));
     return id;
   }, []);

@@ -5,7 +5,10 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "background_color": "#E6F2FB",
   "theme_color": "#35A7DD",
   "orientation": "portrait-primary",
@@ -45,13 +48,32 @@
       "short_name": "Nouveau",
       "description": "Créer un nouveau voyage",
       "url": "/?action=new",
-      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
     }
   ],
-  "categories": ["travel", "productivity", "lifestyle"],
+  "categories": [
+    "travel",
+    "productivity",
+    "lifestyle"
+  ],
   "prefer_related_applications": false,
   "handle_links": "preferred",
   "launch_handler": {
     "client_mode": "navigate-existing"
+  },
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "titre",
+      "text": "texte",
+      "url": "lien"
+    }
   }
 }

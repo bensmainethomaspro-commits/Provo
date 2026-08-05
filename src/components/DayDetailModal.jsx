@@ -60,7 +60,10 @@ export default function DayDetailModal({
               au programme n'est pas une dépense — ce qui est payé se saisit dans
               l'onglet Dépenses, et seulement là. */}
 
-          <LogicAlerts activities={day.activities} />
+          {/* `slots` porte les horaires calculés : sans lui, `getLogicAlerts`
+              saute toute la détection de chevauchement — deux activités à la
+              même heure ne se signalaient nulle part. */}
+          <LogicAlerts activities={day.activities} slots={slots} />
 
           {/* Suggestion d'itinéraire : proposée, jamais appliquée d'office */}
           {routeGain && onOptimizeRoute && (

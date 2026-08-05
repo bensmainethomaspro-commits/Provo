@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatPrice, formatDateShort, getCategoryMeta, haversineKm } from '../utils/helpers';
+import RecapCarte from './RecapCarte';
 
 // Bilan de voyage (« Provo Wrapped ») : chiffres clés du séjour, partageables.
 export default function TripRecap({ trip, onClose }) {
@@ -95,6 +96,11 @@ export default function TripRecap({ trip, onClose }) {
               <div className="recap-hero__pct-label">du programme réalisé</div>
             </div>
           </div>
+
+          {/* Le trajet parcouru : un bilan chiffré dit ce qu'on a fait, une
+              carte le fait revoir. C'est elle qui donne envie de rouvrir un
+              voyage terminé. */}
+          <RecapCarte days={trip.days} />
 
           {/* Grille de stats */}
           <div className="recap-grid">

@@ -56,10 +56,15 @@ ci-dessus prime sur lui.
 `.claude/project-notes.md` dit ce qui est déjà appliqué **ici**, et ce qui a
 été écarté sciemment : ne jamais reproposer ces derniers.
 
-Deux compétences entretiennent la boucle :
+Quatre compétences entretiennent la boucle — trois questions distinctes, plus
+la mémoire :
 
-- `/audit` — audite l'app contre le playbook et propose des améliorations
-  classées, sans toucher au code.
+- `/parcours` — **est-ce que ça marche ?** Parcourt toutes les fonctions en les
+  utilisant vraiment, et rapporte ce qui est cassé.
+- `/verif-ui` — **est-ce lisible et atteignable ?** Contraste, cibles de 44 px,
+  débordement, dans les deux thèmes. Mesure, ne juge pas.
+- `/audit` — **est-ce bien conçu ?** Audite l'app contre le playbook et propose
+  des améliorations classées, sans toucher au code.
 - `/lecon` — transforme un retour en règle durable, généralisée pour les
   autres projets.
 

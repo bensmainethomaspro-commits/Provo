@@ -12,18 +12,24 @@ import PackingList from '../components/PackingList';
 import { forceRefreshApp } from '../components/RefreshButton';
 import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
-import TodayMode from '../components/TodayMode';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
+import { useEtatRetenu } from '../hooks/useEtatRetenu';
+import { toucher } from '../utils/toucher';
+import { piocheGuidee } from '../utils/piocheGuidee';
+import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm } from '../utils/helpers';
+import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
+import { signauxAjout } from '../utils/propositions';
+import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
+import PropositionSheet from '../components/PropositionSheet';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
@@ -185,7 +191,7 @@ function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayT
   return handleTouchDragStart;
 }
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -265,15 +271,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     const stored = localStorage.getItem('provo_viewMode');
     return stored === 'agenda' ? 'agenda' : 'timeline'; // 'list' removed → fallback timeline
   });
-  const [reserveFilter, setReserveFilter] = useState('all');
+  // La vue de la Réserve se retient d'un passage à l'autre : la refaire à
+  // chaque aller-retour est un impôt sur l'écran le plus utilisé.
+  const [reserveFilter, setReserveFilter] = useEtatRetenu(`${tripId}_filtre`, 'all');
   const [reserveSearch, setReserveSearch] = useState('');
-  const [reserveSort, setReserveSort] = useState('default');
+  const [reserveSort, setReserveSort] = useEtatRetenu(`${tripId}_tri`, 'default');
   // Sur place, la question est « qu'est-ce qui est ouvert, près de moi ».
-  const [ouvertSeul, setOuvertSeul] = useState(false);
+  const [ouvertSeul, setOuvertSeul] = useEtatRetenu(`${tripId}_ouvert`, false);
   // Le regroupement par catégorie masque l'ordre manuel : les deux ne peuvent
   // pas cohabiter. On le rend donc débrayable, et c'est en liste à plat que le
   // glisser-déposer prend son sens.
-  const [grouper, setGrouper] = useState(true);
+  const [grouper, setGrouper] = useEtatRetenu(`${tripId}_groupe`, true);
   const reorder = useReorderDrag(
     useCallback((id, cibleId) => moveInReserve(tripId, id, cibleId), [moveInReserve, tripId])
   );
@@ -283,6 +291,37 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const [undoDone, setUndoDone] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
+  // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
+  // avant — elle ne bloque pas le geste.
+  const [proposition, setProposition] = useState(null);
+  // Le calendrier des jours fériés du pays visité, préchargé pendant qu'on a du
+  // réseau : sur place, c'est justement là qu'on n'en a pas.
+  const [feriesReseau, setFeriesReseau] = useState(null);
+  // Le lien qu'on est en train d'ajouter : collé depuis le presse-papier, ou
+  // reçu du menu Partager. Un lien reçu ouvre la feuille par déduction — pas
+  // par un effet qui pousserait un état déjà contenu dans les props.
+  const [lienColle, setLienColle] = useState(null);
+  const [pioche, setPioche] = useState(null);
+  const lienEnCours = lienColle || lienAImporter || null;
+
+  // Préchargé tant qu'on a du réseau : sur place, c'est justement là qu'on n'en
+  // a pas. Ce hook doit rester AVANT le retour anticipé sur `!trip`, sinon son
+  // rang change d'un rendu à l'autre.
+  useEffect(() => {
+    const pays = anchor?.pays;
+    if (!pays || !trip) return undefined;
+    let annule = false;
+    preparerFeries(pays, trip).then(f => {
+      if (!annule && Object.keys(f).length) setFeriesReseau(f);
+    });
+    return () => { annule = true; };
+  }, [anchor?.pays, trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ce qui est déjà en cache s'applique sans attendre le réseau — et reste vrai
+  // hors ligne. L'état ne porte que ce que la requête a ajouté.
+  const feries = useMemo(
+    () => ({ ...feriesEnCache(anchor?.pays, anneesDuVoyage(trip)), ...(feriesReseau || {}) }),
+    [anchor?.pays, trip?.id, feriesReseau]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tripMembers, setTripMembers] = useState([]);
   const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
@@ -345,10 +384,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // Enrobe n'importe quelle action pour la rendre annulable.
   // `tripRef` plutôt que `trip` : utilisable avant le retour anticipé et jamais
   // périmé dans un gestionnaire d'événement.
+  // L'instantané pris pour l'annulation est exactement « l'état d'avant » : on
+  // le passe en dernier argument plutôt que de laisser chaque action relire la
+  // ref. Les callbacks qui n'en ont pas besoin l'ignorent.
   const withUndo = useCallback((msg, fn) => (...args) => {
     const snapshot = tripRef.current;
     if (snapshot) pushUndo(snapshot, msg);
-    return fn(...args);
+    return fn(...args, snapshot);
   }, [pushUndo]);
 
   const handleUndo = () => {
@@ -454,15 +496,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     return new Date(y, m - 1, d) < today;
   })();
 
-  const { isActive, todayDay, todayDayIndex } = (() => {
+  // La journée en cours, quand on est effectivement en voyage. Elle ne sert
+  // plus à afficher un onglet — le planning place déjà le jour J au centre —
+  // mais à savoir où poser ce qu'on pioche, et quoi proposer maintenant.
+  const todayDay = (() => {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const start = new Date(trip.startDate + 'T00:00:00');
     const end = new Date(trip.endDate + 'T00:00:00');
-    const active = !isPast && start <= now && now <= end;
-    if (!active) return { isActive: false, todayDay: null, todayDayIndex: -1 };
+    if (isPast || start > now || now > end) return null;
     const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const idx = trip.days.findIndex(d => d.date === todayStr);
-    return { isActive: true, todayDay: idx >= 0 ? trip.days[idx] : null, todayDayIndex: idx };
+    return trip.days.find(d => d.date === todayStr) || null;
   })();
 
   // Compte à rebours avant le départ, et brief de la veille pour la journée
@@ -524,10 +567,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   const showBudget = initBudget > 0 || stats.total > 0;
 
   // ─── Tab order + swipe navigation ───────────────────────
-  const orderedTabs = [
-    ...(isActive ? ['today'] : []),
-    'planning', 'reserve', 'depenses', 'map', 'notes', 'valise',
-  ];
+  // L'onglet « Aujourd'hui » a été retiré : le planning place déjà le jour J
+  // au centre, et tout ce qu'on y faisait s'y fait directement.
+  const orderedTabs = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
   const navigateTab = (newTab) => {
     if (newTab === tab) return;
@@ -613,8 +655,62 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     (dayId, actId) => moveToNextDay(tripId, dayId, actId));
   const undoableMoveDayToDay = withUndo('Activité déplacée',
     (srcDayId, tgtDayId, actId) => moveDayToDay(tripId, srcDayId, tgtDayId, actId));
+  // Lire le presse-papier demande un geste explicite de l'utilisateur : Safari
+  // affiche sa propre confirmation, et c'est très bien — personne ne veut
+  // qu'une page lise ce qu'il a copié sans le savoir.
+  // Le prénom derrière un identifiant de compte. Les voyageurs liés à un
+  // compte le portent dans `profileId` ; sinon on ne sait pas, et on se tait.
+  const auteurDe = (uid) => {
+    const v = (trip?.tripTravelers || []).find(t => t.profileId === uid);
+    return v ? `${v.emoji || '👤'} ${v.name}` : null;
+  };
+
+  const collerUnLien = async () => {
+    let texte = '';
+    // Refus de l'utilisateur, ou API absente : on ouvre quand même la feuille.
+    try { texte = await navigator.clipboard.readText(); } catch { /* rien à coller */ }
+    const lien = premierLien(texte);
+    // Rien d'exploitable : on ouvre quand même la feuille, prête à recevoir.
+    setLienColle(lien || null);
+    setSheetDefaultDayId(null);
+    setSheetOpen(true);
+  };
+
+  // Glisser une activité d'un jour vers un autre. `moveDayToDay` l'ajoute à la
+  // fin ; si le doigt visait une fiche précise, on la replace devant elle —
+  // sinon déposer en haut d'une journée la ferait atterrir en bas.
+  const deplacerEntreJours = withUndo('Activité déplacée',
+    (jourSource, jourCible, actId, cibleId, avant) => {
+      moveDayToDay(tripId, jourSource, jourCible, actId);
+      if (!cibleId) return;
+      // L'état d'AVANT suffit : la journée d'accueil n'y contient pas encore
+      // l'activité, on la range donc simplement à la place visée. Écrire
+      // l'ordre complet remplace l'ajout en fin de liste.
+      const dest = (avant?.days || []).find(d => d.id === jourCible);
+      const act = (avant?.days || []).find(d => d.id === jourSource)
+        ?.activities.find(a => a.id === actId);
+      if (!dest || !act) return;
+      const arr = dest.activities.filter(a => a.id !== actId);
+      const to = arr.findIndex(a => a.id === cibleId);
+      arr.splice(to < 0 ? arr.length : to, 0, act);
+      setDayActivitiesOrder(tripId, jourCible, arr);
+    });
+
   const undoableAssignFromReserve = withUndo('Idée placée dans la journée',
-    (dayId, actId) => moveFromReserveToDay(tripId, dayId, actId));
+    (dayId, actId, avant) => {
+      // Les signaux se lisent sur l'état d'AVANT : après le déplacement, l'idée
+      // a quitté la réserve et la journée n'est plus la même. On les affiche
+      // une fois l'idée posée — l'app signale, elle n'empêche pas.
+      const idee = (avant?.reserve || []).find(a => a.id === actId);
+      const jour = (avant?.days || []).find(d => d.id === dayId);
+      moveFromReserveToDay(tripId, dayId, actId);
+      toucher('valide');
+      if (!idee || !jour) return;
+      const signaux = signauxAjout(idee, jour, { feries });
+      if (!signaux.length) return;
+      const idx = avant.days.findIndex(d => d.id === dayId);
+      setProposition({ titre: idee.title, jour: `Jour ${idx + 1}`, signaux });
+    });
   const undoableSweep = withUndo('Journée renvoyée en réserve',
     (dayId) => sweepDayToReserve(tripId, dayId));
   const undoableReorderDay = withUndo('Jour déplacé',
@@ -808,6 +904,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                     ⚖️ Comparer des activités
                   </button>
                 )}
+                {todayDay && (
+                  <button className="trip-header-menu__item" onClick={() => {
+                    setTripMenuOpen(false);
+                    setPioche(piocheGuidee(trip, todayDay, {
+                      position: geoReserve.position,
+                      meteoCode: weather?.byDate?.[todayDay.date]?.code,
+                    }));
+                  }}>
+                    🎯 Que faire maintenant ?
+                  </button>
+                )}
                 <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); fouiller(); }}>
                   ✨ Compléter les fiches
                   {ficheseIncompletes > 0 && (
@@ -890,15 +997,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Tabs */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
-        {isActive && (
-          <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
-            <span className="tab-btn__icon">🟢</span>
-            <span className="tab-btn__label">Aujourd'hui</span>
-            {todayDay && todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
-              <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
-            )}
-          </button>
-        )}
         <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
           <span className="tab-btn__icon">📅</span>
           <span className="tab-btn__label">Planning</span>
@@ -940,22 +1038,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Tab content */}
       <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
-
-        {/* ── AUJOURD'HUI TAB ── */}
-        {tab === 'today' && isActive && (
-          <TodayMode
-            day={todayDay}
-            dayIndex={todayDayIndex}
-            totalDays={trip.days.length}
-            trip={trip}
-            onStatusChange={handleStatusChange}
-            onReorderActivities={(dayId, newOrder) => setDayActivitiesOrder(tripId, dayId, newOrder)}
-            reserve={trip.reserve}
-            days={trip.days}
-            onAddFromReserve={todayDay ? (actId) => undoableAssignFromReserve(todayDay.id, actId) : null}
-            onMoveFromDay={todayDay ? (srcDayId, actId) => undoableMoveDayToDay(srcDayId, todayDay.id, actId) : null}
-          />
-        )}
 
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
@@ -1044,6 +1126,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
+                onDeplacerEntreJours={deplacerEntreJours}
               />
             )}
 
@@ -1084,6 +1167,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               </div>
             ) : (
               <>
+                {/* Remplir le vivier est le geste le plus fréquent avant le
+                    départ. Sur iPhone, le menu Partager ne peut pas viser une
+                    app web (WebKit n'implémente pas le Web Share Target) :
+                    coller reste le chemin le plus court, et il marche partout. */}
+                <button className="reserve-coller" onClick={collerUnLien}>
+                  📋 Coller un lien
+                </button>
                 <div className="reserve-search-bar">
                   <input
                     className="reserve-search-input"
@@ -1225,6 +1315,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
                           {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
                           {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
                           {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
+                          {/* Qui l'a proposée. Muet quand on voyage seul, et
+                              muet pour ses propres idées : « proposé par moi »
+                              sur chaque fiche n'apprendrait rien. */}
+                          {activity.proposePar && activity.proposePar !== userId && (
+                            <span className="reserve-etat__auteur">
+                              {auteurDe(activity.proposePar)}
+                            </span>
+                          )}
                           {m.length > 0 && (
                             <span className="reserve-etat__manque" title={`Manque : ${m.join(', ')}`}>
                               {m.length} info{m.length > 1 ? 's' : ''} à compléter
@@ -1316,8 +1414,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Modals & sheets */}
       <AddActivitySheet
-        isOpen={sheetOpen && !editingActivity}
-        onClose={() => { setSheetOpen(false); setSheetDefaultDayId(null); }}
+        isOpen={(sheetOpen || !!lienAImporter) && !editingActivity}
+        onClose={() => { setSheetOpen(false); setSheetDefaultDayId(null); setLienColle(null); onLienConsomme?.(); }}
         days={trip.days}
         defaultDayId={sheetDefaultDayId}
         onAddToReserve={(a) => { const id = addToReserve(tripId, a); autoEnrich(a, id, { type: 'reserve' }); }}
@@ -1329,6 +1427,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         tripLat={anchor?.lat}
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
+        lienInitial={lienEnCours}
       />
 
       {fouilleEnCours && (
@@ -1355,6 +1454,27 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
             onClose={() => setEnrichProps([])}
           />
         </Suspense>
+      )}
+
+      {pioche && (
+        <PiocheSheet
+          resultat={pioche}
+          onClose={() => setPioche(null)}
+          onPiocher={(actId) => {
+            setPioche(null);
+            if (todayDay) undoableAssignFromReserve(todayDay.id, actId);
+          }}
+        />
+      )}
+
+      {proposition && (
+        <PropositionSheet
+          titre={proposition.titre}
+          jour={proposition.jour}
+          signaux={proposition.signaux}
+          onGarder={() => setProposition(null)}
+          onAnnuler={() => { setProposition(null); handleUndo(); }}
+        />
       )}
 
       {showPlaceCheck && (
@@ -1483,7 +1603,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         />
       )}
 
-      <div className={`undo-toast${undoVisible ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
+      {/* Le pop-up de proposition porte déjà « Annuler l'ajout » : laisser le
+          bandeau derrière afficherait deux fois la même sortie. */}
+      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
         <span className="undo-toast__msg">{undoDone ? '↩ ' : ''}{undoMsg}</span>
         {!undoDone && (
           <>

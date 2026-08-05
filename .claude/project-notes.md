@@ -30,11 +30,11 @@ trace de ce qu'on a sciemment écarté.
 | B2 · Grille unique | `.trip-controls` : une rangée, espaceurs explicites |
 | B3 · Cartes détachées | Contraste inversé entre thème clair et sombre |
 | B4 · Accent, pas mur | Palette bleu clair `--accent: #35A7DD` |
-| C1 · Phrase, pas données | « Sam doit 60 € à Alex » |
+| C1 · Phrase, pas données | « Sam doit 60 € à Alex » ; « la journée finirait à 23:30 » |
 | C2 · Chemin direct | Dépense sans activité associée |
-| C3 · Complétion auto | `src/utils/enrich.js` — Nominatim puis Overpass |
+| C3 · Complétion auto | `enrich.js` ; jours fériés (Nager.Date) ; lecture de ticket |
 | C4 · Point de vue connecté | Solde personnel via `profileId` |
-| D1 · Proposer en pop-up | Piochage, itinéraire plus court |
+| D1 · Proposer en pop-up | Piochage, itinéraire ; `PropositionSheet` (fermé, férié, déborde, loin) |
 | D2 · Bénéfice chiffré | « tu économises 1,8 km » |
 | D3 · Rien à signaler | Aucune pop-up si le piochage ne pose pas de problème |
 | D4 · Annulable | `withUndo` dans `TripView` |
@@ -80,6 +80,23 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
    et une réponse marquée `confiance: "basse"` ne peut ni nommer ni situer.
 
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
+
+## Décisions récentes
+
+- **L'onglet « Aujourd'hui » a été retiré** (août 2026). Le planning place déjà
+  le jour J au centre à l'ouverture ; un onglet séparé dédoublait la question.
+  `TodayMode.jsx` supprimé. Ce qui s'y faisait vit dans le menu ⋯
+  (« Que faire maintenant ? ») et sur la fiche d'activité.
+- **Les feuilles sont plein écran** (`align-self: stretch; height: 100dvh`).
+  Une seule exception assumée : `.sheet--proposition`, un avis de trois lignes
+  qui se lirait comme un blocage s'il occupait tout l'écran.
+- **`content-visibility: auto`** sur les listes longues plutôt qu'une
+  bibliothèque de virtualisation : mesuré à 17 648 px rendus pour un écran de
+  844. Là où la propriété n'existe pas, tout se dessine comme avant.
+- **Le retour haptique n'a aucun effet sur iPhone** — Safari n'implémente pas
+  `navigator.vibrate`. Bonus Android, jamais un canal d'information.
+- **Le Web Share Target n'existe pas sur iOS** (WebKit #194593). D'où le
+  bouton « Coller un lien » et la voie du raccourci iOS (`?ajout=`).
 
 ## Écarté sciemment
 
@@ -137,6 +154,37 @@ Le contraste n'est calculé que sur fond **uni** : sur un dégradé ou une photo
 la couleur derrière le texte dépend de l'endroit exact où il tombe. Ces cas
 sortent dans une liste séparée, non comptée en défaut. Un outil qui invente des
 défauts finit par ne plus être lu.
+
+Puis, **avant une livraison importante ou après une modification qui touche
+plusieurs écrans** :
+
+```bash
+npm run parcours              # 50 parcours : hors ligne + services rejoués
+npm run parcours:hors-ligne   # seulement ce qui doit marcher sans réseau
+npm run parcours:reseau       # seulement les chaînes distantes
+npm run verif-carte           # la carte : cadrage, zoom, position, bulles
+```
+
+`/parcours` est le seul des trois outils qui **appuie sur les boutons**. Il
+rejoue des intentions d'utilisateur et vérifie à la fois l'écran et ce qui est
+réellement enregistré — un écran peut avoir l'air juste pendant que les données
+s'abîment derrière. Il détecte aussi les **plantages** : quand l'app tombe,
+l'état fautif n'est jamais enregistré, donc aucun contrôle sur le stockage ne
+peut le voir.
+
+Les services distants sont **rejoués** (`scripts/reseau-stubs.mjs`), avec la
+panne au choix : 500, 429 qui répond du HTML, 200 au corps tronqué, injoignable,
+ou « a répondu mais n'a rien trouvé ». On ne peut pas demander à un vrai service
+de tomber en panne, et c'est là que sont les bugs. Chaque parcours réseau a un
+jumeau à l'attente inverse : les deux au vert prouvent que le stub pilote
+vraiment le comportement.
+
+Reste hors de portée : la **disponibilité réelle** des services et la forme
+actuelle de leurs réponses — voir `scripts/diag-*.mjs`, sur réseau réel.
+
+Devant un ✗ : **regarder le DOM réel avant de toucher au code de l'app.** À la
+mise au point, sept constats sur huit venaient du script lui-même (mauvais
+sélecteurs), pas de l'application.
 
 ## Contrôle des lieux (`verifyPlaces.js`)
 

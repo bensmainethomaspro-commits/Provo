@@ -3,13 +3,13 @@ import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import AuthScreen from './components/AuthScreen';
-import { decodeTrip } from './utils/helpers';
+import { decodeTrip, premierLien } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite, currentTrips } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
@@ -29,6 +29,16 @@ function AppInner() {
     if (s) { window.history.replaceState(null, '', window.location.pathname); return s; }
     return null;
   });
+  // Un lien arrivé du menu Partager (Android), d'un raccourci iOS, ou d'un
+  // `?ajout=` collé. Les apps ne le rangent pas au même endroit : Instagram et
+  // TikTok le noient dans le texte, Safari le met dans `url`.
+  const [lienPartage, setLienPartage] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const l = premierLien(p.get('ajout'), p.get('lien'), p.get('texte'), p.get('titre'));
+    if (l) { window.history.replaceState(null, '', window.location.pathname); return l; }
+    return null;
+  });
+
   const [pendingInvite] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const inv = p.get('invite');
@@ -104,6 +114,8 @@ function AppInner() {
 
   const navigate = (page, tripId = null) => setRoute({ page, tripId });
 
+  const voyagesOuverts = (currentTrips || []);
+
   const handleImport = () => {
     const id = importTrip(pendingImport);
     setPendingImport(null);
@@ -134,6 +146,22 @@ function AppInner() {
       {!isOnline && (
         <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
       )}
+      {/* Un lien partagé ne doit pas téléporter : on annonce ce qu'on a reçu et
+          on laisse choisir. Avec un seul voyage en cours, le choix se réduit à
+          un bouton ; avec plusieurs, on désigne le voyage soi-même. */}
+      {lienPartage && route.page === 'dashboard' && (
+        <div className="import-banner">
+          <span>🔗 Lien reçu{voyagesOuverts.length === 1 ? <> — l'ajouter à <strong>{voyagesOuverts[0].name}</strong> ?</> : ' — ouvre le voyage où le ranger.'}</span>
+          <div className="import-banner__actions">
+            {voyagesOuverts.length === 1 && (
+              <button className="btn btn--white btn--sm" onClick={() => navigate('trip', voyagesOuverts[0].id)}>
+                Ajouter
+              </button>
+            )}
+            <button className="btn btn--ghost-white btn--sm" onClick={() => setLienPartage(null)}>Ignorer</button>
+          </div>
+        </div>
+      )}
       {pendingImport && (
         <div className="import-banner">
           <span>🌍 Voyage partagé : <strong>{pendingImport.name}</strong></span>
@@ -145,7 +173,8 @@ function AppInner() {
       )}
       {route.page === 'dashboard'
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
-        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} />
+        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
+            lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)} />
       }
     </div>
   );

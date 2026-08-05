@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 
-export default function ActivityCard({
+function ActivityCard({
   activity, context, isLastDay, slot, isPastTrip,
   onStatusChange, onDelete, onMoveToReserve, onMoveToNextDay,
   onEdit, onReorderUp, onReorderDown, isFirst, isLast,
@@ -363,3 +363,10 @@ export default function ActivityCard({
     </>
   );
 }
+
+/**
+ * Mémoïsé : c'est le composant le plus instancié de l'app. Sans lui, allumer
+ * « Me situer » redessine toutes les fiches de la liste à chaque relevé GPS,
+ * alors qu'aucune n'a changé.
+ */
+export default memo(ActivityCard);

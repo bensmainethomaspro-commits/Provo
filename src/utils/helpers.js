@@ -11,7 +11,11 @@ export async function extractViaEdge(url) {
     });
     if (error) return null;
     if (data?.ok && data.result && (data.result.title || data.result.lat != null)) {
-      return data.result;
+      // Les lieux que la légende citait en plus voyagent avec le principal.
+      // Rangés sur l'objet plutôt que dans un second retour : tous les
+      // appelants existants continuent de lire ce qu'ils lisaient.
+      const autres = Array.isArray(data.autres) ? data.autres.filter(a => a?.title) : [];
+      return autres.length ? { ...data.result, autresLieux: autres } : data.result;
     }
     return null;
   } catch {
@@ -1112,4 +1116,65 @@ export function nearestNeighborSort(activities) {
     remaining.splice(minIdx, 1);
   }
   return [...result, ...other];
+}
+
+/**
+ * Le premier lien d'un texte partagé.
+ *
+ * Les apps ne partagent pas toutes de la même façon : Instagram et TikTok
+ * envoient souvent l'URL noyée dans `text` avec une légende autour, Safari la
+ * met dans `url`. On accepte les deux et on prend ce qui ressemble à un lien.
+ */
+export function premierLien(...morceaux) {
+  for (const m of morceaux) {
+    const t = String(m || '').trim();
+    if (!t) continue;
+    const trouve = t.match(/https?:\/\/[^\s<>"']+/);
+    if (trouve) return trouve[0].replace(/[.,;)\]]+$/, '');
+  }
+  return null;
+}
+
+/**
+ * Réduit une image avant de l'envoyer.
+ *
+ * Une photo d'iPhone fait quatre mégaoctets ; un ticket de caisse se lit très
+ * bien à mille pixels de large. En itinérance, c'est la différence entre une
+ * seconde et vingt.
+ */
+export function reduireImage(fichier, largeurMax = 1000, qualite = 0.75) {
+  return new Promise((resolve, reject) => {
+    const lecteur = new FileReader();
+    lecteur.onerror = () => reject(new Error('lecture impossible'));
+    lecteur.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('image illisible'));
+      img.onload = () => {
+        const ratio = Math.min(1, largeurMax / img.width);
+        const l = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
+        const c = document.createElement('canvas');
+        c.width = l; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, l, h);
+        resolve(c.toDataURL('image/jpeg', qualite));
+      };
+      img.src = ev.target.result;
+    };
+    lecteur.readAsDataURL(fichier);
+  });
+}
+
+/**
+ * Fait lire un ticket de caisse. Rend ce qui a été lu — jamais une dépense
+ * enregistrée : c'est l'utilisateur qui valide, après relecture.
+ */
+export async function lireRecu(imageDataUrl) {
+  try {
+    const { data, error } = await supabase.functions.invoke('read-receipt', {
+      body: { image: imageDataUrl },
+    });
+    if (error) return { error: 'appel_impossible' };
+    return data || { error: 'reponse_vide' };
+  } catch {
+    return { error: 'hors_ligne' };
+  }
 }
