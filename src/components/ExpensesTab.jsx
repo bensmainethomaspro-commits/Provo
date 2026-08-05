@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react';
-import { formatPrice, CATEGORIES, formatDateShort } from '../utils/helpers';
+import { formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
@@ -223,6 +223,47 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     setError('');
     setShowForm(true);
     scrollToForm();
+  };
+
+  const [lectureRecu, setLectureRecu] = useState(false);
+  const [recuMsg, setRecuMsg] = useState('');
+
+  /**
+   * Lit le ticket photographié et REMPLIT le formulaire — sans l'enregistrer.
+   * L'utilisateur relit et corrige : c'est lui qui valide, comme avant.
+   */
+  const lireLeRecu = async (e) => {
+    const fichier = e.target.files?.[0];
+    e.target.value = '';
+    if (!fichier) return;
+    setLectureRecu(true);
+    setRecuMsg('');
+    try {
+      // Réduite avant l'envoi : une photo d'iPhone fait 4 Mo, un ticket se lit
+      // très bien à 1000 px de large, et c'est du réseau en itinérance.
+      const image = await reduireImage(fichier, 1000);
+      const lu = await lireRecu(image);
+      if (!lu || lu.error) {
+        setRecuMsg(lu?.error === 'cle_absente'
+          ? "La lecture de ticket n'est pas configurée — saisis le montant à la main."
+          : "Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
+        return;
+      }
+      setForm(f => ({
+        ...f,
+        description: lu.commerce || f.description,
+        amount: lu.montant != null ? String(lu.montant) : f.amount,
+        currency: lu.devise || f.currency,
+        expenseCategory: lu.categorie || f.expenseCategory,
+      }));
+      setRecuMsg(lu.montant == null
+        ? "Montant illisible sur la photo — complète-le toi-même."
+        : lu.confiance === 'basse'
+          ? `${lu.montant} ${lu.devise || ''} — photo peu nette, vérifie avant d'enregistrer.`
+          : `Lu sur le ticket : ${lu.montant} ${lu.devise || ''}. Vérifie et enregistre.`);
+    } finally {
+      setLectureRecu(false);
+    }
   };
 
   const openForm = () => {
@@ -609,6 +650,20 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       {/* Add form */}
       {showForm ? (
         <div className="expense-form" ref={formRef}>
+          {/* Le montant est déjà écrit sur le ticket qu'on tient : le retaper
+              est un calcul de plus que l'app devrait éviter. Rien n'est
+              enregistré sans relecture — un montant faux dans un partage se
+              découvre à la fin du voyage, trop tard pour le corriger. */}
+          {!editingId && (
+            <div className="recu">
+              <label className="recu__btn">
+                {lectureRecu ? '⏳ Lecture du ticket…' : '📷 Photographier le ticket'}
+                <input type="file" accept="image/*" capture="environment"
+                  onChange={lireLeRecu} disabled={lectureRecu} hidden />
+              </label>
+              {recuMsg && <p className="recu__msg">{recuMsg}</p>}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Description</label>
             <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}

@@ -6922,3 +6922,69 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 /* L'adresse est un lien vers l'itinéraire : sur place, on le vise en marchant. */
 .today-act-card__addr { min-height: 44px; display: inline-flex; align-items: center; }
+
+/* ─── « Que faire maintenant ? » ──────────────────────────────────────────
+   Ce ne sont pas des suggestions venues d'ailleurs : ce sont tes idées, celles
+   qui tiennent dans le temps restant. Une feuille courte, des cibles larges —
+   on la lit debout dans la rue. */
+.sheet--pioche { align-self: flex-end; height: auto; max-height: 80dvh; border-radius: 24px 24px 0 0; }
+.sheet--pioche .sheet__body { flex: 0 1 auto; }
+.pioche__intro, .pioche__vide {
+  margin: 0 0 12px; font-size: 14.5px; line-height: 1.45; color: var(--text-muted);
+}
+.pioche__liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.pioche__item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 64px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface-raised); color: var(--text);
+  font-family: inherit; text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.pioche__item:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+.pioche__emoji { font-size: 24px; flex-shrink: 0; }
+.pioche__texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pioche__titre { font-size: 15.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pioche__meta { font-size: 12.5px; color: var(--text-muted); }
+.pioche__cta {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-size: 20px; font-weight: 700;
+}
+/* Ce qui a été écarté se dit : sans ça, une Réserve pleine qui ne propose que
+   deux idées ressemble à une panne. */
+.pioche__ecartees {
+  margin: 12px 0 0; font-size: 12.5px; color: var(--text-muted); text-align: center;
+}
+
+/* ─── La carte du voyage vécu, dans le bilan ──────────────────────────────
+   Elle ne montre que ce qui a eu lieu. Y mettre le programme non réalisé
+   raconterait le voyage qu'on avait prévu, pas celui qu'on a vécu.
+   Non manipulable : un bilan se regarde, et attraper le geste de défilement
+   de la feuille sous le doigt serait pénible. */
+.recap-carte { margin: 16px 0; }
+.recap-carte__titre {
+  font-size: 12px; font-weight: 800; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px;
+}
+.recap-carte__toile {
+  height: 220px; border-radius: 16px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-raised);
+}
+.recap-carte .leaflet-container { background: var(--surface-raised); }
+
+/* ─── Photographier le ticket ─────────────────────────────────────────────
+   Le montant est déjà écrit sur le papier qu'on tient : le retaper est un
+   calcul de plus. Rien n'est enregistré sans relecture. */
+.recu { margin-bottom: 14px; }
+.recu__btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 48px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-deep, var(--accent));
+  font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+[data-theme="dark"] .recu__btn { color: var(--accent); }
+.recu__btn:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+.recu__msg { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-muted); }

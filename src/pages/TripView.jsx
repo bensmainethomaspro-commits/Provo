@@ -19,6 +19,8 @@ import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useEtatRetenu } from '../hooks/useEtatRetenu';
 import { toucher } from '../utils/toucher';
+import { piocheGuidee } from '../utils/piocheGuidee';
+import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
@@ -300,6 +302,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // reçu du menu Partager. Un lien reçu ouvre la feuille par déduction — pas
   // par un effet qui pousserait un état déjà contenu dans les props.
   const [lienColle, setLienColle] = useState(null);
+  const [pioche, setPioche] = useState(null);
   const lienEnCours = lienColle || lienAImporter || null;
 
   // Préchargé tant qu'on a du réseau : sur place, c'est justement là qu'on n'en
@@ -882,6 +885,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     ⚖️ Comparer des activités
                   </button>
                 )}
+                {todayDay && (
+                  <button className="trip-header-menu__item" onClick={() => {
+                    setTripMenuOpen(false);
+                    setPioche(piocheGuidee(trip, todayDay, {
+                      position: geoReserve.position,
+                      meteoCode: weather?.byDate?.[todayDay.date]?.code,
+                    }));
+                  }}>
+                    🎯 Que faire maintenant ?
+                  </button>
+                )}
                 <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); fouiller(); }}>
                   ✨ Compléter les fiches
                   {ficheseIncompletes > 0 && (
@@ -1445,6 +1459,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
             onClose={() => setEnrichProps([])}
           />
         </Suspense>
+      )}
+
+      {pioche && (
+        <PiocheSheet
+          resultat={pioche}
+          onClose={() => setPioche(null)}
+          onPiocher={(actId) => {
+            setPioche(null);
+            if (todayDay) undoableAssignFromReserve(todayDay.id, actId);
+          }}
+        />
       )}
 
       {proposition && (

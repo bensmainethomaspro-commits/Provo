@@ -70,6 +70,16 @@ export const REPONSES = {
   enrichVide: { horaires: null, prixMin: null, description: null, site: null, photo: null,
     source: 'aucune', confiance: 'basse' },
 
+  // Edge Function `read-receipt` : ce qu'un ticket photographié donne.
+  recu: { ok: true, montant: 47.8, devise: 'EUR', commerce: 'Figlmüller',
+    date: '2026-08-05', categorie: 'repas', confiance: 'haute' },
+  // Photo floue : le montant est là, mais il faut le relire.
+  recuDouteux: { ok: true, montant: 47.8, devise: 'EUR', commerce: 'Figlmüller',
+    date: '', categorie: 'repas', confiance: 'basse' },
+  // Ce n'était pas un ticket.
+  recuIllisible: { ok: true, montant: null, devise: '', commerce: '', date: '',
+    categorie: 'autre', confiance: 'basse' },
+
   wikipedia: { query: { search: [{ title: 'Hofburg', snippet: 'Palais impérial de Vienne' }] } },
 
   // Nager.Date : les jours fériés du pays. `global: false` = fête régionale,
@@ -110,6 +120,8 @@ export const VARIANTES = {
     aucun: { ok: false },
   },
   nominatim: { aucun: [] },
+  recu: { douteux: REPONSES.recuDouteux, illisible: REPONSES.recuIllisible,
+    sansCle: { error: 'cle_absente' } },
   overpass: { aucun: { elements: [] } },
 };
 
@@ -224,6 +236,7 @@ export async function brancherReseau(page, base, plan = {}) {
     const url = route.request().url();
     if (url.includes('extract-place')) return servir(route, 'extractPlace', REPONSES.extractPlace);
     if (url.includes('enrich-place')) return servir(route, 'enrichPlace', REPONSES.enrichPlace);
+    if (url.includes('read-receipt')) return servir(route, 'recu', REPONSES.recu);
     return route.fulfill(json({ ok: false }));
   });
 

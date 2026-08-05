@@ -310,6 +310,41 @@ const JOUR_FERIE = { ...TRIP,
   reserve: [{ id: 'musee', title: 'Musée Leopold', category: 'visite', status: 'todo',
     durationHours: 2, durationMinutes: 0, travelerIds: [] }] };
 
+// Une journée en cours, un créneau court, et une Réserve où tout ne convient
+// pas : fermé, trop loin, trop long. C'est la situation réelle de « il me
+// reste deux heures ».
+const CRENEAU = { ...TRIP,
+  startDate: jour(0), endDate: jour(2),
+  days: [{ id: 'd1', date: jour(0), startTime: '09:00', notes: '', activities: [
+    { id: 'soir', title: 'Opéra', category: 'fun', status: 'todo',
+      durationHours: 2, durationMinutes: 30, fixedStart: '20:00', travelerIds: [] },
+  ] }, ...TRIP.days.slice(1)],
+  reserve: [
+    { id: 'ok1', title: 'Café Sperl', category: 'resto', status: 'todo',
+      durationHours: 1, durationMinutes: 0, lat: 48.1985, lon: 16.3620,
+      openingHours: 'Mo-Su 07:00-23:00', travelerIds: [] },
+    { id: 'ok2', title: 'Albertina', category: 'visite', status: 'todo',
+      durationHours: 1, durationMinutes: 30, lat: 48.2044, lon: 16.3684,
+      openingHours: 'Mo-Su 10:00-18:00', travelerIds: [] },
+    { id: 'ferme', title: 'Musée fermé', category: 'visite', status: 'todo',
+      durationHours: 1, durationMinutes: 0, lat: 48.2050, lon: 16.3690,
+      openingHours: 'Mo-Su off', travelerIds: [] },
+    { id: 'loin', title: 'Abbaye de Melk', category: 'visite', status: 'todo',
+      durationHours: 2, durationMinutes: 0, lat: 48.2280, lon: 15.3330, travelerIds: [] },
+    { id: 'long', title: 'Randonnée au Kahlenberg', category: 'balade', status: 'todo',
+      durationHours: 9, durationMinutes: 0, lat: 48.2049, lon: 16.3680, travelerIds: [] },
+  ] };
+
+// Un voyage dont une partie a été faite : la carte du bilan ne montre que le
+// vécu, pas le programme prévu.
+// Seul le premier jour est fait : il reste donc des lieux situés NON visités,
+// sans lesquels on ne pourrait pas prouver qu'ils sont écartés.
+const VECU = (() => {
+  const t = JSON.parse(JSON.stringify(TRIP));
+  t.days[0].activities.forEach(a => { if (a.lat) a.status = 'done'; });
+  return t;
+})();
+
 // ── Les parcours ────────────────────────────────────────────────────────────
 // Chacun est une intention d'utilisateur, pas un test unitaire. `depart` dit
 // dans quel état l'app démarre : 'vierge' (aucun voyage), 'voyage' (le voyage
@@ -1336,6 +1371,126 @@ const PARCOURS = [
         titres.slice(-3).join(', '));
     } },
 
+  { groupe: 'Propositions', nom: "« Que faire maintenant ? » ne propose que ce qui tient", depart: CRENEAU,
+    reseau: { meteo: 'ok', nominatim: 'ok' },
+    geo: { latitude: 48.2044, longitude: 16.3690 },
+    intention: "Debout dans la rue, deux heures devant soi : ne pas relire trente fiches.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.p.waitForTimeout(1200);
+      await t.menu(/Que faire maintenant/);
+      t.verifier('la feuille s\'ouvre', await t.visible('.sheet--pioche'));
+      const titres = await t.p.evaluate(() =>
+        [...document.querySelectorAll('.pioche__titre')].map(n => n.textContent.trim()));
+      // Ce qui doit être écarté, et pourquoi.
+      t.verifier('le lieu fermé est écarté', !titres.includes('Musée fermé'), titres.join(' · '));
+      t.verifier('le lieu à 80 km est écarté', !titres.includes('Abbaye de Melk'), titres.join(' · '));
+      t.verifier('la randonnée de 9 h est écartée',
+        !titres.some(x => /Kahlenberg/.test(x)), titres.join(' · '));
+      t.verifier('il reste des idées à proposer', titres.length > 0, titres.join(' · '));
+      t.verifier('ce qui a été écarté est dit',
+        /écart/i.test(await t.p.evaluate(() => document.querySelector('.sheet--pioche')?.innerText || '')));
+
+      // Et piocher depuis la feuille doit poser l'idée dans la journée.
+      const avant = (await t.voyage()).days[0].activities.length;
+      await t.clic('.pioche__item', { delai: 1600 });
+      const apres = (await t.voyage()).days[0].activities.length;
+      t.verifier('piocher depuis la feuille pose l\'idée', apres === avant + 1, `${avant} → ${apres}`);
+    } },
+
+  { groupe: 'Dépenses', nom: 'Photographier le ticket remplit la dépense', depart: 'voyage',
+    reseau: { recu: 'ok' },
+    intention: "Le montant est écrit sur le papier qu'on tient : le retaper est un calcul de trop.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 800 });
+      t.verifier('la photo du ticket est proposée', await t.visible('.recu__btn'));
+
+      // Une photo quelconque : c'est le service qui lit, pas le parcours.
+      await t.p.setInputFiles('.recu input[type="file"]', {
+        name: 'ticket.jpg', mimeType: 'image/jpeg',
+        buffer: Buffer.from(
+          '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+          + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
+          + 'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'),
+      });
+      await t.p.waitForTimeout(2600);
+
+      t.verifier('le service de lecture a été appelé', (t.appels().recu || 0) > 0,
+        `${t.appels().recu || 0} appels`);
+      const champs = await t.p.evaluate(() => {
+        // Le champ fichier du ticket est désormais le premier `input` du
+        // formulaire : viser par position mènerait à lui.
+        const desc = document.querySelector('.expense-form input.form-input[placeholder*="Resto"]');
+        const num = [...document.querySelectorAll('.expense-form input')].find(i => i.type === 'number');
+        return { description: desc?.value || '', montant: num?.value || '',
+          message: document.querySelector('.recu__msg')?.innerText || '' };
+      });
+      t.verifier('le montant est repris du ticket', champs.montant === '47.8', champs.montant || '(vide)');
+      t.verifier('le commerce devient la description', /Figlm/i.test(champs.description), champs.description);
+      // Le voyage de référence contient déjà « Dîner Figlmüller » : c'est le
+      // NOMBRE de dépenses qui doit être inchangé, pas l'absence d'un nom.
+      t.verifier('rien n\'est enregistré sans relecture',
+        (await t.voyage()).expenses.length === TRIP.expenses.length,
+        `${TRIP.expenses.length} → ${(await t.voyage()).expenses.length}`);
+      t.verifier('on demande de vérifier avant d\'enregistrer',
+        /v[ée]rifie|enregistre/i.test(champs.message), champs.message.slice(0, 70));
+    } },
+
+  { groupe: 'Dépenses', nom: 'Un ticket illisible le dit et ne bloque pas', depart: 'voyage',
+    reseau: { recu: 'illisible' },
+    intention: "Une photo floue ne doit ni inventer un montant ni empêcher la saisie.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 800 });
+      await t.p.setInputFiles('.recu input[type="file"]', {
+        name: 'flou.jpg', mimeType: 'image/jpeg',
+        buffer: Buffer.from(
+          '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
+          + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
+          + 'AAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'),
+      });
+      await t.p.waitForTimeout(2600);
+      const champs = await t.p.evaluate(() => {
+        const num = [...document.querySelectorAll('.expense-form input')].find(i => i.type === 'number');
+        return { montant: num?.value || '', message: document.querySelector('.recu__msg')?.innerText || '' };
+      });
+      t.verifier('aucun montant inventé', champs.montant === '', champs.montant || '(vide, correct)');
+      t.verifier('on le dit franchement', champs.message.length > 10, champs.message.slice(0, 70));
+      // Et la saisie manuelle doit rester possible juste après.
+      await t.saisir('.expense-form input.form-input', 'Taxi');
+      await t.p.locator('.expense-form input[type="number"]').first().fill('22');
+      await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1300 });
+      t.verifier('la saisie à la main reste possible',
+        (await t.voyage()).expenses.some(e => e.description === 'Taxi'));
+    } },
+
+  { groupe: 'Menu ⋯', nom: 'Le bilan montre où on est allé', depart: VECU,
+    intention: "Un bilan chiffré dit ce qu'on a fait ; une carte le fait revoir.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Bilan/);
+      await t.p.waitForTimeout(2200);
+      t.verifier('la carte du voyage est là', await t.visible('.recap-carte'));
+      const reperes = await t.combien('.recap-carte .leaflet-interactive');
+      t.verifier('elle porte les lieux visités', reperes > 0, `${reperes} repères`);
+      const h = await t.p.evaluate(() =>
+        Math.round(document.querySelector('.recap-carte__toile')?.getBoundingClientRect().height || 0));
+      t.verifier('elle a une hauteur exploitable', h > 150, `${h} px`);
+      // Ce qui n'a pas été fait ne doit pas y figurer : ce serait raconter le
+      // voyage prévu, pas le voyage vécu.
+      const v = await t.voyage();
+      const faites = v.days.flatMap(d => d.activities).filter(a => a?.status === 'done' && a.lat).length;
+      const situees = v.days.flatMap(d => d.activities).filter(a => a?.lat).length;
+      // Un repère par lieu visité, plus l'anneau du point de départ et le trait
+      // qui les relie : au-delà, ce serait le programme prévu qui s'afficherait.
+      t.verifier('seul le vécu est dessiné',
+        faites < situees && reperes === faites + 2,
+        `${faites} faites sur ${situees} situées · ${reperes} repères (attendu ${faites + 2})`);
+    } },
+
 ];
 
 // ── Exécution ───────────────────────────────────────────────────────────────
@@ -1362,6 +1517,7 @@ for (const parcours of choisis) {
   const ctx = await navigateur.newContext({
     viewport: { width: 390, height: 844 }, deviceScaleFactor: 2,
     hasTouch: true, isMobile: true, locale: 'fr-FR',
+    ...(parcours.geo ? { permissions: ['geolocation'], geolocation: parcours.geo } : {}),
   });
   const p = await ctx.newPage();
   const erreurs = [];
@@ -1375,12 +1531,13 @@ for (const parcours of choisis) {
   else await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
   const amorce = parcours.depart === 'vierge' ? []
     : parcours.depart === 'voyage' ? [TRIP] : [parcours.depart];
-  await p.addInitScript(([t, s]) => {
+  await p.addInitScript(([t, s, geo]) => {
     localStorage.setItem('provo_trips', t);
     localStorage.setItem('provo_settings', s);
     localStorage.setItem('provo_theme', 'light');
     localStorage.setItem('provo_onboarded', '1');
-  }, [JSON.stringify(amorce), JSON.stringify(SETTINGS)]);
+    if (geo) localStorage.setItem('provo_geo_active', '1');
+  }, [JSON.stringify(amorce), JSON.stringify(SETTINGS), !!parcours.geo]);
 
   const journal = [];
   const t = outils(p, journal);
