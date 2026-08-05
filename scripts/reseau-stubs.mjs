@@ -71,6 +71,15 @@ export const REPONSES = {
     source: 'aucune', confiance: 'basse' },
 
   wikipedia: { query: { search: [{ title: 'Hofburg', snippet: 'Palais impérial de Vienne' }] } },
+
+  // Nager.Date : les jours fériés du pays. `global: false` = fête régionale,
+  // que l'app doit ignorer — l'annoncer partout serait faux.
+  feries: (annee) => [
+    { date: `${annee}-01-01`, localName: 'Neujahr', name: "New Year's Day", global: true },
+    { date: `${annee}-08-15`, localName: 'Mariä Himmelfahrt', name: 'Assumption Day', global: true },
+    { date: `${annee}-12-25`, localName: 'Christtag', name: 'Christmas Day', global: true },
+    { date: `${annee}-11-15`, localName: 'Leopolditag', name: 'St. Leopold', global: false },
+  ],
 };
 
 const json = (corps) => ({ status: 200, contentType: 'application/json',
@@ -83,7 +92,23 @@ const json = (corps) => ({ status: 200, contentType: 'application/json',
  */
 export const VARIANTES = {
   enrichPlace: { vide: REPONSES.enrichVide },
-  extractPlace: { aucun: { ok: false } },
+  // Une légende de reel qui cite plusieurs adresses — le cas normal, pas
+  // l'exception : c'est ce que le lecteur ne savait pas rendre jusqu'ici.
+  extractPlace: {
+    plusieurs: {
+      ok: true,
+      result: { title: 'Café Central', address: 'Herrengasse 14, 1010 Wien, Autriche',
+        lat: 48.2101, lon: 16.3654, category: 'resto', source: 'tiktok' },
+      // Des noms absents du voyage de référence : sinon un « il est bien
+      // ressorti » se confondrait avec une fiche qui y était déjà.
+      autres: [
+        { title: 'Zum Schwarzen Kameel', category: 'resto', location: 'Bognergasse 5, Vienne, Autriche' },
+        { title: 'Café Sperl', category: 'resto', location: 'Gumpendorfer Str. 11, Vienne, Autriche' },
+        { title: 'Volksgarten', category: 'balade', location: 'Volksgarten, Vienne, Autriche' },
+      ],
+    },
+    aucun: { ok: false },
+  },
   nominatim: { aucun: [] },
   overpass: { aucun: { elements: [] } },
 };
@@ -168,10 +193,20 @@ export async function brancherReseau(page, base, plan = {}) {
     ['**/en.wikipedia.org/**', 'wikipedia', () => REPONSES.wikipedia],
     ['**/router.project-osrm.org/**', 'osrm', () => ({ routes: [{ duration: 900, distance: 3200 }] })],
     ['**/api.rss2json.com/**', 'actualites', () => ({ items: [] })],
+    ['**/date.nager.at/**', 'feries', null],
   ];
 
   for (const [motif, nom, reponse] of routes) {
     await page.route(motif, (route) => {
+      if (nom === 'feries') {
+        compter('feries');
+        const choix = plan.feries ?? 'ok';
+        if (choix === 'coupe') return route.abort('failed');
+        if (typeof choix === 'string' && choix !== 'ok') return route.fulfill(PANNES[choix]);
+        // L'URL porte l'année : .../PublicHolidays/2026/AT
+        const an = Number(route.request().url().match(/\/(\d{4})\//)?.[1]) || new Date().getFullYear();
+        return route.fulfill(json(REPONSES.feries(an)));
+      }
       if (nom === 'meteo') {
         compter('meteo');
         const choix = plan.meteo ?? 'ok';

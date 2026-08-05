@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
@@ -36,7 +36,7 @@ function isDefaultDuration(f) {
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve,
-  tripTravelers, onAddToAllDays, tripLat, tripLon, tripDestination }) {
+  tripTravelers, onAddToAllDays, tripLat, tripLon, tripDestination, lienInitial }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
   const { suggestions } = usePlaceSuggestions(tripLat, tripLon, isOpen && !isEdit);
@@ -54,15 +54,23 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const [poiHint, setPoiHint] = useState(null);
   const [saving, setSaving] = useState(false);
   const [recurring, setRecurring] = useState(false);
+  // Une légende de vidéo cite rarement un seul endroit. Les autres sont déjà
+  // lus : les jeter obligerait à les retaper un par un.
+  const [autresLieux, setAutresLieux] = useState([]);
+  const [lieuxRetenus, setLieuxRetenus] = useState(() => new Set());
 
   useEffect(() => {
     if (isOpen) {
       setClosing(false);
       setError('');
-      setImportUrl('');
+      // Un lien arrivé du menu Partager : il est déjà là, autant le chercher
+      // tout de suite plutôt que de faire appuyer sur un bouton de plus.
+      setImportUrl(lienInitial || '');
       setCandidates([]);
       setImportMsg('');
       setPoiHint(null);
+      setAutresLieux([]);
+      setLieuxRetenus(new Set());
       if (isEdit) {
         setForm({
           title: editActivity.title || '',
@@ -146,6 +154,20 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setPoiHint(null);
   };
 
+  // Les lieux retenus rejoignent la Réserve tels qu'ils ont été lus : titre,
+  // catégorie, et la localisation comme adresse de départ. Le reste, l'app le
+  // cherchera elle-même — c'est déjà ce qu'elle fait pour tout ajout.
+  const ajouterLesAutres = () => {
+    const choisis = autresLieux.filter((_, i) => lieuxRetenus.has(i));
+    if (!choisis.length) return;
+    for (const l of choisis) {
+      onAddToReserve({ ...blank, title: l.title, category: l.category || 'visite', address: l.location || '' });
+    }
+    setAutresLieux([]);
+    setLieuxRetenus(new Set());
+    setImportMsg(`${choisis.length} lieu${choisis.length > 1 ? 'x' : ''} mis en réserve ✓`);
+  };
+
   const handleImport = async () => {
     const raw = importUrl.trim();
     setImporting(true);
@@ -164,6 +186,12 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         if (!result) result = await extractPlaceClient(normalized);
 
         if (result && (result.title || result.lat != null)) {
+          // Retenus par défaut : ils viennent d'être trouvés, et décocher est
+          // plus rapide que cocher six fois.
+          if (result.autresLieux?.length) {
+            setAutresLieux(result.autresLieux);
+            setLieuxRetenus(new Set(result.autresLieux.map((_, i) => i)));
+          }
           applyResult({ ...result, link: result.link || raw }, raw);
 
           // Un lien partagé donne presque toujours le NOM du lieu, rarement son
@@ -236,6 +264,24 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setImporting(false);
     }
   };
+
+  // Un lien arrivé du menu Partager est déjà connu : le chercher tout de suite
+  // évite un appui de plus. La ref retient ce qui a déjà été lancé — sans elle,
+  // le moindre rendu relancerait la requête. Placé après `handleImport` : une
+  // const n'existe pas avant sa déclaration.
+  const lienLanceRef = useRef(null);
+  useEffect(() => {
+    if (!isOpen || !lienInitial || importing) return;
+    if (lienLanceRef.current === lienInitial) return;
+    if (importUrl.trim() !== lienInitial.trim()) return;
+    lienLanceRef.current = lienInitial;
+    // Hors de la phase de validation de l'effet : `handleImport` lève tout de
+    // suite un drapeau « recherche en cours », et l'enchaîner ici ferait un
+    // rendu en cascade.
+    queueMicrotask(handleImport);
+  }, [isOpen, lienInitial, importUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!isOpen) lienLanceRef.current = null; }, [isOpen]);
+
 
   const compressImage = (file) => new Promise((resolve) => {
     const reader = new FileReader();
@@ -432,6 +478,49 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
             {importMsg && <p className="import-msg">{importMsg}</p>}
+
+            {/* Les autres lieux cités par la même légende. Ils partent en
+                Réserve — ce sont des idées, pas un programme — et l'app ira
+                compléter leurs fiches comme pour n'importe quel ajout. */}
+            {autresLieux.length > 0 && (
+              <div className="autres-lieux">
+                <p className="autres-lieux__titre">
+                  Ce lien cite aussi {autresLieux.length} lieu{autresLieux.length > 1 ? 'x' : ''} :
+                </p>
+                <ul className="autres-lieux__liste">
+                  {autresLieux.map((l, i) => (
+                    <li key={`${l.title}-${i}`}>
+                      <button
+                        type="button"
+                        className={`autres-lieux__item${lieuxRetenus.has(i) ? ' autres-lieux__item--on' : ''}`}
+                        aria-pressed={lieuxRetenus.has(i)}
+                        onClick={() => setLieuxRetenus(s => {
+                          const n = new Set(s);
+                          if (n.has(i)) n.delete(i); else n.add(i);
+                          return n;
+                        })}
+                      >
+                        <span className="autres-lieux__coche" aria-hidden="true">
+                          {lieuxRetenus.has(i) ? '☑' : '☐'}
+                        </span>
+                        <span className="autres-lieux__nom">
+                          {getCategoryMeta(l.category).emoji} {l.title}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="btn btn--secondary btn--sm autres-lieux__valider"
+                  disabled={!lieuxRetenus.size}
+                  onClick={ajouterLesAutres}
+                >
+                  📦 Mettre {lieuxRetenus.size} en réserve
+                </button>
+              </div>
+            )}
+
             {poiHint && (
               <button type="button" className="poi-hint" onClick={usePoiHint}>
                 <span className="poi-hint__icon" aria-hidden="true">💡</span>

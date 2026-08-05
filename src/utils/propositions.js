@@ -59,9 +59,11 @@ const hhmm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, '0')}:${S
  *
  * @param {object} activite — celle qu'on vient de poser
  * @param {object} jour — la journée d'accueil, activité comprise ou non
+ * @param {object} [opts]
+ * @param {Record<string,string>} [opts.feries] — `{ '2026-08-15': 'Assomption' }`
  * @returns {Array<{cle: string, icone: string, texte: string}>} vide = rien à dire
  */
-export function signauxAjout(activite, jour, { maintenant = new Date() } = {}) {
+export function signauxAjout(activite, jour, { maintenant = new Date(), feries = null } = {}) {
   const out = [];
   if (!activite || !jour) return out;
   const autres = (jour.activities || []).filter(a => a && a.id !== activite.id);
@@ -75,6 +77,19 @@ export function signauxAjout(activite, jour, { maintenant = new Date() } = {}) {
     out.push({
       cle: 'ferme', icone: '🚪',
       texte: aujourdhui ? "C'est fermé en ce moment." : 'C\'est fermé ce jour-là.',
+    });
+  }
+
+  // ── Jour férié ────────────────────────────────────────────────────────────
+  // Les horaires OpenStreetMap portent une règle « PH » que le lecteur ne sait
+  // pas résoudre faute de calendrier : un lieu peut donc paraître ouvert un
+  // jour de fermeture nationale. On ne prétend pas savoir si CE lieu ferme —
+  // on dit ce qui est vrai et vérifiable, et on laisse juger.
+  const ferie = feries?.[String(jour.date || '').slice(0, 10)];
+  if (ferie && ouvert !== true) {
+    out.push({
+      cle: 'ferie', icone: '📅',
+      texte: `C'est un jour férié (${ferie}) — beaucoup de lieux ferment.`,
     });
   }
 

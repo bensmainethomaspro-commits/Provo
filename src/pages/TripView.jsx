@@ -20,11 +20,12 @@ import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm } from '../utils/helpers';
+import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
+import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
 import PropositionSheet from '../components/PropositionSheet';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
@@ -187,7 +188,7 @@ function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayT
   return handleTouchDragStart;
 }
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -288,6 +289,33 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
   // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
   // avant — elle ne bloque pas le geste.
   const [proposition, setProposition] = useState(null);
+  // Le calendrier des jours fériés du pays visité, préchargé pendant qu'on a du
+  // réseau : sur place, c'est justement là qu'on n'en a pas.
+  const [feriesReseau, setFeriesReseau] = useState(null);
+  // Le lien qu'on est en train d'ajouter : collé depuis le presse-papier, ou
+  // reçu du menu Partager. Un lien reçu ouvre la feuille par déduction — pas
+  // par un effet qui pousserait un état déjà contenu dans les props.
+  const [lienColle, setLienColle] = useState(null);
+  const lienEnCours = lienColle || lienAImporter || null;
+
+  // Préchargé tant qu'on a du réseau : sur place, c'est justement là qu'on n'en
+  // a pas. Ce hook doit rester AVANT le retour anticipé sur `!trip`, sinon son
+  // rang change d'un rendu à l'autre.
+  useEffect(() => {
+    const pays = anchor?.pays;
+    if (!pays || !trip) return undefined;
+    let annule = false;
+    preparerFeries(pays, trip).then(f => {
+      if (!annule && Object.keys(f).length) setFeriesReseau(f);
+    });
+    return () => { annule = true; };
+  }, [anchor?.pays, trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ce qui est déjà en cache s'applique sans attendre le réseau — et reste vrai
+  // hors ligne. L'état ne porte que ce que la requête a ajouté.
+  const feries = useMemo(
+    () => ({ ...feriesEnCache(anchor?.pays, anneesDuVoyage(trip)), ...(feriesReseau || {}) }),
+    [anchor?.pays, trip?.id, feriesReseau]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tripMembers, setTripMembers] = useState([]);
   const [slideClass, setSlideClass] = useState('');
   const undoRef = useRef(null);
@@ -621,6 +649,20 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
     (dayId, actId) => moveToNextDay(tripId, dayId, actId));
   const undoableMoveDayToDay = withUndo('Activité déplacée',
     (srcDayId, tgtDayId, actId) => moveDayToDay(tripId, srcDayId, tgtDayId, actId));
+  // Lire le presse-papier demande un geste explicite de l'utilisateur : Safari
+  // affiche sa propre confirmation, et c'est très bien — personne ne veut
+  // qu'une page lise ce qu'il a copié sans le savoir.
+  const collerUnLien = async () => {
+    let texte = '';
+    // Refus de l'utilisateur, ou API absente : on ouvre quand même la feuille.
+    try { texte = await navigator.clipboard.readText(); } catch { /* rien à coller */ }
+    const lien = premierLien(texte);
+    // Rien d'exploitable : on ouvre quand même la feuille, prête à recevoir.
+    setLienColle(lien || null);
+    setSheetDefaultDayId(null);
+    setSheetOpen(true);
+  };
+
   const undoableAssignFromReserve = withUndo('Idée placée dans la journée',
     (dayId, actId, avant) => {
       // Les signaux se lisent sur l'état d'AVANT : après le déplacement, l'idée
@@ -630,7 +672,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
       const jour = (avant?.days || []).find(d => d.id === dayId);
       moveFromReserveToDay(tripId, dayId, actId);
       if (!idee || !jour) return;
-      const signaux = signauxAjout(idee, jour);
+      const signaux = signauxAjout(idee, jour, { feries });
       if (!signaux.length) return;
       const idx = avant.days.findIndex(d => d.id === dayId);
       setProposition({ titre: idee.title, jour: `Jour ${idx + 1}`, signaux });
@@ -1104,6 +1146,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
               </div>
             ) : (
               <>
+                {/* Remplir le vivier est le geste le plus fréquent avant le
+                    départ. Sur iPhone, le menu Partager ne peut pas viser une
+                    app web (WebKit n'implémente pas le Web Share Target) :
+                    coller reste le chemin le plus court, et il marche partout. */}
+                <button className="reserve-coller" onClick={collerUnLien}>
+                  📋 Coller un lien
+                </button>
                 <div className="reserve-search-bar">
                   <input
                     className="reserve-search-input"
@@ -1336,8 +1385,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
 
       {/* Modals & sheets */}
       <AddActivitySheet
-        isOpen={sheetOpen && !editingActivity}
-        onClose={() => { setSheetOpen(false); setSheetDefaultDayId(null); }}
+        isOpen={(sheetOpen || !!lienAImporter) && !editingActivity}
+        onClose={() => { setSheetOpen(false); setSheetDefaultDayId(null); setLienColle(null); onLienConsomme?.(); }}
         days={trip.days}
         defaultDayId={sheetDefaultDayId}
         onAddToReserve={(a) => { const id = addToReserve(tripId, a); autoEnrich(a, id, { type: 'reserve' }); }}
@@ -1349,6 +1398,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark }) {
         tripLat={anchor?.lat}
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
+        lienInitial={lienEnCours}
       />
 
       {fouilleEnCours && (

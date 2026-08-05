@@ -11,7 +11,11 @@ export async function extractViaEdge(url) {
     });
     if (error) return null;
     if (data?.ok && data.result && (data.result.title || data.result.lat != null)) {
-      return data.result;
+      // Les lieux que la légende citait en plus voyagent avec le principal.
+      // Rangés sur l'objet plutôt que dans un second retour : tous les
+      // appelants existants continuent de lire ce qu'ils lisaient.
+      const autres = Array.isArray(data.autres) ? data.autres.filter(a => a?.title) : [];
+      return autres.length ? { ...data.result, autresLieux: autres } : data.result;
     }
     return null;
   } catch {
@@ -1112,4 +1116,21 @@ export function nearestNeighborSort(activities) {
     remaining.splice(minIdx, 1);
   }
   return [...result, ...other];
+}
+
+/**
+ * Le premier lien d'un texte partagé.
+ *
+ * Les apps ne partagent pas toutes de la même façon : Instagram et TikTok
+ * envoient souvent l'URL noyée dans `text` avec une légende autour, Safari la
+ * met dans `url`. On accepte les deux et on prend ce qui ressemble à un lien.
+ */
+export function premierLien(...morceaux) {
+  for (const m of morceaux) {
+    const t = String(m || '').trim();
+    if (!t) continue;
+    const trouve = t.match(/https?:\/\/[^\s<>"']+/);
+    if (trouve) return trouve[0].replace(/[.,;)\]]+$/, '');
+  }
+  return null;
 }

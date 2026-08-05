@@ -11,7 +11,10 @@ import { useState, useEffect } from 'react';
 // la zone visée — et le défaut empirait à mesure qu'on remplissait le voyage.
 // D'où : un point d'ancrage à part, qui ne dépend que de la destination.
 
-const CACHE_KEY = 'provo_dest_coords';
+// v2 : l'ancre porte désormais le code pays, dont dépend le calendrier des
+// jours fériés. Les entrées v1 n'en avaient pas — nouvelle clé plutôt qu'un
+// repli qui donnerait un pays vide pour toujours.
+const CACHE_KEY = 'provo_dest_coords_v2';
 
 function readCache() {
   try { return JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); }
@@ -26,6 +29,7 @@ const memory = new Map();
 
 /**
  * Géocode une destination, une seule fois par chaîne de caractères.
+ * Rend `{ lat, lon, pays }`.
  * Le résultat est mémorisé — une destination ne bouge pas, et le géocodeur
  * limite à une requête par seconde.
  */
@@ -39,13 +43,19 @@ export async function geocodeDestination(destination) {
 
   try {
     const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
+      + `&format=json&limit=1&addressdetails=1`,
       { headers: { 'Accept-Language': 'fr' } }
     );
     if (!r.ok) return null;
     const d = await r.json();
     if (!d?.[0]) return null;
-    const coords = { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
+    const coords = {
+      lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon),
+      // Le pays sert à savoir quels jours sont fériés là-bas — un 15 août
+      // ferme les musées à Vienne, pas à Londres.
+      pays: (d[0].address?.country_code || '').toUpperCase() || null,
+    };
     if (!Number.isFinite(coords.lat)) return null;
     memory.set(q, coords);
     writeCache({ ...cache, [q]: coords });

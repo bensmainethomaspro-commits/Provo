@@ -295,6 +295,21 @@ const A_SIGNALER = { ...TRIP,
     // Fermé tous les jours de la semaine, et à 40 km du reste du programme.
     openingHours: 'Mo-Su off', lat: 48.5500, lon: 16.3700, travelerIds: [] }] };
 
+// Le 15 août prochain — jour férié en Autriche, et le genre de date où l'on se
+// présente devant une porte close sans avoir rien vu venir.
+const PROCHAIN_15_AOUT = (() => {
+  const n = new Date();
+  const a = new Date(n.getFullYear(), 7, 15) < n ? n.getFullYear() + 1 : n.getFullYear();
+  return `${a}-08-15`;
+})();
+const JOUR_FERIE = { ...TRIP,
+  destination: 'Vienne', startDate: PROCHAIN_15_AOUT, endDate: PROCHAIN_15_AOUT,
+  days: [{ id: 'd1', date: PROCHAIN_15_AOUT, startTime: '09:00', notes: '', activities: [] }],
+  // Sans horaires connus : c'est justement le cas où seul le calendrier peut
+  // prévenir. Une fiche « fermée » le dirait déjà toute seule.
+  reserve: [{ id: 'musee', title: 'Musée Leopold', category: 'visite', status: 'todo',
+    durationHours: 2, durationMinutes: 0, travelerIds: [] }] };
+
 // ── Les parcours ────────────────────────────────────────────────────────────
 // Chacun est une intention d'utilisateur, pas un test unitaire. `depart` dit
 // dans quel état l'app démarre : 'vierge' (aucun voyage), 'voyage' (le voyage
@@ -1189,6 +1204,136 @@ const PARCOURS = [
       t.verifier('aucune correction inventée', !/Corriger|Remplacer/i.test(txt)
         || /impossible|indisponible|réessay|plus tard/i.test(txt),
         txt.slice(0, 100).replace(/\n/g, ' · '));
+    } },
+
+  { groupe: 'Propositions', nom: 'Un jour férié est signalé', depart: JOUR_FERIE,
+    reseau: { feries: 'ok', nominatim: 'ok' },
+    intention: "Poser une visite un 15 août sans savoir que tout ferme.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Le calendrier se charge après le géocodage de la destination.
+      await t.p.waitForTimeout(2600);
+      await t.onglet(/Réserve/i);
+      await t.clic('.reserve-assign__toggle', { delai: 700 });
+      await t.clic('.reserve-assign__day', { delai: 1600 });
+      t.verifier('le calendrier a été consulté', (t.appels().feries || 0) > 0,
+        `${t.appels().feries || 0} appels`);
+      const popup = await t.p.evaluate(() =>
+        document.querySelector('.sheet--proposition')?.innerText || '');
+      t.verifier('le jour férié est signalé', /f[ée]ri[ée]/i.test(popup),
+        popup.replace(/\n/g, ' · ').slice(0, 110) || '(aucun pop-up)');
+      t.verifier('son nom local est donné', /Himmelfahrt|Assumption|Assomption/i.test(popup));
+    } },
+
+  { groupe: 'Propositions', nom: 'Le calendrier reste dispo hors ligne', depart: JOUR_FERIE,
+    reseau: { feries: 'ok', nominatim: 'ok' },
+    intention: "Sur place, sans réseau, le signal doit encore fonctionner.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.p.waitForTimeout(2600);
+      const enCache = await t.p.evaluate(() => {
+        try { return Object.keys(JSON.parse(localStorage.getItem('provo_feries') || '{}')).length; }
+        catch { return 0; }
+      });
+      // Mis en cache pendant qu'on avait du réseau : c'est ce qui le rend
+      // utilisable là où on n'en a plus.
+      t.verifier('le calendrier est mis en cache', enCache > 0, `${enCache} entrées`);
+      const dates = await t.p.evaluate(() => {
+        const c = JSON.parse(localStorage.getItem('provo_feries') || '{}');
+        return Object.values(c).flatMap(o => Object.keys(o));
+      });
+      t.verifier('les dates sont bien celles du pays visité', dates.some(d => /-08-15$/.test(d)),
+        dates.slice(0, 4).join(', '));
+      // Une fête régionale ne ferme pas le pays : l'annoncer partout serait faux.
+      t.verifier('les fêtes régionales sont écartées', !dates.some(d => /-11-15$/.test(d)),
+        dates.join(', '));
+    } },
+
+  { groupe: 'Réserve', nom: 'Un lien partagé remplit la Réserve', depart: 'voyage',
+    reseau: { extractPlace: 'ok' },
+    intention: "Recevoir un lien d'Instagram ou TikTok et le ranger sans rien saisir.",
+    async faire(t) {
+      // Ce que le menu Partager d'Android envoie, et ce que le raccourci iOS
+      // reproduit : l'app s'ouvre avec le lien dans l'URL.
+      await t.p.goto(`${URL_BASE}/?texte=${encodeURIComponent('Ce café à Vienne 😍 https://maps.app.goo.gl/xyz')}`,
+        { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(1400);
+      const banniere = await t.texte();
+      t.verifier("l'accueil annonce le lien reçu", /lien re[çc]u/i.test(banniere),
+        (banniere.match(/[^\n]*lien re[çc]u[^\n]*/i) || ['(rien)'])[0].slice(0, 70));
+      // Pas de téléportation : c'est un choix, pas une surprise.
+      t.verifier("aucun voyage n'est ouvert d'office", !(await t.visible('.trip-view')));
+
+      await t.clic('.import-banner button', { texte: /Ajouter/, delai: 1200, obligatoire: false })
+        || await t.ouvrirVoyage();
+      await t.p.waitForTimeout(2600);
+      t.verifier("le service d'extraction est appelé tout seul", (t.appels().extractPlace || 0) > 0,
+        `${t.appels().extractPlace || 0} appels`);
+      const rempli = await t.p.evaluate(() => {
+        const q = (s) => document.querySelector(s)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'), adresse: q('input[placeholder="Lieu"]') };
+      });
+      t.verifier('la feuille est ouverte et préremplie', /Central/i.test(rempli.titre),
+        rempli.titre || '(vide)');
+      t.verifier("l'adresse aussi", rempli.adresse.length > 5, rempli.adresse || '(vide)');
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      t.verifier("l'idée rejoint la Réserve",
+        (await t.voyage()).reserve.some(a => /Central/i.test(a?.title || '')));
+    } },
+
+  { groupe: 'Réserve', nom: 'Coller un lien depuis le presse-papier', depart: 'voyage',
+    reseau: { extractPlace: 'ok' },
+    intention: "Sur iPhone, le menu Partager ne peut pas viser une app web : coller doit marcher.",
+    async faire(t) {
+      await t.p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await t.p.evaluate(() => navigator.clipboard.writeText('https://maps.app.goo.gl/abc'));
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      t.verifier('le bouton « Coller un lien » est là', await t.visible('.reserve-coller'));
+      await t.clic('.reserve-coller', { delai: 2600 });
+      const titre = await t.p.evaluate(() =>
+        document.querySelector('input[placeholder*="Déjeuner au marché"]')?.value || '');
+      t.verifier('le lien collé est cherché tout seul', /Central/i.test(titre), titre || '(vide)');
+    } },
+
+  { groupe: 'Réserve', nom: "Un lien qui cite plusieurs lieux les propose tous", depart: 'voyage',
+    reseau: { extractPlace: 'plusieurs' },
+    intention: "Une vidéo « 4 spots à Vienne » ne doit pas n'en donner qu'un.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const avant = (await t.voyage()).reserve.length;
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://www.tiktok.com/@x/video/1');
+      await t.clic('.import-row button', { delai: 2600, obligatoire: false });
+
+      t.verifier('les autres lieux sont proposés', await t.visible('.autres-lieux'));
+      const noms = await t.p.evaluate(() =>
+        [...document.querySelectorAll('.autres-lieux__nom')].map(n => n.textContent.trim()));
+      t.verifier('les trois autres sont listés', noms.length === 3, noms.join(' · ') || '(aucun)');
+      // Cochés d'avance : décocher est plus rapide que cocher trois fois.
+      const coches = await t.p.evaluate(() =>
+        document.querySelectorAll('.autres-lieux__item--on').length);
+      t.verifier('ils sont retenus par défaut', coches === 3, `${coches} sur ${noms.length}`);
+
+      // On en écarte un : le compte doit suivre.
+      await t.clic('.autres-lieux__item', { delai: 400 });
+      const libelle = await t.p.evaluate(() =>
+        document.querySelector('.autres-lieux__valider')?.innerText || '');
+      t.verifier('le bouton compte ce qui reste coché', /2/.test(libelle), libelle);
+
+      await t.clic('.autres-lieux__valider', { delai: 1400 });
+      const apres = (await t.voyage()).reserve;
+      t.verifier('les lieux retenus rejoignent la Réserve',
+        apres.length === avant + 2, `${avant} → ${apres.length}`);
+      // Le premier de la liste a été décoché : il ne doit pas être là, et les
+      // deux autres doivent y être.
+      const titres = apres.map(a => a?.title || '');
+      t.verifier('celui qu\'on a décoché est resté dehors',
+        !titres.some(x => /Schwarzen Kameel/i.test(x)), titres.slice(-3).join(', '));
+      t.verifier('les deux autres sont bien arrivés',
+        titres.some(x => /Sperl/i.test(x)) && titres.some(x => /Volksgarten/i.test(x)),
+        titres.slice(-3).join(', '));
     } },
 
 ];

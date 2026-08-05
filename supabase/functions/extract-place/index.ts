@@ -636,6 +636,16 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     if (ai.title) title = ai.title;
     if (ai.category && VALID_CATEGORIES.includes(ai.category)) category = ai.category;
   }
+  // Les lieux suivants de la légende : nommés, jamais géocodés ici — le client
+  // les cherchera si l'utilisateur les retient. Géocoder six lieux qu'on va
+  // peut-être tous refuser coûterait six requêtes pour rien.
+  const autresLieux = (ai?.lieux || []).slice(1)
+    .filter((l: any) => l.title)
+    .map((l: any) => ({
+      title: l.title,
+      category: VALID_CATEGORIES.includes(l.category) ? l.category : "visite",
+      location: l.location || "",
+    }));
   // Témoin d'activation : permet de vérifier que le secret est bien posé sans
   // jamais lire la clé. Ne révèle rien d'autre que « le modèle a répondu ».
   const modeleActif = ai !== null;
@@ -648,6 +658,7 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     notes: caption ? caption.slice(0, 400) : "",
     source: "tiktok",
     ...(modeleActif ? { modele: true } : {}),
+    ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
   // Localisation : 1) lieu suggéré par l'IA ou repéré (📍 / "à …") dans la
@@ -759,21 +770,29 @@ async function classifyWithLLM(text: string, _kind: string) {
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 256,
+        max_tokens: 900,
         system:
-          "Tu lis la légende d'une vidéo de voyage et tu en extrais UN lieu.\n" +
-          "Réponds UNIQUEMENT par du JSON compact :\n" +
-          '{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
-          '|"repos"|"trajet"|"fun","location":string,"confiance":"haute"|"basse"}\n' +
+          "Tu lis la légende d'une vidéo de voyage et tu en extrais TOUS les " +
+          "lieux nommés — une légende en cite souvent plusieurs (« 6 spots à " +
+          "Lisbonne »), et n'en garder qu'un ferait perdre le reste.\n" +
+          "Réponds UNIQUEMENT par un tableau JSON compact, 8 entrées au maximum, " +
+          "dans l'ordre de la légende :\n" +
+          '[{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
+          '|"repos"|"trajet"|"fun","location":string,"confiance":"haute"|"basse"}]\n' +
           "title = le NOM de l'établissement ou du lieu, tel qu'on le chercherait " +
           "sur une carte. Jamais une phrase, jamais un slogan, sans emoji ni " +
-          "hashtag. Si la légende ne nomme aucun lieu, renvoie \"\".\n" +
+          "hashtag.\n" +
           "location = « Nom, Ville, Pays » géocodable si tu l'identifies, sinon \"\".\n" +
-          "confiance = \"basse\" dès que tu devines. Mieux vaut une chaîne vide " +
-          "qu'une invention : un lieu faux est pire que pas de lieu.\n" +
+          "confiance = \"basse\" dès que tu devines. Mieux vaut ne pas citer un " +
+          "lieu que d'en inventer un : un lieu faux est pire que pas de lieu.\n" +
+          "Si la légende ne nomme aucun lieu, renvoie [].\n" +
           "Exemples :\n" +
-          '« Perfect restaurant for Gen-Zs😂 #genz #fyp » → {"title":"","category":"resto","location":"","confiance":"basse"}\n' +
-          '« Bouillon Chartier, le moins cher de Paris » → {"title":"Bouillon Chartier","category":"resto","location":"Bouillon Chartier, Paris, France","confiance":"haute"}',
+          '« Perfect restaurant for Gen-Zs😂 #genz #fyp » → []\n' +
+          '« Bouillon Chartier, le moins cher de Paris » → [{"title":"Bouillon Chartier","category":"resto","location":"Bouillon Chartier, Paris, France","confiance":"haute"}]\n' +
+          '« 3 spots à Vienne : Café Central, le Belvédère et Naschmarkt » → ' +
+          '[{"title":"Café Central","category":"resto","location":"Café Central, Vienne, Autriche","confiance":"haute"},' +
+          '{"title":"Belvédère","category":"visite","location":"Belvédère, Vienne, Autriche","confiance":"haute"},' +
+          '{"title":"Naschmarkt","category":"visite","location":"Naschmarkt, Vienne, Autriche","confiance":"haute"}]',
         messages: [{ role: "user", content: text.slice(0, 1500) }],
       }),
     });
@@ -781,19 +800,30 @@ async function classifyWithLLM(text: string, _kind: string) {
     if (!r.ok) return null;
     const d = await r.json();
     const raw = d?.content?.[0]?.text || "";
-    const m = raw.match(/\{[\s\S]*\}/);
+    // Le tableau d'abord ; un objet seul reste accepté au cas où le modèle
+    // retombe sur l'ancienne forme.
+    const m = raw.match(/\[[\s\S]*\]/) || raw.match(/\{[\s\S]*\}/);
     if (!m) return null;
-    const parsed = JSON.parse(m[0]);
-    const titre = typeof parsed.title === "string" ? parsed.title.trim() : "";
-    const lieu = typeof parsed.location === "string" ? parsed.location.trim() : "";
-    // Une réponse peu sûre ne sert qu'à classer : on ne lui laisse ni nommer
-    // l'activité ni la poser sur la carte.
-    const sur = parsed.confiance !== "basse";
-    return {
-      title: sur ? titre : "",
-      category: typeof parsed.category === "string" ? parsed.category.trim() : "",
-      location: sur ? lieu : "",
-    };
+    const brut = JSON.parse(m[0]);
+    const liste = Array.isArray(brut) ? brut : [brut];
+    const lieux = liste
+      .filter((p: any) => p && typeof p === "object")
+      .map((p: any) => {
+        const titre = typeof p.title === "string" ? p.title.trim() : "";
+        const lieu = typeof p.location === "string" ? p.location.trim() : "";
+        // Une réponse peu sûre ne sert qu'à classer : on ne lui laisse ni
+        // nommer l'activité ni la poser sur la carte.
+        const sur = p.confiance !== "basse";
+        return {
+          title: sur ? titre : "",
+          category: typeof p.category === "string" ? p.category.trim() : "",
+          location: sur ? lieu : "",
+        };
+      })
+      .slice(0, 8);
+    // Le modèle a répondu, même sans rien nommer : c'est une information, pas
+    // un échec. Le premier reste en tête pour l'appelant qui n'en veut qu'un.
+    return { ...(lieux[0] || { title: "", category: "", location: "" }), lieux };
   } catch {
     clear();
     return null;
@@ -826,7 +856,13 @@ Deno.serve(async (req) => {
       result = await handleGeneric(url);
     }
     if (!result) return json({ error: "no_data" }, 200);
-    return json({ ok: true, result }, 200);
+    // `result` reste le lieu principal — aucun appelant existant ne change.
+    // `autres` porte ceux que la légende citait en plus : une vidéo « 6 spots
+    // à Lisbonne » n'en donnait qu'un seul jusqu'ici, les cinq autres étaient
+    // perdus alors qu'ils étaient déjà lus.
+    const autres = Array.isArray(result.autres) ? result.autres : [];
+    delete result.autres;
+    return json({ ok: true, result, autres }, 200);
   } catch (e) {
     return json({ error: "extraction_failed", detail: String(e) }, 200);
   }

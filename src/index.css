@@ -6791,3 +6791,57 @@ button.budget-inline:active { transform: scale(0.98); }
 .proposition__note {
   margin: 14px 0 0; font-size: 12.5px; color: var(--text-muted); text-align: center;
 }
+
+/* ─── Coller un lien dans la Réserve ──────────────────────────────────────
+   Remplir le vivier est LE geste d'avant-voyage. Sur iPhone, le menu Partager
+   ne peut pas viser une app web (WebKit n'implémente pas le Web Share Target) :
+   coller est le chemin le plus court, et il marche partout. */
+.reserve-coller {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 44px; margin-bottom: 10px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-deep, var(--accent));
+  font-family: inherit; font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.reserve-coller:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
+/* `--accent-deep` est un bleu foncé fait pour porter du blanc : posé comme
+   texte sur une surface sombre il tombe à 3,39:1. En thème sombre, c'est
+   l'accent clair qui doit écrire. */
+[data-theme="dark"] .reserve-coller { color: var(--accent); }
+
+/* ─── Les autres lieux d'un même lien ─────────────────────────────────────
+   Une légende de vidéo cite rarement un seul endroit. Ils sont déjà lus :
+   cochés par défaut, parce que décocher est plus rapide que cocher six fois. */
+.autres-lieux {
+  margin-top: 10px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 14px;
+  background: var(--surface-raised);
+}
+.autres-lieux__titre {
+  margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--text-muted);
+}
+.autres-lieux__liste { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+.autres-lieux__item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; min-height: 44px; padding: 0 8px;
+  border: none; border-radius: 10px; background: transparent;
+  font-family: inherit; font-size: 14.5px; color: var(--text); text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.autres-lieux__item--on { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.autres-lieux__coche { font-size: 17px; color: var(--accent-deep, var(--accent)); flex-shrink: 0; }
+.autres-lieux__nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autres-lieux__valider { width: 100%; }
+
+/* ─── Le ⋯ d'une fiche : 33 × 20 px mesurés ───────────────────────────────
+   C'est la porte d'entrée vers modifier, supprimer et déplacer — les trois
+   actions les plus utiles d'une fiche — et un pouce ne vise pas 20 px. Même
+   technique que `.map-moi-btn` : la pastille reste fine, la zone touchée fait
+   44 px. Rien ne bouge à l'écran. */
+.activity-card__dots-btn { position: relative; }
+.activity-card__dots-btn::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px); height: max(100%, 44px);
+}
