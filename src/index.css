@@ -6988,3 +6988,11 @@ button.budget-inline:active { transform: scale(0.98); }
 [data-theme="dark"] .recu__btn { color: var(--accent); }
 .recu__btn:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
 .recu__msg { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-muted); }
+
+/* La journée visée pendant un glissement. Déplacer une activité au lendemain
+   passait par un menu, un cran à la fois : elle se prend et se pose. */
+.tl-day--cible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+}

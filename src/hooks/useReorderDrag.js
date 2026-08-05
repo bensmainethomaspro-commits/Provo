@@ -12,19 +12,25 @@ import { useRef, useState, useCallback } from 'react';
  * positions : la liste peut défiler, changer de hauteur, contenir des cartes de
  * tailles différentes — `elementFromPoint` reste juste dans tous les cas.
  *
- * @param {(id: string, cibleId: string|null) => void} onDeplacer
+ * La cible rendue porte AUSSI sa journée : dans un planning, déposer une
+ * activité sur un autre jour est le geste le plus naturel, et le refuser
+ * obligeait à passer par un menu, un cran à la fois.
+ *
+ * @param {(id: string, cible: {id: string|null, jour: string|null}) => void} onDeplacer
  */
 export function useReorderDrag(onDeplacer) {
   const [dragId, setDragId] = useState(null);
-  const [surId, setSurId] = useState(null);
+  const [sur, setSur] = useState(null);
   const etat = useRef({ id: null, sur: null });
 
   const finir = useCallback(() => {
-    const { id, sur } = etat.current;
-    if (id && sur && id !== sur) onDeplacer(id, sur);
+    const { id, sur: cible } = etat.current;
+    // Déposer sur soi-même n'est pas un déplacement ; déposer dans le vide non
+    // plus. Dans les deux cas on ne touche à rien.
+    if (id && cible && (cible.id !== id || cible.jour)) onDeplacer(id, cible);
     etat.current = { id: null, sur: null };
     setDragId(null);
-    setSurId(null);
+    setSur(null);
   }, [onDeplacer]);
 
   const demarrer = useCallback((id, e) => {
@@ -37,19 +43,92 @@ export function useReorderDrag(onDeplacer) {
     const cible = (ev) => {
       const t = ev.touches?.[0] || ev;
       const el = document.elementFromPoint(t.clientX, t.clientY);
-      return el?.closest('[data-reorder-id]')?.dataset.reorderId || null;
+      // Sur une fiche : on se place devant elle.
+      const fiche = el?.closest('[data-reorder-id]');
+      if (fiche) return { id: fiche.dataset.reorderId, jour: fiche.dataset.jourId || null };
+      // Ailleurs dans une journée — son en-tête, son espace vide : on y entre,
+      // à la fin. Sans ça, une journée vide serait impossible à viser.
+      const jour = el?.closest('[data-day-id]');
+      if (jour) return { id: null, jour: jour.dataset.dayId };
+      return null;
+    };
+
+    const memeCible = (a, b) => a?.id === b?.id && a?.jour === b?.jour;
+
+    // Dans le planning, les journées défilent horizontalement : le lendemain
+    // n'est visible que sur quelques pixels. Sans ce défilement au bord, on ne
+    // pourrait déposer que sur la tranche du jour suivant — autant dire nulle
+    // part. Le conteneur se cherche une fois, au départ du geste.
+    // Chaque axe a son conteneur : la frise défile horizontalement, la page
+    // verticalement. Rendre le premier ancêtre défilant tout court renverrait
+    // la carte du jour, qui défile en hauteur — et la frise ne bougerait
+    // jamais.
+    const chercher = (axe) => {
+      let n = e.target;
+      while (n && n !== document.body) {
+        const st = getComputedStyle(n);
+        const debordeX = n.scrollWidth > n.clientWidth + 4;
+        const debordeY = n.scrollHeight > n.clientHeight + 4;
+        if (axe === 'x' && /(auto|scroll)/.test(st.overflowX) && debordeX) return n;
+        if (axe === 'y' && /(auto|scroll)/.test(st.overflowY) && debordeY) return n;
+        n = n.parentElement;
+      }
+      return null;
+    };
+    const defilantX = chercher('x');
+    const defilantY = chercher('y');
+    // La frise est magnétique (`scroll-snap-type: x mandatory`) : chaque petit
+    // incrément était ramené à la journée la plus proche, et le défilement au
+    // bord n'avançait jamais. On suspend le magnétisme le temps du geste, et
+    // on le rend en relâchant — c'est lui qui recale proprement.
+    const snapInitial = defilantX?.style.scrollSnapType ?? null;
+    if (defilantX) defilantX.style.scrollSnapType = 'none';
+    // Le défilement ne doit s'amorcer que quand on cherche à QUITTER la
+    // journée de départ. Une marge fixe au bord du conteneur se déclencherait
+    // dès le premier pixel : la poignée est à quinze pixels du bord gauche, et
+    // un simple réordonnancement vertical ferait défiler toute la frise.
+    const depart = e.target.closest('[data-day-id]')?.getBoundingClientRect() || null;
+    // Une journée fait environ 350 px : à 6 px par image, il en passe une par
+    // seconde. Assez vif pour ne pas attendre, assez lent pour viser — à 14 px
+    // on traversait deux jours et demi par seconde, impossible à arrêter au bon
+    // endroit.
+    const PAS = 6;
+    let pointeur = null, boucle = 0;
+    const defiler = () => {
+      boucle = 0;
+      if (!pointeur) return;
+      let bouge = false;
+      if (defilantX && depart) {
+        if (pointeur.x < depart.left) { defilantX.scrollLeft -= PAS; bouge = true; }
+        else if (pointeur.x > depart.right) { defilantX.scrollLeft += PAS; bouge = true; }
+      }
+      if (defilantY) {
+        const r = defilantY.getBoundingClientRect();
+        // Verticalement, une marge suffit : rien ne démarre au bord.
+        if (pointeur.y < r.top + 56) { defilantY.scrollTop -= PAS; bouge = true; }
+        else if (pointeur.y > r.bottom - 56) { defilantY.scrollTop += PAS; bouge = true; }
+      }
+      // Tant que le doigt reste au bord, on continue : un seul pas par
+      // déplacement ne suffirait pas quand le doigt s'immobilise.
+      if (bouge) boucle = requestAnimationFrame(defiler);
     };
 
     const bouger = (ev) => {
       // Sans ça, le geste fait défiler la page au lieu de déplacer la carte.
       if (ev.cancelable) ev.preventDefault();
-      const sur = cible(ev);
-      if (sur !== etat.current.sur) {
-        etat.current.sur = sur;
-        setSurId(sur);
+      const pt = ev.touches?.[0] || ev;
+      pointeur = { x: pt.clientX, y: pt.clientY };
+      if (!boucle) boucle = requestAnimationFrame(defiler);
+      const c = cible(ev);
+      if (!memeCible(c, etat.current.sur)) {
+        etat.current.sur = c;
+        setSur(c);
       }
     };
     const lacher = () => {
+      if (boucle) cancelAnimationFrame(boucle);
+      boucle = 0; pointeur = null;
+      if (defilantX) defilantX.style.scrollSnapType = snapInitial || '';
       window.removeEventListener('pointermove', bouger);
       window.removeEventListener('pointerup', lacher);
       window.removeEventListener('pointercancel', lacher);
@@ -66,5 +145,7 @@ export function useReorderDrag(onDeplacer) {
     window.addEventListener('touchmove', bouger, { passive: false });
   }, [finir]);
 
-  return { dragId, surId, demarrer };
+  // `surId` reste exposé pour les listes à une seule dimension, qui n'ont pas
+  // de journée à connaître.
+  return { dragId, sur, surId: sur?.id ?? null, demarrer };
 }

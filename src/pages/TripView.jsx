@@ -12,7 +12,6 @@ import PackingList from '../components/PackingList';
 import { forceRefreshApp } from '../components/RefreshButton';
 import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
-import TodayMode from '../components/TodayMode';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
 import { useWeather } from '../hooks/useWeather';
@@ -497,15 +496,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     return new Date(y, m - 1, d) < today;
   })();
 
-  const { isActive, todayDay, todayDayIndex } = (() => {
+  // La journée en cours, quand on est effectivement en voyage. Elle ne sert
+  // plus à afficher un onglet — le planning place déjà le jour J au centre —
+  // mais à savoir où poser ce qu'on pioche, et quoi proposer maintenant.
+  const todayDay = (() => {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const start = new Date(trip.startDate + 'T00:00:00');
     const end = new Date(trip.endDate + 'T00:00:00');
-    const active = !isPast && start <= now && now <= end;
-    if (!active) return { isActive: false, todayDay: null, todayDayIndex: -1 };
+    if (isPast || start > now || now > end) return null;
     const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    const idx = trip.days.findIndex(d => d.date === todayStr);
-    return { isActive: true, todayDay: idx >= 0 ? trip.days[idx] : null, todayDayIndex: idx };
+    return trip.days.find(d => d.date === todayStr) || null;
   })();
 
   // Compte à rebours avant le départ, et brief de la veille pour la journée
@@ -567,10 +567,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const showBudget = initBudget > 0 || stats.total > 0;
 
   // ─── Tab order + swipe navigation ───────────────────────
-  const orderedTabs = [
-    ...(isActive ? ['today'] : []),
-    'planning', 'reserve', 'depenses', 'map', 'notes', 'valise',
-  ];
+  // L'onglet « Aujourd'hui » a été retiré : le planning place déjà le jour J
+  // au centre, et tout ce qu'on y faisait s'y fait directement.
+  const orderedTabs = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
   const navigateTab = (newTab) => {
     if (newTab === tab) return;
@@ -676,6 +675,26 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     setSheetDefaultDayId(null);
     setSheetOpen(true);
   };
+
+  // Glisser une activité d'un jour vers un autre. `moveDayToDay` l'ajoute à la
+  // fin ; si le doigt visait une fiche précise, on la replace devant elle —
+  // sinon déposer en haut d'une journée la ferait atterrir en bas.
+  const deplacerEntreJours = withUndo('Activité déplacée',
+    (jourSource, jourCible, actId, cibleId, avant) => {
+      moveDayToDay(tripId, jourSource, jourCible, actId);
+      if (!cibleId) return;
+      // L'état d'AVANT suffit : la journée d'accueil n'y contient pas encore
+      // l'activité, on la range donc simplement à la place visée. Écrire
+      // l'ordre complet remplace l'ajout en fin de liste.
+      const dest = (avant?.days || []).find(d => d.id === jourCible);
+      const act = (avant?.days || []).find(d => d.id === jourSource)
+        ?.activities.find(a => a.id === actId);
+      if (!dest || !act) return;
+      const arr = dest.activities.filter(a => a.id !== actId);
+      const to = arr.findIndex(a => a.id === cibleId);
+      arr.splice(to < 0 ? arr.length : to, 0, act);
+      setDayActivitiesOrder(tripId, jourCible, arr);
+    });
 
   const undoableAssignFromReserve = withUndo('Idée placée dans la journée',
     (dayId, actId, avant) => {
@@ -978,15 +997,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
       {/* Tabs */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
-        {isActive && (
-          <button role="tab" aria-selected={tab === 'today'} className={`tab-btn tab-btn--today${tab === 'today' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('today')}>
-            <span className="tab-btn__icon">🟢</span>
-            <span className="tab-btn__label">Aujourd'hui</span>
-            {todayDay && todayDay.activities.filter(a => a.status === 'todo').length > 0 && (
-              <span className="tab-badge tab-badge--today" aria-label={`${todayDay.activities.filter(a => a.status === 'todo').length} activités à faire`}>{todayDay.activities.filter(a => a.status === 'todo').length}</span>
-            )}
-          </button>
-        )}
         <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
           <span className="tab-btn__icon">📅</span>
           <span className="tab-btn__label">Planning</span>
@@ -1028,22 +1038,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
       {/* Tab content */}
       <div ref={tabContentRef} role="tabpanel" aria-label={tab} className={`tab-content${slideClass ? ` ${slideClass}` : ''}`} onTouchStart={onTabTouchStart} onTouchEnd={onTabTouchEnd}>
-
-        {/* ── AUJOURD'HUI TAB ── */}
-        {tab === 'today' && isActive && (
-          <TodayMode
-            day={todayDay}
-            dayIndex={todayDayIndex}
-            totalDays={trip.days.length}
-            trip={trip}
-            onStatusChange={handleStatusChange}
-            onReorderActivities={(dayId, newOrder) => setDayActivitiesOrder(tripId, dayId, newOrder)}
-            reserve={trip.reserve}
-            days={trip.days}
-            onAddFromReserve={todayDay ? (actId) => undoableAssignFromReserve(todayDay.id, actId) : null}
-            onMoveFromDay={todayDay ? (srcDayId, actId) => undoableMoveDayToDay(srcDayId, todayDay.id, actId) : null}
-          />
-        )}
 
         {/* ── PLANNING TAB ── */}
         {tab === 'planning' && (
@@ -1132,6 +1126,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
+                onDeplacerEntreJours={deplacerEntreJours}
               />
             )}
 

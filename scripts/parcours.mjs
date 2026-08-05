@@ -370,22 +370,30 @@ const PARCOURS = [
     async faire(t) {
       await t.ouvrirVoyage();
       t.verifier('la vue voyage s\'ouvre', await t.visible('.trip-view'));
-      t.verifier('la barre d\'onglets est là', (await t.combien('.tab-btn')) >= 5,
+      t.verifier('la barre d\'onglets est là', (await t.combien('.tab-btn')) >= 4,
         `${await t.combien('.tab-btn')} onglets`);
       const txt = await t.texte();
       t.verifier('le nom du voyage est affiché', txt.includes('Vienne'));
     } },
 
-  { groupe: "Aujourd'hui", nom: "L'écran du jour répond à « je fais quoi ? »", depart: 'voyage',
-    intention: "Sur place : savoir quoi faire maintenant sans réfléchir.",
+  { groupe: 'Planning', nom: 'Le jour J est au centre en arrivant', depart: 'voyage',
+    intention: "L'onglet du jour a disparu : le planning doit répondre à sa place.",
     async faire(t) {
       await t.ouvrirVoyage();
-      await t.onglet(/Aujourd'hui/i);
-      const txt = await t.texte();
-      t.verifier('une activité est proposée',
-        (await t.combien('.today-act-card, .today-act, .live-day-card')) > 0);
-      t.verifier('le jour est situé dans le voyage', /Jour\s*\d+/i.test(txt),
-        (txt.match(/Jour\s*\d+\s*\/?\s*\d*/i) || [])[0]);
+      await t.onglet(/Planning/i);
+      await t.p.waitForTimeout(900);
+      const vue = await t.p.evaluate(() => {
+        const w = document.querySelector('.timeline-view-wrap');
+        const auj = document.querySelector('.tl-day--auj');
+        if (!w || !auj) return { auj: false };
+        const r = auj.getBoundingClientRect(), c = w.getBoundingClientRect();
+        return { auj: true, visible: r.x < c.right && r.right > c.left,
+          decalage: Math.round(r.x - c.x) };
+      });
+      t.verifier("la journée du jour est repérée", vue.auj);
+      t.verifier('elle est amenée dans le champ', vue.visible !== false, `décalage ${vue.decalage} px`);
+      t.verifier('les activités du jour sont lisibles', (await t.combien('.tl-activity')) > 0,
+        `${await t.combien('.tl-activity')} activités`);
     } },
 
   { groupe: 'Planning', nom: 'Ajouter une activité à un jour', depart: 'voyage',
@@ -787,7 +795,7 @@ const PARCOURS = [
     intention: "Voyage tout neuf : chaque onglet doit dire quoi faire, et le dire juste.",
     async faire(t) {
       await t.ouvrirVoyage();
-      for (const [nom, re] of [["Aujourd'hui", /Aujourd'hui/i], ['Planning', /Planning/i],
+      for (const [nom, re] of [['Planning', /Planning/i],
                                ['Réserve', /Réserve/i], ['Dépenses', /Dépenses/i], ['Carte', /Carte/i]]) {
         if (!(await t.onglet(re, { facultatif: true }))) continue;
         const contenu = (await t.p.evaluate(() =>
@@ -1489,6 +1497,83 @@ const PARCOURS = [
       t.verifier('seul le vécu est dessiné',
         faites < situees && reperes === faites + 2,
         `${faites} faites sur ${situees} situées · ${reperes} repères (attendu ${faites + 2})`);
+    } },
+
+  { groupe: 'Planning', nom: "Glisser une activité d'un jour à l'autre", depart: 'voyage',
+    intention: "Reporter une visite au lendemain sans passer par un menu.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Planning/i);
+      const v0 = await t.voyage();
+      const j1 = v0.days[0], j2 = v0.days[1];
+      const aDeplacer = j1.activities.find(a => !a.isMeal);
+      if (!aDeplacer) t.injouable('aucune activité déplaçable au jour 1');
+
+      // Les journées défilent horizontalement : le lendemain n'est visible que
+      // sur quelques pixels. Le geste consiste donc à emmener l'activité au
+      // bord droit et à laisser le défilement automatique amener la cible —
+      // exactement ce que fait un doigt.
+      const grip = await t.p.locator(`[data-reorder-id="${aDeplacer.id}"] .tl-act-grip`).boundingBox();
+      if (!grip) t.injouable('poignée introuvable');
+      // Pour quitter une journée, le doigt doit dépasser SON bord — pas celui
+      // du conteneur. C'est là que le défilement s'amorce.
+      const bord = await t.p.evaluate(() => {
+        const w = document.querySelector('.timeline-view-wrap');
+        const carte = document.querySelector('.tl-day').getBoundingClientRect();
+        return { x: Math.min(Math.round(carte.right + 14), innerWidth - 6),
+          y: Math.round(carte.top + carte.height / 2), depart: w.scrollLeft };
+      });
+      await t.p.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+      await t.p.mouse.down();
+      await t.p.waitForTimeout(120);
+      for (let i = 1; i <= 8; i++) {
+        await t.p.mouse.move(
+          grip.x + (bord.x - grip.x) * i / 8,
+          grip.y + (bord.y - grip.y) * i / 8);
+        await t.p.waitForTimeout(70);
+      }
+      // On laisse le défilement amener le jour suivant sous le doigt.
+      await t.p.waitForTimeout(1400);
+      const pendant = await t.p.evaluate(() => ({
+        jourMarque: !!document.querySelector('.tl-day--cible'),
+        defile: document.querySelector('.timeline-view-wrap').scrollLeft,
+        cible: document.querySelector('.tl-day--cible')?.dataset?.dayId || null,
+      }));
+      await t.p.mouse.up();
+      await t.p.waitForTimeout(900);
+
+      t.verifier('la frise défile pendant le glissement', pendant.defile > bord.depart,
+        `${bord.depart} → ${pendant.defile} px`);
+      t.verifier('la journée visée est signalée', pendant.jourMarque, pendant.cible || '(aucune)');
+      const v = await t.voyage();
+      const dansJ1 = v.days[0].activities.some(a => a?.id === aDeplacer.id);
+      const ailleurs = v.days.slice(1).findIndex(d => d.activities.some(a => a?.id === aDeplacer.id));
+      t.verifier("l'activité a changé de jour", !dansJ1 && ailleurs >= 0,
+        `jour 1 : ${dansJ1 ? 'oui' : 'non'} · arrivée jour ${ailleurs + 2}`);
+      t.verifier('rien n\'est perdu au passage',
+        v.days.flatMap(d => d.activities).filter(Boolean).length
+          === v0.days.flatMap(d => d.activities).length,
+        `${v0.days.flatMap(d => d.activities).length} → ${v.days.flatMap(d => d.activities).filter(Boolean).length}`);
+      t.verifier("l'app ne tombe pas", !(await t.visible('.error-screen')));
+    } },
+
+  { groupe: 'Planning', nom: "L'onglet Aujourd'hui n'existe plus", depart: 'voyage',
+    intention: "Le planning place déjà le jour J au centre.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const onglets = await t.p.evaluate(() =>
+        [...document.querySelectorAll('.tab-btn')].map(b => b.innerText.replace(/\s+/g, ' ').trim()));
+      t.verifier("l'onglet a disparu de la barre",
+        !onglets.some(o => /Aujourd'hui/i.test(o)), onglets.join(' · '));
+      t.verifier('la barre garde ses autres onglets', onglets.length >= 4, `${onglets.length} onglets`);
+      // Et ce qu'on y faisait doit rester atteignable.
+      t.verifier('« Que faire maintenant ? » reste dans le menu',
+        await t.p.evaluate(async () => {
+          document.querySelector('button[aria-label="Options du voyage"]')?.click();
+          await new Promise(r => setTimeout(r, 400));
+          return [...document.querySelectorAll('.trip-header-menu__item')]
+            .some(b => /Que faire maintenant/i.test(b.innerText));
+        }));
     } },
 
 ];
