@@ -886,13 +886,16 @@ const PARCOURS = [
     async faire(t) {
       await t.ouvrirVoyage();
       await t.onglet(/Planning/i);
-      const frise = (await t.texte()).match(/surcharg/i);
+      // Sur la frise, le signal est un glyphe dans la rangée d'état du jour :
+      // il porte son message en `aria-label`, pas en texte visible — on ne va
+      // pas écrire « journée surchargée » en toutes lettres sur chaque carte.
+      const surLaFrise = await t.p.locator('.tl-day__souci').count()
+        || /surcharg/i.test(await t.texte());
       await t.ouvrirLeJour();
-      const jour = (await t.texte()).match(/surcharg/i);
-      t.verifier('la surcharge est signalée quelque part', !!(frise || jour),
-        `frise : ${frise ? 'oui' : 'non'} · détail du jour : ${jour ? 'oui' : 'non'}`);
-      if (!frise && jour) t.friction("l'alerte n'existe que dans le détail du jour",
-        'la vue par défaut du planning ne la montre pas — il faut ouvrir le jour pour la voir');
+      const dansLeJour = /surcharg/i.test(await t.texte());
+      t.verifier('la surcharge se voit sans ouvrir le jour', !!surLaFrise,
+        surLaFrise ? 'signalée sur la carte du jour' : 'absente de la frise');
+      t.verifier('et le détail dit pourquoi', dansLeJour);
     } },
 
   { groupe: 'Dépenses', nom: 'Seul en voyage : pas de partage absurde', depart: SOLO,

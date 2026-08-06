@@ -253,6 +253,28 @@ const ECRANS = [
   { nom: 'Réserve', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Réserve/i); } },
   { nom: 'Dépenses', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Dépenses/i); } },
   { nom: 'Carte', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200); } },
+  // Deux écrans arrivés en août 2026 et jamais mesurés : le pli du formulaire
+  // d'ajout, et les billets du voyage. Le débordement de la zone de notes
+  // sous la barre d'onglets s'était vu à l'œil — c'est exactement ce que cet
+  // outil est censé trouver avant moi.
+  {
+    nom: 'Ajout',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('.header__add-btn').click().catch(() => {});
+      await p.waitForTimeout(600);
+    },
+  },
+  {
+    nom: 'Notes',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('button[aria-label="Options du voyage"]').click().catch(() => {});
+      await p.waitForTimeout(300);
+      await p.locator('.trip-header-menu__item', { hasText: /Notes/ }).click().catch(() => {});
+      await p.waitForTimeout(600);
+    },
+  },
   {
     nom: 'Fiche activité',
     aller: async (p) => {
