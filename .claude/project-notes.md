@@ -131,10 +131,28 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   rester ouvert — il n'accepte aucune donnée, ne rend que des compteurs, et
   n'envoie chaque rappel qu'une fois.
 
-  **Non vérifié de bout en bout depuis ici** : le bac à sable ne joint ni un
-  service de push réel ni le domaine Supabase du projet. Ce qui est vérifié :
-  l'app se construit, les 63 parcours passent, et l'interrupteur affiche la
-  bonne raison quand la clé publique est absente.
+  **Installé et mesuré le 6 août 2026.** Le workflow a créé la table et déposé
+  la clé privée ; son dernier pas a échoué parce que `main` est protégée — il
+  ouvre maintenant une PR au lieu de pousser. Vérifié depuis un exécuteur
+  GitHub, sur le vrai projet :
+
+  ```
+  POST .../functions/v1/push-tick → HTTP 200
+  {"ok":true,"abonnes":0,"envoyes":0}
+  ```
+
+  Si la table manquait, la réponse serait `abonnements_illisibles` ; si la clé
+  privée manquait, `vapid_absent`. Les deux sont donc en place, et la clé
+  publique est dans le bundle construit depuis `main`.
+
+  **Reste non prouvé tant qu'aucun appareil n'est abonné** : le chiffrement de
+  la charge utile et l'envoi réel. Le premier abonnement fera passer `abonnes`
+  à 1 au tour suivant — c'est le contrôle à faire après avoir touché
+  l'interrupteur.
+
+  **Le bac à sable de développement ne joint ni `vercel.app` ni le domaine
+  Supabase du projet** : toute vérification de la chaîne réelle passe par un
+  exécuteur GitHub (voir E2 dans le playbook).
 
 - **La carte se garde toute seule** (août 2026). Ouvrir l'onglet Carte quand le
   départ est à moins de dix jours pré-charge les tuiles autour des lieux du
