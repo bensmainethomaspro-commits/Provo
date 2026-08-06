@@ -72,6 +72,14 @@ export function useTrips() {
   const [userEmail, setUserEmail] = useState(null);
   const [userProfile, setUserProfile] = useState({ name: null, emoji: null });
   const [authLoading, setAuthLoading] = useState(true);
+  // Vrai dès qu'une écriture locale échoue : le voyage ne tient plus dans le
+  // stockage du navigateur, et tout ce qui n'est pas parti chez Supabase est
+  // en sursis. Ça se dit à l'écran.
+  const [stockagePlein, setStockagePlein] = useState(false);
+  // Le drapeau est doublé d'une référence : sans elle, on appellerait setState
+  // à chaque sauvegarde — donc à chaque frappe. On ne rend l'information à
+  // React qu'au moment où elle change vraiment.
+  const pleinRef = useRef(false);
   const syncedHashRef = useRef({});
   const syncTimeouts = useRef({});
   const remoteIdsRef = useRef(new Set());
@@ -144,16 +152,25 @@ export function useTrips() {
   }, [loadFromSupabase, applySession]);
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
+  // Vrai dès qu'une écriture locale échoue : le voyage ne tient plus.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchroniser
+  // React avec un système extérieur (le stockage du navigateur) est exactement
+  // ce à quoi un effet sert ; l'écriture ne se produit qu'au changement d'état.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+      if (pleinRef.current) { pleinRef.current = false; setStockagePlein(false); }
     } catch (e) {
       // Photos de couverture, captures et PDF sont stockés en base64 dans le
-      // voyage : le quota du navigateur (~5 Mo) se dépasse vite. L'écriture
-      // échoue alors pour tout le reste aussi, et ce qui n'est pas encore parti
-      // vers Supabase disparaît au rechargement. À défaut de mieux, ne plus
-      // avaler l'échec en silence.
+      // voyage : le stockage local tient 5,1 Mo — mesuré — et il se dépasse
+      // vite. L'écriture échoue alors pour TOUT le reste aussi, et ce qui n'est
+      // pas encore parti vers Supabase disparaît au rechargement.
+      //
+      // C'est la pire panne possible : silencieuse, et elle mange le travail.
+      // Elle se dit maintenant à l'écran, pas dans une console que personne
+      // n'ouvre sur un téléphone.
       console.error('[Provo] Sauvegarde locale impossible :', e?.name || e);
+      if (!pleinRef.current) { pleinRef.current = true; setStockagePlein(true); }
     }
   }, [trips]);
 
@@ -823,6 +840,7 @@ export function useTrips() {
     userProfile,
     updateProfile,
     authLoading,
+    stockagePlein,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
     signIn, signUp, signOut, resetPassword,

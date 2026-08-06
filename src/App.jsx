@@ -9,7 +9,7 @@ import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite, currentTrips } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
@@ -145,6 +145,16 @@ function AppInner() {
       )}
       {!isOnline && (
         <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
+      )}
+      {/* La pire panne possible : l'écriture locale échoue, et tout ce qui n'est
+          pas encore parti chez Supabase disparaîtra au rechargement. Elle était
+          silencieuse — un message dans une console que personne n'ouvre sur un
+          téléphone. Elle se dit maintenant, en rouge, avec quoi faire. */}
+      {stockagePlein && (
+        <div className="offline-banner" style={{ background: 'var(--red-deep)' }}>
+          ⚠️ Mémoire pleine — retire des photos ou des billets, sinon les
+          modifications ne seront pas gardées.
+        </div>
       )}
       {/* Un lien partagé ne doit pas téléporter : on annonce ce qu'on a reçu et
           on laisse choisir. Avec un seul voyage en cours, le choix se réduit à

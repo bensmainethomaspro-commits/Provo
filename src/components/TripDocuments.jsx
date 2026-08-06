@@ -18,7 +18,28 @@ import { reduireImage } from '../utils/helpers';
  */
 
 const MAX_PDF = 1_500_000;         // ~1,5 Mo : au-delà, le voyage ne tient plus
-const MAX_TOTAL = 6_000_000;       // marge sous le quota de stockage local
+
+// Le stockage local d'un navigateur tient **5,1 Mo** — mesuré, pas supposé, et
+// c'est une limite dure que `navigator.storage.estimate()` ne dit pas (il
+// annonce 1 Go, qui vaut pour d'autres stockages). Tout le voyage y vit :
+// activités, photos de couverture, captures, et ces documents. Un plafond fixe
+// à 6 Mo, comme celui écrit ici d'abord, dépassait donc à lui seul le budget
+// total — et une écriture qui échoue fait perdre en silence tout ce qui n'était
+// pas encore parti chez Supabase.
+//
+// On mesure donc ce qui est réellement occupé, et on garde une réserve.
+const PLAFOND_STOCKAGE = 5_100_000;
+const RESERVE = 700_000;           // de quoi continuer à travailler après coup
+
+function placeRestante() {
+  let occupe = 0;
+  try {
+    for (const cle of Object.keys(localStorage)) {
+      occupe += cle.length + (localStorage.getItem(cle)?.length || 0);
+    }
+  } catch { return 0; }
+  return Math.max(0, PLAFOND_STOCKAGE - RESERVE - occupe);
+}
 
 const poids = (docs) => (docs || []).reduce((n, d) => n + (d.data?.length || 0), 0);
 
@@ -58,9 +79,11 @@ export default function TripDocuments({ documents, onChange }) {
       }
     }
     if (!nouveaux.length) return;
-    const total = poids(docs) + poids(nouveaux);
-    if (total > MAX_TOTAL) {
-      setErreur(`Ça ferait ${lisible(total)} de papiers dans ce voyage — c'est plus que ce que le téléphone garde hors ligne. Retire-en avant d'en ajouter.`);
+    const libre = placeRestante();
+    const ajoute = poids(nouveaux);
+    if (ajoute > libre) {
+      setErreur(`Il reste ${lisible(libre)} de place sur ce téléphone, et ça en demande ${lisible(ajoute)}. `
+        + `Retire des papiers ou des photos avant d'en ajouter — sinon c'est tout le voyage qui ne s'enregistrerait plus.`);
       return;
     }
     onChange([...docs, ...nouveaux]);
