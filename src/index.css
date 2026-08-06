@@ -7140,3 +7140,15 @@ button.budget-inline:active { transform: scale(0.98); }
    la rangée d'état du jour, avec la météo et les notes. Il ne remplace pas le
    détail — il donne la raison d'aller le lire. */
 .tl-day__souci { font-size: 13px; line-height: 1; }
+
+/* Une capacité indisponible ne se montre pas comme un interrupteur grisé :
+   un contrôle mort se lit comme une panne, et on cherche pourquoi ça ne
+   réagit pas. On met la raison et le geste à sa place. */
+.settings-note {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-sunken);
+}
+.settings-note__titre { font-size: 15px; font-weight: 650; color: var(--text); }
+.settings-note__texte { font-size: 13px; line-height: 1.45; color: var(--text-muted); }

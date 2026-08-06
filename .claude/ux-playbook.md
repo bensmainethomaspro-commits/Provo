@@ -75,6 +75,15 @@ qu'elles y soient. À chaque ajout ou modification, il faut penser UX/UI pour qu
 cela s'inclue bien dans ce qui est déjà en place ». Cinquième retour consécutif
 sur la densité.*
 
+**A8. Une capacité indisponible ne se déguise pas en contrôle.** Pas
+d'interrupteur grisé, pas de bouton inerte : à sa place, la raison et le geste
+qui débloque. Un contrôle qui ne réagit pas se lit comme une panne, et on perd
+du temps à chercher ce qu'on fait de travers.
+*Origine : « je ne peux pas cocher comme si le bouton n'en était pas ». Un
+interrupteur de notifications était affiché désactivé là où le système ne les
+permet pas — avec l'explication en petit dessous, que personne ne lit avant
+d'avoir essayé de cliquer.*
+
 ---
 
 ## B · Visibilité et alignement
@@ -248,6 +257,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-07 | mémoire partagée introuvable depuis un autre projet | F2 (affinée) |
 | 2026-07 | « ça ne fonctionne toujours pas […] une solution dont tu es sûre ! » (3ᵉ fois) | E2 (affinée), F4 |
 | 2026-08 | « tu ajoutes toutes les fonctionnalités, juste pour qu'elles y soient » (5ᵉ sur la densité) | A7 |
+| 2026-08 | « je ne peux pas cocher comme si le bouton n'en était pas » | A8 |
 
 ### Récidives repérées
 
