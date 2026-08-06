@@ -111,10 +111,11 @@ jobs:
           })();
           JS
 
-      - name: Commiter la clé publique
+      - name: Ouvrir une PR avec la clé publique
         if: ${{ inputs.renouveler_les_cles }}
         env:
           PUBLIQUE: ${{ steps.cles.outputs.publique }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 - <<'PY'
           import os, pathlib, re
@@ -124,15 +125,24 @@ jobs:
                      f"import.meta.env.VITE_VAPID_PUBLIC_KEY || '{os.environ['PUBLIQUE']}'", s)
           p.write_text(s)
           PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then
             echo "Clé publique inchangée."
-          else
-            git add src/lib/vapid.js
-            git commit -m "chore(rappels): clé publique VAPID posée par le workflow d'installation"
-            git push origin HEAD:${{ github.ref_name }}
+            exit 0
           fi
+          # `main` est protégée : on ne pousse pas dessus, on passe par une PR.
+          # C'est le comportement voulu — une clé publique reste une
+          # modification de code, elle se relit.
+          BR="rappels/cle-publique-$(date +%s)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BR"
+          git add src/lib/vapid.js
+          git commit -m "chore(rappels): clé publique VAPID posée par le workflow d'installation"
+          git push origin "$BR"
+          gh pr create --base "${{ github.ref_name }}" --head "$BR" \
+            --title "Clé publique VAPID" \
+            --body "Posée par le workflow « Installer les rappels ». La clé publique n'est pas un secret : elle vit de toute façon dans le bundle du navigateur. Sa jumelle privée est dans les secrets Supabase et n'apparaît nulle part." \
+            || echo "::notice::PR déjà ouverte."
 
       - name: Récapitulatif
         run: |
@@ -141,7 +151,7 @@ jobs:
             echo
             echo "- Table \`push_subscriptions\` créée (ou déjà là)."
             echo "- Clé privée VAPID déposée dans les secrets Supabase — elle n'apparaît nulle part ailleurs."
-            echo "- Clé publique commitée dans \`src/lib/vapid.js\` : le prochain déploiement Vercel la prendra."
+            echo "- Clé publique proposée en PR sur \`src/lib/vapid.js\` — \`main\` est protégée. Fusionner la PR met les rappels en service."
             echo
             echo "Il ne reste qu'à ouvrir Provo **depuis l'écran d'accueil** de l'iPhone,"
             echo "puis Mon compte → Préférences → « Rappels du voyage »."

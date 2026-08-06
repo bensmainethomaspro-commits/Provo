@@ -14,4 +14,4 @@
  * lieu d'afficher un interrupteur mort.
  */
 export const VAPID_PUBLIC_KEY =
-  import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+  import.meta.env.VITE_VAPID_PUBLIC_KEY || 'BFlVLGz4OrOyFdxzYBS_dOa6xsoVdHoI5UbhYqOxbHoYZJipESrIoNCkU_YTNK9oBTl9Gx-PJU_UeGj0q9Fcbts';
