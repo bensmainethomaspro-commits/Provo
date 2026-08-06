@@ -118,33 +118,35 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
               <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
               <span className="settings-toggle__label">Vibrations (haptics)</span>
             </label>
-            {/* Troisième interrupteur de la même rangée : les rappels sont une
-                préférence d'appareil, ils vivent avec le thème et les
-                vibrations. Aucun écran ni entrée de menu de plus.
+            {/* Les rappels sont une préférence d'appareil : ils vivent avec le
+                thème et les vibrations. Aucun écran ni entrée de menu de plus.
 
-                Quand ils ne sont pas possibles, on n'affiche PAS d'interrupteur
-                grisé : « je ne peux pas cocher, comme si le bouton n'en était
-                pas un ». Un contrôle mort se lit comme une panne. On met à sa
-                place la phrase qui dit quoi faire — un élément au lieu de
-                deux. */}
-            {userId && (notifs.etat.possible ? (
-              <>
-                <label className="settings-toggle" style={{ marginTop: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={notifs.actives}
-                    disabled={notifs.enCours}
-                    onChange={e => (e.target.checked ? notifs.activer() : notifs.desactiver())}
-                  />
-                  <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
-                  <span className="settings-toggle__label">
-                    Rappels du voyage{notifs.enCours ? ' …' : ''}
-                  </span>
-                </label>
-                {notifs.message && (
-                  <p className="settings-section__desc" style={{ marginTop: 6 }}>{notifs.message}</p>
-                )}
-              </>
+                Deux choses ont été enlevées ici, parce qu'elles produisaient
+                toutes deux « ça ne marche pas » sans rien dire :
+
+                1. La rangée était masquée quand personne n'était connecté. On
+                   ne voyait donc RIEN — ni interrupteur, ni raison.
+                2. C'était une case à cocher dans un `<label>`. Sur iOS, la
+                   demande de permission doit partir d'un geste utilisateur, et
+                   l'événement `change` synthétisé par un label perd parfois
+                   cette attribution : on tape, la boîte système n'apparaît
+                   jamais. Un vrai `<button>` ne laisse pas ce doute. */}
+            {notifs.etat.possible ? (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={notifs.actives}
+                className={`settings-switch${notifs.actives ? ' settings-switch--on' : ''}`}
+                disabled={notifs.enCours}
+                onClick={() => (notifs.actives ? notifs.desactiver() : notifs.activer())}
+              >
+                <span className="settings-switch__label">
+                  🔔 Rappels du voyage{notifs.enCours ? ' …' : ''}
+                </span>
+                <span className="settings-toggle__track" aria-hidden="true">
+                  <span className="settings-toggle__thumb" />
+                </span>
+              </button>
             ) : (
               <div className="settings-note" style={{ marginTop: 10 }}>
                 <span className="settings-note__titre">🔔 Rappels du voyage</span>
@@ -156,7 +158,10 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
                       : "Ce navigateur ne sait pas recevoir de notifications."}
                 </span>
               </div>
-            ))}
+            )}
+            {notifs.message && (
+              <p className="settings-section__desc" style={{ marginTop: 6 }}>{notifs.message}</p>
+            )}
           </div>
 
           {/* App */}
