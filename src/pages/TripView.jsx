@@ -23,13 +23,15 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
 import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
 import PropositionSheet from '../components/PropositionSheet';
+import TripDocuments from '../components/TripDocuments';
+import { aProposer as carteAProposer, telecharger as telechargerCarte } from '../utils/carteHorsLigne';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
@@ -42,154 +44,6 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // La pop-up d'enrichissement n'apparaît qu'après une recherche réussie :
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
-
-function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
-  const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
-
-  const handleTouchDragStart = (activityId, touch, sourceEl) => {
-    const s = stateRef.current;
-    s.id = activityId;
-    s.sourceEl = sourceEl;
-    const rect = sourceEl.getBoundingClientRect();
-    s.offset = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-    const ghost = sourceEl.cloneNode(true);
-    Object.assign(ghost.style, {
-      position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
-      width: rect.width + 'px', pointerEvents: 'none', zIndex: '9999',
-      opacity: '0.88', transform: 'scale(1.03) rotate(1deg)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.3)', transition: 'none', borderRadius: '16px',
-    });
-    document.body.appendChild(ghost);
-    s.ghost = ghost;
-    sourceEl.classList.add('activity-card--dragging');
-    // Disable scroll-snap on the timeline so the horizontal auto-scroll is smooth.
-    document.body.classList.add('dnd-active');
-  };
-
-  // Sur la timeline, les jours défilent horizontalement : la carte voisine ne
-  // dépasse souvent que de quelques pixels à l'écran. Viser cette lisière au
-  // doigt est impossible — si le point touché ne tombe sur aucune zone, on
-  // rattrape le dépôt sur la carte la plus proche, à condition de rester à la
-  // hauteur de la timeline. Le geste devient tolérant sans devenir hasardeux.
-  const resolveZone = (x, y) => {
-    const el = document.elementFromPoint(x, y);
-    const direct = el?.closest('[data-drop-zone="true"]');
-    if (direct) return direct;
-    const wrap = document.querySelector('.timeline-view-wrap');
-    if (!wrap) return null;
-    const r = wrap.getBoundingClientRect();
-    if (y < r.top || y > r.bottom) return null;
-    let best = null, bestDist = Infinity;
-    wrap.querySelectorAll('[data-drop-zone="true"]').forEach(z => {
-      const zr = z.getBoundingClientRect();
-      const d = x < zr.left ? zr.left - x : x > zr.right ? x - zr.right : 0;
-      if (d < bestDist) { bestDist = d; best = z; }
-    });
-    return bestDist <= 120 ? best : null;
-  };
-
-  useEffect(() => {
-    const onMove = (e) => {
-      const s = stateRef.current;
-      if (!s.ghost) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
-      s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
-
-      // Vertical auto-scroll (Liste / Agenda). Use the container's own bounding box for the
-      // edge zones — otherwise the sticky header eats the top zone and you can't drag an
-      // activity *upward* onto an earlier day.
-      const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
-      if (sc) {
-        const r = sc.getBoundingClientRect();
-        const EDGE = 110, MAX = 20;
-        const y = touch.clientY;
-        if (y < r.top + EDGE) {
-          const k = Math.min(1, (r.top + EDGE - y) / EDGE);
-          sc.scrollTop -= Math.round(MAX * Math.pow(k, 1.4));
-        } else if (y > r.bottom - EDGE) {
-          const k = Math.min(1, (y - (r.bottom - EDGE)) / EDGE);
-          sc.scrollTop += Math.round(MAX * Math.pow(k, 1.4));
-        }
-      }
-      // Horizontal auto-scroll for the Timeline, where days are laid out left-to-right.
-      // Lets you drag an activity onto a day several days further along.
-      if (s.timelineWrap === undefined) s.timelineWrap = document.querySelector('.timeline-view-wrap') || null;
-      const tl = s.timelineWrap;
-      if (tl) {
-        const r = tl.getBoundingClientRect();
-        const HEDGE = 84, HMAX = 20;
-        const x = touch.clientX;
-        if (x < r.left + HEDGE) {
-          const k = Math.min(1, (r.left + HEDGE - x) / HEDGE);
-          tl.scrollLeft -= Math.round(HMAX * Math.pow(k, 1.4));
-        } else if (x > r.right - HEDGE) {
-          const k = Math.min(1, (x - (r.right - HEDGE)) / HEDGE);
-          tl.scrollLeft += Math.round(HMAX * Math.pow(k, 1.4));
-        }
-      }
-
-      s.ghost.style.visibility = 'hidden';
-      const newZone = resolveZone(touch.clientX, touch.clientY);
-      s.ghost.style.visibility = '';
-      if (newZone !== s.dropZone) {
-        s.dropZone?.classList.remove('day-section__body--drop-target');
-        newZone?.classList.add('day-section__body--drop-target');
-        s.dropZone = newZone;
-      }
-    };
-
-    const onEnd = (e) => {
-      const s = stateRef.current;
-      if (!s.ghost) return;
-      const touch = e.changedTouches[0];
-      s.ghost.style.visibility = 'hidden';
-      const zone = resolveZone(touch.clientX, touch.clientY) || s.dropZone;
-      s.ghost.style.visibility = '';
-      if (zone && s.id) {
-        const zoneType = zone.dataset.zoneType;
-        const dayId = zone.dataset.dayId;
-        const itemId = s.id;
-        const trip = tripRef.current;
-        if (zoneType === 'day' && dayId) {
-          const isInReserve = trip.reserve.some(a => a.id === itemId);
-          if (isInReserve) {
-            pushUndo(trip, 'Idée placée dans la journée');
-            moveFromReserveToDay(tripId, dayId, itemId);
-          } else {
-            const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
-            if (srcDay && srcDay.id !== dayId) {
-              pushUndo(trip, 'Activité déplacée');
-              moveDayToDay(tripId, srcDay.id, dayId, itemId);
-            }
-          }
-        } else if (zoneType === 'reserve') {
-          const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
-          if (srcDay) {
-            pushUndo(trip, 'Activité renvoyée en réserve');
-            moveToReserve(tripId, srcDay.id, itemId);
-          }
-        }
-      }
-      s.dropZone?.classList.remove('day-section__body--drop-target');
-      zone?.classList.remove('day-section__body--drop-target');
-      if (s.ghost) { s.ghost.remove(); s.ghost = null; }
-      s.sourceEl?.classList.remove('activity-card--dragging');
-      document.body.classList.remove('dnd-active');
-      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null; s.timelineWrap = undefined;
-    };
-
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd);
-    return () => {
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
-    };
-  }, [tripId, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return handleTouchDragStart;
-}
 
 export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme }) {
   const {
@@ -423,11 +277,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     fetchTripMembers(tripId).then(members => setTripMembers(members || []));
   };
 
-  const handleTouchDragStart = useTouchDnd({
-    tripId, tripRef, pushUndo,
-    moveFromReserveToDay, moveDayToDay, moveToReserve,
-  });
-
   // Auto-scroll during HTML5 (mouse / touch-PC) drag near the edges — vertically
   // for Liste/Agenda and horizontally for the Timeline (days laid out left→right).
   useEffect(() => {
@@ -476,6 +325,29 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   useEffect(() => {
     if (compareSelectedIds.size >= 2) setShowCompare(true);
   }, [compareSelectedIds.size]);
+
+  const [completionEnCours, setCompletionEnCours] = useState(() => new Set());
+
+  // La carte du voyage, gardée pour le jour où il n'y aura pas de réseau.
+  //
+  // Sans interface : ni bouton, ni bandeau, ni pop-up. Ouvrir l'onglet Carte
+  // télécharge déjà des tuiles ; on continue simplement autour des lieux du
+  // voyage, une fois, à débit modeste. Une boîte de dialogue à l'arrivée sur
+  // la carte serait exactement le clic réflexe que le playbook interdit (D3),
+  // et elle demanderait une décision que l'utilisateur n'a pas de quoi
+  // prendre — il ne sait pas ce que pèsent des tuiles.
+  useEffect(() => {
+    if (tab !== 'map' || !trip) return undefined;
+    const ctrl = new AbortController();
+    (async () => {
+      const offre = await carteAProposer(trip);
+      if (!offre || ctrl.signal.aborted) return;
+      const obtenues = await telechargerCarte(offre.urls, { arret: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      updateTrip(tripId, { carteHorsLigne: { le: new Date().toISOString(), tuiles: obtenues } });
+    })();
+    return () => ctrl.abort();
+  }, [tab, trip?.id, trip?.carteHorsLigne]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!trip) return (
     <div className="trip-view">
@@ -743,6 +615,25 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     if (propositions.length) setEnrichProps(propositions);
   };
 
+  // « 2 infos à compléter » ne disait que le problème. Le même élément lance
+  // maintenant la recherche pour cette fiche-là : c'est un bouton, pas un
+  // constat. Le principe produit dit que l'app complète elle-même — afficher
+  // un décompte sans l'offrir, c'était le contraire.
+  const completerUneFiche = async (activite) => {
+    if (completionEnCours.has(activite.id)) return;
+    setCompletionEnCours(s => new Set(s).add(activite.id));
+    const emplacement = { type: 'reserve' };
+    try {
+      const { propositions, marques } = await fouillerLesFiches(
+        [{ activite, emplacement, ou: 'Réserve' }], {});
+      marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
+      if (propositions.length) setEnrichProps(propositions);
+      else await autoEnrich(activite, activite.id, emplacement);
+    } finally {
+      setCompletionEnCours(s => { const n = new Set(s); n.delete(activite.id); return n; });
+    }
+  };
+
   const openAddSheet = (dayId = null) => {
     setSheetDefaultDayId(dayId);
     setSheetOpen(true);
@@ -824,8 +715,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
   const detailDay_ = detailDay ? trip.days.find(d => d.id === detailDay.id) : null;
 
+  // À pied, sauf en road trip. Le voyage porte déjà l'information : demander le
+  // mode à chaque itinéraire serait un choix de plus à faire sur le trottoir.
+  const enVoiture = !!trip.roadTripMode;
+
   const sharedDayProps = {
     days: trip.days,
+    enVoiture,
     onDuplicate: handleDuplicate,
     compareMode,
     compareSelectedIds,
@@ -891,7 +787,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
-                  📝 Notes du voyage{trip.tripNotes?.trim() ? ' •' : ''}
+                  📝 Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('valise'); setTripMenuOpen(false); }}>
                   🎒 Valise{(trip.packingList?.length || 0) > 0
@@ -1023,6 +919,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
           <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('notes')}>
             <span className="tab-btn__icon">📝</span>
             <span className="tab-btn__label">Notes</span>
+            {trip.documents?.length > 0 && (
+              <span className="tab-badge" aria-label={`${trip.documents.length} documents`}>{trip.documents.length}</span>
+            )}
           </button>
         )}
         {tab === 'valise' && (
@@ -1120,10 +1019,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 onDrop={handleDropOnDay}
                 onMoveToDay={undoableMoveDayToDay}
                 onMoveToReserve={undoableMoveToReserve}
+                enVoiture={enVoiture}
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
-                onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
                 onDeplacerEntreJours={deplacerEntreJours}
@@ -1170,17 +1069,28 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 {/* Remplir le vivier est le geste le plus fréquent avant le
                     départ. Sur iPhone, le menu Partager ne peut pas viser une
                     app web (WebKit n'implémente pas le Web Share Target) :
-                    coller reste le chemin le plus court, et il marche partout. */}
-                <button className="reserve-coller" onClick={collerUnLien}>
-                  📋 Coller un lien
-                </button>
+                    coller reste le chemin le plus court, et il marche partout.
+
+                    Il occupait un bloc pleine largeur à lui seul, au-dessus de
+                    la première idée. Il vit maintenant DANS le champ de
+                    recherche, comme la croix d'effacement : une rangée de moins
+                    avant le contenu, et toujours un seul tap. */}
                 <div className="reserve-search-bar">
-                  <input
-                    className="reserve-search-input"
-                    placeholder="🔍 Rechercher…"
-                    value={reserveSearch}
-                    onChange={e => setReserveSearch(e.target.value)}
-                  />
+                  <div className="reserve-search-field">
+                    <input
+                      className="reserve-search-input"
+                      placeholder="🔍 Chercher, ou coller un lien"
+                      value={reserveSearch}
+                      onChange={e => setReserveSearch(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="reserve-search-coller"
+                      onClick={collerUnLien}
+                      title="Coller un lien depuis le presse-papier"
+                      aria-label="Coller un lien depuis le presse-papier"
+                    >📋</button>
+                  </div>
                   <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
                     <option value="default">Ordre d'ajout</option>
                     <option value="alpha">A–Z</option>
@@ -1207,12 +1117,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     aria-pressed={grouper}
                     title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
                   >{grouper ? '⊞ Groupé' : '☰ Liste'}</button>
-                  {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
+                  {/* En vue groupée, chaque en-tête porte déjà « 🍽 RESTO · 3 » :
+                      ces pastilles disaient la même chose sur une deuxième
+                      rangée, juste au-dessus. Elles ne servent qu'en vue liste. */}
+                  {!grouper && CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
                     const count = trip.reserve.filter(a => a.category === cat.id).length;
                     return (
                       <button key={cat.id}
                         className={`reserve-filter__pill${reserveFilter === cat.id ? ' reserve-filter__pill--active' : ''}`}
                         onClick={() => setReserveFilter(cat.id)}
+                        aria-label={`${cat.label} — ${count} idée${count > 1 ? 's' : ''}`}
+                        aria-pressed={reserveFilter === cat.id}
                       >{cat.emoji} {count}</button>
                     );
                   })}
@@ -1324,15 +1239,24 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                             </span>
                           )}
                           {m.length > 0 && (
-                            <span className="reserve-etat__manque" title={`Manque : ${m.join(', ')}`}>
-                              {m.length} info{m.length > 1 ? 's' : ''} à compléter
-                            </span>
+                            <button
+                              type="button"
+                              className="reserve-etat__manque"
+                              title={`Manque : ${m.join(', ')} — toucher pour chercher`}
+                              disabled={completionEnCours.has(activity.id)}
+                              onClick={(e) => { e.stopPropagation(); completerUneFiche(activity); }}
+                            >
+                              {completionEnCours.has(activity.id)
+                                ? 'Recherche…'
+                                : `${m.length} info${m.length > 1 ? 's' : ''} à compléter`}
+                            </button>
                           )}
                         </div>
                       );
                     })()}
                     <ActivityCard
                       activity={activity}
+                      enVoiture={enVoiture}
                       context="reserve"
                       isPastTrip={isPast}
                       onStatusChange={(s) => setActivityStatus(tripId, { type: 'reserve' }, activity.id, s)}
@@ -1398,6 +1322,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
               placeholder={'Ex:\n✈️ Vol: AB1234 — départ 14h30 Terminal 2\n🏨 Hôtel Le Palais — 5 rue Victor Hugo\n📞 Urgence: +33 6 12 34 56 78\n\n☐ Passeport\n☐ Assurance voyage\n☐ Adaptateur prise'}
               value={trip.tripNotes || ''}
               onChange={e => updateTrip(tripId, { tripNotes: e.target.value })}
+            />
+            {/* Un billet de train n'appartient à aucune activité : il vit ici,
+                avec le reste de ce qu'on veut sous la main. Pas d'onglet ni
+                d'entrée de menu en plus — c'est la même intention. */}
+            <TripDocuments
+              documents={trip.documents}
+              onChange={docs => updateTrip(tripId, { documents: docs })}
             />
           </div>
         )}

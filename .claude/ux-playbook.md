@@ -52,6 +52,17 @@ qu'un onglet montre déjà, il encombre.
 *Origine : le bloc « Réserve d'idées » du Planning doublonnait l'onglet
 Réserve.*
 
+**A7. Une fonctionnalité nouvelle est portée par un élément qui existe déjà.**
+Avant de créer un bouton, une bannière ou un champ, chercher à l'écran ce qui
+peut recevoir l'action : une adresse affichée devient le lien vers l'itinéraire,
+un compteur devient le bouton qui lance le calcul. On ne crée un élément que si
+aucun ne convient — et on annonce alors ce qu'on retire en échange. **Le solde
+d'éléments visibles ne doit pas monter à chaque livraison.**
+*Origine : « souvent tu ajoutes toutes les fonctionnalités, mais juste pour
+qu'elles y soient. À chaque ajout ou modification, il faut penser UX/UI pour que
+cela s'inclue bien dans ce qui est déjà en place ». Cinquième retour consécutif
+sur la densité.*
+
 ---
 
 ## B · Visibilité et alignement
@@ -224,13 +235,17 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-07 | « je ne veux rien dépenser » | F3 |
 | 2026-07 | mémoire partagée introuvable depuis un autre projet | F2 (affinée) |
 | 2026-07 | « ça ne fonctionne toujours pas […] une solution dont tu es sûre ! » (3ᵉ fois) | E2 (affinée), F4 |
+| 2026-08 | « tu ajoutes toutes les fonctionnalités, juste pour qu'elles y soient » (5ᵉ sur la densité) | A7 |
 
 ### Récidives repérées
 
-- **Densité de l'interface** : signalée 4 fois de suite (boutons partout → haut
-  de l'écran → fusionner → trop d'informations). Ce n'est pas un réglage, c'est
-  le premier réflexe à avoir sur tout nouvel écran → traiter A1–A6 en priorité
-  dans chaque audit.
+- **Densité de l'interface** : signalée **5 fois** (boutons partout → haut de
+  l'écran → fusionner → trop d'informations → « ajoutées juste pour qu'elles y
+  soient »). C'est le thème le plus récurrent du playbook. Les quatre premiers
+  retours demandaient de *retirer* ; le cinquième dit d'où vient le problème :
+  chaque fonctionnalité est arrivée **à côté** de l'existant au lieu d'être
+  **fondue dedans**. → A7 s'applique au moment de concevoir, A1–A6 au moment de
+  nettoyer. Si A7 est tenue, les autres n'ont plus grand-chose à faire.
 - **Un correctif superficiel a été livré trois fois** avant la vraie cause (roue,
   dépôt sur la timeline, puis extraction d'un lien partagé). C'est le thème le
   plus coûteux du playbook : à chaque fois l'utilisateur a dû revenir dire « ça

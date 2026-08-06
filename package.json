@@ -15,7 +15,8 @@
     "verif-carte": "node scripts/verif-carte.mjs",
     "perf": "node scripts/perf.mjs",
     "sync": "npm run build && npx cap sync android",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "vapid": "node scripts/vapid.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

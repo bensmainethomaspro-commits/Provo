@@ -1,0 +1,59 @@
+name: Rappels du voyage
+
+# Les notifications ont besoin d'un réveil régulier : rien, côté navigateur, ne
+# peut se déclencher quand l'app est fermée. Ce workflow appelle simplement la
+# fonction « push-tick », qui décide seule s'il y a quelque chose à dire.
+#
+# Toutes les quinze minutes : c'est la maille des rappels (« dans 25 minutes »),
+# et c'est assez peu pour rester très en dessous des quotas GitHub.
+#
+# **Aucun secret à configurer.** L'adresse du projet et la clé publiable sont
+# déjà dans le dépôt (`src/lib/supabase.js`) : ce sont des valeurs publiques,
+# faites pour vivre dans le bundle du navigateur.
+#
+# L'appel n'a pas besoin d'être protégé : `push-tick` n'accepte rien, ne rend
+# que des compteurs, et n'envoie chaque rappel qu'une seule fois (colonne
+# `envoyes`). L'appeler cent fois de suite ne produit rien de plus qu'une.
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+# Un seul passage à la fois : deux appels simultanés enverraient deux fois le
+# même rappel avant que la marque « déjà envoyé » ne soit écrite.
+concurrency:
+  group: push-tick
+  cancel-in-progress: false
+
+env:
+  BASE: https://usztistixgzdrvjzplqx.supabase.co/functions/v1
+  PUBLIABLE: sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler push-tick
+        run: |
+          code=$(curl -s -o /tmp/rep.json -w '%{http_code}' -X POST "$BASE/push-tick" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $PUBLIABLE" \
+            -H "apikey: $PUBLIABLE" \
+            --max-time 60 -d '{}')
+          echo "HTTP $code"
+          cat /tmp/rep.json; echo
+          # Tant que les clés VAPID ne sont pas posées, la fonction répond
+          # « vapid_absent » en 200 : ce n'est pas une panne, c'est une
+          # installation pas encore faite. Le dire sans peindre le dépôt en
+          # rouge toutes les quinze minutes.
+          if grep -q vapid_absent /tmp/rep.json; then
+            echo "::notice::Rappels pas encore installés — lancer le workflow « Installer les rappels »."
+            exit 0
+          fi
+          # Une panne passagère du service de push ne doit pas non plus faire
+          # échouer le dépôt en boucle. Seule une erreur franche compte.
+          if [ "$code" -ge 500 ]; then
+            echo "::error::push-tick a répondu $code"
+            exit 1
+          fi

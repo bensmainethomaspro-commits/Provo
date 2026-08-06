@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { useNotifications } from '../hooks/useNotifications';
 
 const PROFILE_EMOJIS = [
   '😀','😎','🤩','🧑','👩','👨','🧔','👦','👧',
@@ -11,6 +12,7 @@ const PROFILE_EMOJIS = [
 export default function AccountSheet({ onClose, userId, userEmail, userProfile, onUpdateProfile, signOut, darkMode, onToggleDark, trips }) {
   const { settings, setSetting } = useSettings();
   const { canInstall, install } = useInstallPrompt();
+  const notifs = useNotifications(userId);
   const [name, setName] = useState(userProfile?.name || '');
   const [emoji, setEmoji] = useState(userProfile?.emoji || '😀');
   const [saving, setSaving] = useState(false);
@@ -116,6 +118,38 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
               <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
               <span className="settings-toggle__label">Vibrations (haptics)</span>
             </label>
+            {/* Troisième interrupteur de la même rangée : les rappels sont une
+                préférence d'appareil, ils vivent avec le thème et les
+                vibrations. Aucun écran ni entrée de menu de plus. */}
+            {userId && (
+              <>
+                <label className="settings-toggle" style={{ marginTop: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={notifs.actives}
+                    disabled={!notifs.etat.possible || notifs.enCours}
+                    onChange={e => (e.target.checked ? notifs.activer() : notifs.desactiver())}
+                  />
+                  <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
+                  <span className="settings-toggle__label">
+                    Rappels du voyage{notifs.enCours ? ' …' : ''}
+                  </span>
+                </label>
+                {/* Une limite annoncée vaut mieux qu'un interrupteur mort. */}
+                {!notifs.etat.possible && (
+                  <p className="settings-section__desc" style={{ marginTop: 6 }}>
+                    {notifs.etat.raison === 'ios_onglet'
+                      ? "Sur iPhone, les rappels demandent que Provo soit sur l'écran d'accueil : Partager → « Sur l'écran d'accueil »."
+                      : notifs.etat.raison === 'non_configure'
+                        ? "Les rappels ne sont pas configurés sur ce déploiement."
+                        : "Ce navigateur ne sait pas recevoir de notifications."}
+                  </p>
+                )}
+                {notifs.message && (
+                  <p className="settings-section__desc" style={{ marginTop: 6 }}>{notifs.message}</p>
+                )}
+              </>
+            )}
           </div>
 
           {/* App */}

@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
-import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel } from '../utils/helpers';
+import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -10,7 +10,7 @@ function ActivityCard({
   onDragStart, onDragEnd, isDragging,
   days, currentDayId, onDuplicate,
   compareMode, compareSelected, onToggleCompare,
-  onTouchDragStart,
+  onTouchDragStart, enVoiture,
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -21,6 +21,10 @@ function ActivityCard({
   const SWIPE_MAX = 90;
   const SWIPE_THRESHOLD = 50;
   const [swipeDir, setSwipeDir] = useState(null);
+
+  // L'adresse affichée EST le lien vers l'itinéraire : pas de bouton en plus,
+  // et la navigation ne demande plus de déplier la fiche.
+  const itineraire = lienItineraire(activity, { enVoiture });
 
   const handleSwipeTouchStart = useCallback((e) => {
     if (compareMode || e.target.closest('.activity-card__drag-handle')) return;
@@ -191,7 +195,19 @@ function ActivityCard({
                 {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.start} – {slot.end}</span>}
                 {dur > 0 && <span className="activity-card__duration">{formatDuration(dur)}</span>}
                 {activity.price > 0 && <span className="activity-card__price">{formatPrice(parseFloat(activity.price))}</span>}
-                {activity.address && <span className="activity-card__address">{activity.address}</span>}
+                {activity.address && (itineraire
+                  ? (
+                    <a
+                      className="activity-card__address activity-card__address--nav"
+                      href={itineraire}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      aria-label={`Itinéraire vers ${activity.title}`}
+                    >{activity.address}</a>
+                  )
+                  : <span className="activity-card__address">{activity.address}</span>
+                )}
               </div>
             </div>
             {!compareMode && onTouchDragStart && (
@@ -220,22 +236,6 @@ function ActivityCard({
           {isExpandedOrPast && (
             <div className="activity-card__expand" onClick={e => e.stopPropagation()}>
               {activity.openingHours && <div className="activity-card__hours">🕐 {activity.openingHours}</div>}
-              {activity.address && (
-                <div className="activity-card__nav">
-                  <a
-                    href={activity.lat && activity.lon
-                      ? `https://maps.google.com/maps?daddr=${activity.lat},${activity.lon}&directionsmode=driving`
-                      : `https://maps.google.com/maps?daddr=${encodeURIComponent(activity.address)}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="nav-btn"
-                    title="Naviguer vers ce lieu"
-                  >
-                    🧭 Y aller
-                  </a>
-                </div>
-              )}
               {activity.link && (
                 <div className="activity-card__link">
                   <a href={activity.link} target="_blank" rel="noopener noreferrer">

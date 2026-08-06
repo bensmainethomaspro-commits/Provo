@@ -40,8 +40,25 @@ export function useReorderDrag(onDeplacer) {
     etat.current = { id, sur: null };
     setDragId(id);
 
+    // La barre d'onglets et l'en-tête flottent au-dessus de la liste. Sous eux,
+    // `elementFromPoint` renvoie la barre : le doigt est « sur » elle sans avoir
+    // quitté la liste pour autant.
+    const surUnCalqueFlottant = (el) => {
+      for (let n = el; n && n !== document.body; n = n.parentElement) {
+        if (getComputedStyle(n).position === 'fixed') return true;
+      }
+      return false;
+    };
+
     const cible = (ev) => {
       const t = ev.touches?.[0] || ev;
+      // Le doigt est sorti de l'écran par le bas ou par le côté. Ce n'est pas
+      // « le vide » : c'est le bord. On garde la dernière cible connue, sinon
+      // un geste qui dépasse d'un pixel annule tout.
+      if (t.clientX < 0 || t.clientY < 0
+        || t.clientX > window.innerWidth || t.clientY > window.innerHeight) {
+        return etat.current.sur;
+      }
       const el = document.elementFromPoint(t.clientX, t.clientY);
       // Sur une fiche : on se place devant elle.
       const fiche = el?.closest('[data-reorder-id]');
@@ -50,6 +67,12 @@ export function useReorderDrag(onDeplacer) {
       // à la fin. Sans ça, une journée vide serait impossible à viser.
       const jour = el?.closest('[data-day-id]');
       if (jour) return { id: null, jour: jour.dataset.dayId };
+      // Les quatre-vingt-dix derniers pixels de l'écran sont couverts par la
+      // barre d'onglets. Une fiche qui tombe dessous devenait impossible à
+      // viser : la cible passait à « rien », et relâcher là ne déplaçait
+      // rien — sans un mot. On garde la dernière cible connue.
+      if (surUnCalqueFlottant(el)) return etat.current.sur;
+      // Vraiment dans le vide : c'est l'échappatoire, on annule.
       return null;
     };
 

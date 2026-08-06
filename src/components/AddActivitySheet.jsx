@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation} from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 
@@ -47,6 +47,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   const [importUrl, setImportUrl] = useState('');
   const [importing, setImporting] = useState(false);
   const [candidates, setCandidates] = useState([]);
+  // Résultats de la frappe, distincts des candidats d'un import : ceux-là
+  // s'effacent dès qu'on continue à écrire.
+  const [candidats, setCandidats] = useState([]);
+  const [chercheEnCours, setChercheEnCours] = useState(false);
   // Le retour de la recherche s'affiche sous le champ qui l'a déclenchée, en
   // haut de la feuille — `error` reste réservé à la validation, près du bouton.
   const [importMsg, setImportMsg] = useState('');
@@ -58,6 +62,9 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // lus : les jeter obligerait à les retaper un par un.
   const [autresLieux, setAutresLieux] = useState([]);
   const [lieuxRetenus, setLieuxRetenus] = useState(() => new Set());
+  // En modification, on vient précisément pour changer un champ : le pli
+  // s'ouvre. En création, la recherche suffit presque toujours.
+  const [detailsOuverts, setDetailsOuverts] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +78,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setPoiHint(null);
       setAutresLieux([]);
       setLieuxRetenus(new Set());
+      setDetailsOuverts(isEdit);
       if (isEdit) {
         setForm({
           title: editActivity.title || '',
@@ -109,13 +117,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
+  // Les candidats d'un import ambigu passent devant : l'utilisateur vient
+  // d'agir dessus, ils répondent à une question posée.
+  const resultats = candidates.length ? candidates : candidats;
+
   const applyResult = (result, rawInput) => {
     setForm(f => {
       const newCat = result.category || f.category;
       const dur = DEFAULT_DURATIONS[newCat];
       return {
         ...f,
-        title: result.title || f.title,
+        // Le titre est ce qu'on affichera en gros sur la fiche : il porte le
+        // nom du lieu, pas l'adresse — qui a sa propre ligne juste dessous.
+        title: (result.title ? nomDeLieu(result.title) : '') || f.title,
         address: result.address || f.address,
         category: newCat,
         ...(result.link ? { link: result.link } : {}),
@@ -130,6 +144,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     });
     setImportUrl('');
     setCandidates([]);
+    setCandidats([]);
     setImportMsg('');
   };
 
@@ -167,6 +182,31 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setLieuxRetenus(new Set());
     setImportMsg(`${choisis.length} lieu${choisis.length > 1 ? 'x' : ''} mis en réserve ✓`);
   };
+
+  // Chercher pendant qu'on tape. Le bouton ⬇️ reste — pour les liens, pour
+  // valider une adresse complète — mais il n'est plus le seul chemin : sur un
+  // téléphone, taper trois lettres et toucher le bon nom est le geste le plus
+  // court qui existe pour remplir une fiche.
+  //
+  // Un lien ne déclenche rien : il se résout en une requête réseau lourde
+  // (redirections, extraction), qu'on ne lance pas à chaque caractère.
+  useEffect(() => {
+    if (isEdit) return undefined;
+    const q = importUrl.trim();
+    if (q.length < 3 || q.length > 120 || /^https?:\/\//i.test(q) || /\s?\w+\.\w{2,}\//.test(q)) {
+      setCandidats([]);
+      return undefined;
+    }
+    let vivant = true;
+    const minuteur = setTimeout(async () => {
+      setChercheEnCours(true);
+      const trouves = await searchPlaces(q, { lat: tripLat, lon: tripLon, limit: 5 }).catch(() => []);
+      if (!vivant) return;
+      setChercheEnCours(false);
+      setCandidats(trouves);
+    }, 420);
+    return () => { vivant = false; clearTimeout(minuteur); };
+  }, [importUrl, isEdit, tripLat, tripLon]);
 
   const handleImport = async () => {
     const raw = importUrl.trim();
@@ -233,6 +273,49 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         set('link', normalized);
         setImportMsg("Ce lien n'a pas pu être lu — les liens courts Google sont souvent protégés. "
           + "Ouvre-le, copie le nom ou l'adresse du lieu et colle-les ici : le lien, lui, est déjà enregistré.");
+        return;
+      }
+
+      // Une confirmation collée n'est ni une adresse ni un nom : c'est un
+      // courriel entier. Le même champ la reconnaît et la lit — pas de bouton
+      // « importer une réservation » à côté, pas d'écran de plus. C'est le
+      // travail de saisie le plus ingrat du voyage, et il disparaît.
+      if (ressembleAUneReservation(raw)) {
+        const r = await lireReservation(raw);
+        if (r?.ok) {
+          applyResult({
+            title: r.titre,
+            address: r.adresse || r.lieu,
+            category: r.categorie === 'autre' ? 'trajet' : r.categorie,
+            notes: r.reference ? `Réf. ${r.reference}` : '',
+          }, raw);
+          if (r.heure) set('fixedStart', r.heure);
+          if (r.fin) set('fixedEnd', r.fin);
+          // La date choisit la journée : c'est tout l'intérêt d'une
+          // confirmation, elle sait quand ça se passe.
+          const jour = (days || []).find(d => d.date === r.date);
+          if (jour) { setDest('day'); setSelectedDayId(jour.id); }
+          setImportMsg(r.confiance === 'basse'
+            ? `Réservation lue — mais j'ai un doute${r.date ? ` sur le ${r.date}` : ''}. Ouvre les détails et vérifie.`
+            : `Réservation lue ✓${r.date ? ` — ${r.date}` : ''}${jour ? '' : r.date ? ' (hors des dates du voyage)' : ''}`);
+          if (r.confiance === 'basse') setDetailsOuverts(true);
+          // Le lieu part quand même en recherche : une confirmation donne
+          // rarement des coordonnées, et la fiche doit finir complète.
+          if (r.lieu) {
+            const trouve = await searchPlaces(
+              tripDestination ? `${r.lieu}, ${tripDestination}` : r.lieu,
+              { lat: tripLat, lon: tripLon });
+            if (trouve.length === 1) {
+              setForm(f => ({ ...f, lat: trouve[0].lat, lon: trouve[0].lon,
+                address: f.address || trouve[0].address }));
+            }
+          }
+          return;
+        }
+        setImportMsg(r?.error === 'cle_absente'
+          ? "La lecture des réservations n'est pas configurée sur ce compte."
+          : "Ce texte n'a pas pu être lu comme une réservation — remplis les détails à la main, rien n'est perdu.");
+        setDetailsOuverts(true);
         return;
       }
 
@@ -435,37 +518,21 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             </div>
           )}
 
-          {/* Activity templates */}
-          {!isEdit && (
-            <div className="templates-row">
-              {TEMPLATES.map(t => (
-                <button
-                  key={t.label}
-                  type="button"
-                  className="template-pill"
-                  onClick={() => setForm(f => ({
-                    ...f,
-                    category: t.category,
-                    durationHours: t.durationHours,
-                    durationMinutes: t.durationMinutes,
-                  }))}
-                >
-                  {t.emoji} {t.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Adresse, nom de lieu, ou lien à importer */}
+          {/* Le premier geste de l'ajout, et le seul dans la plupart des cas :
+              on tape un nom, l'app cherche pendant qu'on tape, on touche le
+              bon résultat et la fiche est faite. La recherche existait déjà —
+              elle attendait qu'on appuie sur un bouton, sous une rangée de
+              raccourcis, au milieu d'un formulaire de onze champs. */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Adresse, nom du lieu, ou lien</label>
+            <label className="form-label">📍 Cherche un lieu — ou colle un lien, ou une confirmation</label>
             <div className="import-row">
               <input
                 className="form-input"
-                placeholder="5 rue Victor Hugo, Biarritz — ou colle un lien"
+                placeholder="Figlmüller — ou colle un lien"
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}
+                autoFocus={!isEdit}
               />
               <button
                 type="button"
@@ -534,14 +601,21 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 <span className="poi-hint__cta">Oui</span>
               </button>
             )}
-            {/* Plusieurs correspondances : on laisse choisir plutôt que de
-                deviner. Le tap remplit adresse, coordonnées et catégorie. */}
-            {candidates.length > 0 && (
+            {/* Une seule liste de résultats, qu'ils viennent de la frappe ou
+                d'un import ambigu : deux listes empilées auraient dit la même
+                chose deux fois. Le tap remplit adresse, coordonnées, catégorie
+                et horaires. */}
+            {chercheEnCours && !candidates.length && !candidats.length && (
+              <p className="import-msg">Recherche…</p>
+            )}
+            {resultats.length > 0 && (
               <div className="place-results">
-                <div className="place-results__title">
-                  {candidates.length} lieux trouvés — lequel ?
-                </div>
-                {candidates.map(c => (
+                {candidates.length > 0 && (
+                  <div className="place-results__title">
+                    {candidates.length} lieux trouvés — lequel ?
+                  </div>
+                )}
+                {resultats.map(c => (
                   <button
                     key={c.id}
                     type="button"
@@ -558,6 +632,27 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </div>
             )}
           </div>
+
+          {/* Activity templates */}
+          {!isEdit && (
+            <div className="templates-row">
+              {TEMPLATES.map(t => (
+                <button
+                  key={t.label}
+                  type="button"
+                  className="template-pill"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    category: t.category,
+                    durationHours: t.durationHours,
+                    durationMinutes: t.durationMinutes,
+                  }))}
+                >
+                  {t.emoji} {t.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Nearby place suggestions */}
           {suggestions.length > 0 && !isEdit && (
@@ -603,10 +698,26 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             </div>
           )}
 
+          {/* Tout ce qui suit, l'app le remplit elle-même dès qu'un lieu est
+              trouvé : titre, catégorie, durée, horaires, prix, adresse. Le
+              formulaire complet s'ouvrait pourtant en grand à chaque ajout —
+              onze champs et huit tuiles avant d'avoir rien fait. Il est
+              maintenant derrière un pli : présent pour qui en a besoin,
+              invisible pour les neuf ajouts sur dix qui n'en ont pas. */}
+          <button
+            type="button"
+            className="details-pli"
+            onClick={() => setDetailsOuverts(o => !o)}
+            aria-expanded={detailsOuverts}
+          >
+            <span>{detailsOuverts ? '▴' : '▾'} Détails</span>
+            <small>titre, catégorie, durée, horaires, prix, notes</small>
+          </button>
+          {detailsOuverts && (<>
           <div className="form-group">
             <label className="form-label">Titre <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— déduit si vide</span></label>
             <input className="form-input" placeholder="Ex: Déjeuner au marché" value={form.title}
-              onChange={e => set('title', e.target.value)} autoFocus />
+              onChange={e => set('title', e.target.value)} />
           </div>
 
           <div className="form-group">
@@ -789,6 +900,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               )}
             </div>
           )}
+
+          </>)}
 
           {!isEdit && (
             <div className="form-group">

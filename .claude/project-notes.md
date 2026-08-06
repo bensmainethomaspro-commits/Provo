@@ -83,6 +83,119 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Règle A7 en vigueur ici, sans exception** (août 2026) — « souvent tu ajoutes
+  toutes les fonctionnalités, mais juste pour qu'elles y soient ». Dans ce
+  projet, toute livraison doit pouvoir répondre à trois questions :
+  1. quel élément **déjà à l'écran** porte la nouveauté ?
+  2. si un élément est créé, **lequel disparaît** en échange ?
+  3. le nombre d'éléments visibles par écran a-t-il **baissé ou stagné** ?
+
+  Provo a une identité épurée : peu d'éléments, gros caractères, action évidente.
+  C'est ce qui le distingue de Wanderlog, dont le reproche n°1 en 2026 est d'être
+  « chaotique et encombré ». Une fonctionnalité utile mal insérée coûte plus que
+  ce qu'elle rapporte.
+
+- **Les rappels du voyage** (août 2026). Le Web Push marche sur iPhone depuis
+  iOS 16.4, **mais seulement pour une app ajoutée à l'écran d'accueil** — en
+  onglet Safari, `PushManager` n'existe pas. L'interrupteur le dit au lieu de
+  rester mort. Un refus précédent fondé sur « bloqué sur iOS » était périmé.
+
+  Chaîne : `useNotifications.js` (abonnement) → table `push_subscriptions`
+  → `push-tick` (fonction Edge) → `.github/workflows/push-tick.yml` toutes les
+  15 min. Le serveur lit les voyages dans `trips.data`, d'où la nécessité d'un
+  compte connecté — sans compte, rien n'est proposé.
+
+  **Trois rappels seulement**, chacun lié à une décision à prendre à cet
+  instant : « il est temps de partir » (25 min avant), « ça ferme bientôt »
+  (1 h avant), « c'est demain » (la veille à 18 h). Pas de résumé, pas de bonne
+  journée : une notification qui n'aide pas fait désactiver toutes les autres.
+  Rien entre 22 h et 7 h, **à l'heure du voyageur** (colonne `fuseau`), et un
+  seul envoi par activité et par type (colonne `envoyes`).
+
+  **Mise en route : un seul geste.** Actions › « Installer les rappels » ›
+  Run workflow. Il crée la table par l'API de gestion Supabase, fabrique la
+  paire de clés VAPID, dépose la privée dans les secrets Supabase et commite
+  la publique dans `src/lib/vapid.js`. Aucun secret GitHub nouveau : le seul
+  utilisé est `SUPABASE_ACCESS_TOKEN`, déjà là pour le déploiement des
+  fonctions.
+
+  **La clé privée n'existe jamais ailleurs que dans le runner et Supabase.**
+  Ni dépôt, ni journal, ni conversation. La publique, elle, est faite pour être
+  dans le bundle : la commiter évite qu'un déploiement l'oublie.
+
+  `scripts/vapid.mjs` (`npm run vapid`) reste disponible pour la faire à la
+  main, mais n'est plus nécessaire.
+
+  Le déclencheur `push-tick.yml` ne demande **aucun secret** : l'adresse du
+  projet et la clé publiable sont déjà dans le dépôt, et le point d'entrée peut
+  rester ouvert — il n'accepte aucune donnée, ne rend que des compteurs, et
+  n'envoie chaque rappel qu'une fois.
+
+  **Non vérifié de bout en bout depuis ici** : le bac à sable ne joint ni un
+  service de push réel ni le domaine Supabase du projet. Ce qui est vérifié :
+  l'app se construit, les 63 parcours passent, et l'interrupteur affiche la
+  bonne raison quand la clé publique est absente.
+
+- **La carte se garde toute seule** (août 2026). Ouvrir l'onglet Carte quand le
+  départ est à moins de dix jours pré-charge les tuiles autour des lieux du
+  voyage — **sans aucune interface** : ni bouton, ni bandeau, ni pop-up. Une
+  boîte de dialogue à l'arrivée sur la carte a été écrite puis retirée : elle
+  bloquait l'écran et demandait une décision que personne ne peut prendre (qui
+  sait ce que pèsent des tuiles ?). Limites tenues dans
+  `utils/carteHorsLigne.js` : 300 tuiles maximum (~4,5 Mo), six à la fois avec
+  une pause — les CGU d'OpenStreetMap découragent le téléchargement en masse —
+  et rien du tout si l'économiseur de données du système est actif.
+
+- **Coller une confirmation remplit la fiche** (août 2026). Le champ de
+  recherche de la feuille d'ajout reconnaît un courriel de réservation
+  (`ressembleAUneReservation`) et le fait lire par `read-booking`. Même champ,
+  même bouton : aucun écran ni bouton « importer une réservation » à côté.
+
+- **Les hooks après le `return` anticipé** — quatrième occurrence dans
+  `TripView.jsx`, dont une déjà livrée. Le fichier a une garde `if (!trip)`
+  vers la ligne 330 : **tout `useState` / `useEffect` doit être au-dessus**.
+  `npx eslint src/pages/TripView.jsx` le dit ; le lancer avant de commiter.
+
+- **Deux jetons de bleu, deux métiers** (août 2026). `--accent` (#35A7DD) est la
+  teinte de marque : traits, bordures, surfaces. Elle **ne peut porter aucun
+  texte** — 2,72:1 contre le blanc, dans les deux sens. `--accent-deep`
+  (#287DA6) reçoit du blanc ; `--accent-texte` (#22719A, clair en thème sombre)
+  *est* du texte. Idem `--red-deep` / `--red-texte`, `--green-deep`.
+  Trois fois de suite, une correction de couleur a été annulée par une
+  redéclaration plus bas dans `index.css` (B5) : chercher `--orange:` et
+  `!important` avant de conclure qu'un correctif ne marche pas.
+
+- **Un seul geste par intention** (août 2026). Il existait **quatre** façons de
+  déplacer une activité du planning : deux poignées ⠿ identiques côte à côte,
+  un appui long, et les pastilles « Déplacer vers ». Il en reste **une**
+  (poignée 44 × 44) plus les pastilles, qui sont aussi le seul chemin vers la
+  Réserve. `useTouchDnd` supprimé (146 lignes).
+
+- **La barre d'onglets masquait les dépôts** (août 2026). `elementFromPoint`
+  renvoyait la barre flottante, la cible passait à « rien », et relâcher là ne
+  déplaçait rien — sans un mot. `useReorderDrag` garde maintenant la dernière
+  cible connue quand le doigt passe sous un calque `position: fixed`. Le vide
+  reste l'échappatoire.
+
+- **Le formulaire d'ajout est derrière un pli** (août 2026). La recherche de
+  lieu est passée en tête et cherche à la frappe ; titre, catégorie, durée,
+  horaires, prix et notes vivent sous « ▾ Détails ». Onze champs et huit tuiles
+  ne s'ouvrent plus à chaque ajout alors que le principe produit dit que l'app
+  remplit elle-même.
+
+- **La carte reste à 32 px, sciemment.** Les 26 points restants de `/verif-ui`
+  sont tous là : marqueurs Leaflet 32 × 32 et les deux liens d'attribution
+  OpenStreetMap, obligatoires par licence. Les élargir à 44 px les ferait se
+  chevaucher en zone dense — le doigt toucherait le mauvais lieu, ce qui est
+  pire que viser. Tout le reste de l'app est à zéro dans les deux thèmes.
+
+- **`/verif-ui` détecte les plantages et ignore les émojis** (août 2026). Il
+  mesurait l'écran d'erreur sans broncher — tout au vert alors que l'app était
+  tombée. Il comptait aussi les émojis couleur comme des défauts de contraste
+  (1,11:1) alors qu'ils peignent leurs propres pixels. Les glyphes monochromes
+  — ⠿, ▼, ＋ — restent mesurés : c'est ainsi qu'une poignée invisible a été
+  trouvée.
+
 - **L'onglet « Aujourd'hui » a été retiré** (août 2026). Le planning place déjà
   le jour J au centre à l'ouverture ; un onglet séparé dédoublait la question.
   `TodayMode.jsx` supprimé. Ce qui s'y faisait vit dans le menu ⋯

@@ -4,11 +4,21 @@
 :root {
   /* Couleur de marque : bleu clair. Les noms --orange / --yellow sont conservés
      comme alias hérités (ils sont référencés dans tout le fichier) — ils portent
-     désormais les bleus ci-dessous, c'est la seule source de vérité. */
+     désormais les bleus ci-dessous, c'est la seule source de vérité.
+
+     --accent (#35A7DD) est la teinte de marque : traits, bordures, surfaces
+     décoratives, pastilles actives. Elle ne peut PAS porter de texte : mesurée
+     à 2,72:1 contre le blanc — sous le seuil AA de 4,5 — et donc illisible en
+     plein soleil, aussi bien en fond blanc-sur-bleu qu'en texte bleu-sur-blanc.
+
+     --accent-deep est la même famille en plus dense : c'est elle qui remplit les
+     boutons et porte le texte d'accent. C'est aussi ce que reçoit l'alias
+     --orange, référencé partout. Sa valeur de référence est déclarée une seule
+     fois, tout en bas du fichier (#287DA6, 4,59:1) — ne pas la dupliquer ici,
+     c'est ce genre de doublon qui a rendu la correction invisible. */
   --accent: #35A7DD;
   --accent-light: #7FD1F0;
-  --accent-deep: #1B7DB5;
-  --orange: var(--accent);
+  --orange: var(--accent-deep);
   --yellow: var(--accent-light);
   --white: #FFFFFF;
   --surface: rgba(255,255,255,0.97);
@@ -1221,7 +1231,9 @@ body {
 .notes-tab {
   display: flex;
   flex-direction: column;
-  padding: 12px 16px 24px;
+  /* Marge basse au-delà de la barre d'onglets flottante : les billets sont
+     sous les notes, et ils passaient dessous. */
+  padding: 12px 16px 110px;
   gap: 10px;
   flex: 1;
 }
@@ -1230,8 +1242,11 @@ body {
   font-style: italic; line-height: 1.5;
 }
 .notes-textarea {
-  flex: 1;
-  min-height: 55vh;
+  /* Elle prenait 55 % de la hauteur d'écran à elle seule et repoussait les
+     billets hors du champ. Trois lignes suffisent à commencer ; elle
+     s'agrandit à l'usage. */
+  flex: 0 0 auto;
+  min-height: 26vh;
   width: 100%;
   padding: 14px 16px;
   font-size: 14px;
@@ -1364,9 +1379,11 @@ body {
   padding: 8px 0 12px;
 }
 .reserve-filter__pill {
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px; font-weight: 600;
+  /* 24 px de haut mesurés : sous le pouce, on visait. */
+  min-height: 44px; padding: 4px 14px;
+  display: inline-flex; align-items: center; gap: 4px;
+  border-radius: 22px;
+  font-size: 13px; font-weight: 600;
   background: var(--surface-raised);
   color: var(--text-muted);
   border: 1.5px solid var(--border-strong);
@@ -1981,19 +1998,9 @@ body {
   font-size: 12px; color: var(--text-muted); margin-top: -4px; margin-bottom: 6px;
 }
 
-/* ─── TIMELINE: DRAG HANDLE ──────────────────────────────── */
-.tl-activity__drag-handle {
-  color: rgba(255,255,255,0.5);
-  font-size: 11px;
-  cursor: grab;
-  padding: 0 2px;
-  touch-action: none;
-  line-height: 1;
-  align-self: flex-start;
-  margin-top: 1px;
-  flex-shrink: 0;
-}
-.tl-activity__drag-handle:active { cursor: grabbing; }
+/* La seconde poignée ⠿ de la timeline a été supprimée : elle doublait
+   `.tl-act-grip`, à 20 px d'écart et avec le même caractère, pour un geste
+   différent — et son contraste mesuré était de 1,08:1. */
 
 /* ─── TIMELINE: DAY NOTES + ACTIONS ──────────────────────── */
 .tl-day__actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; flex-shrink: 0; }
@@ -2499,7 +2506,7 @@ body {
 }
 .debts-card__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .debts-card__title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
-.debts-card__detail-btn { background: none; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 2px 8px; }
+.debts-card__detail-btn { background: none; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 2px 10px; min-height: 44px; }
 .debts-card__detail-btn:hover { color: var(--text); }
 .debt-row { display: flex; align-items: center; gap: 5px; font-size: 13px; margin: 5px 0; flex-wrap: wrap; }
 .debt-settle-btn { background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 2px; margin-left: auto; opacity: 0.7; }
@@ -2555,15 +2562,9 @@ body {
 .swipe-hint__icon { font-size: 22px; }
 
 /* ─── GPS NAVIGATION BUTTON ───────────────────────────────── */
-.activity-card__nav { margin-top: 4px; }
-.nav-btn {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; font-weight: 700; color: var(--trip-accent, var(--orange));
-  background: color-mix(in srgb, var(--trip-accent, var(--orange)) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--trip-accent, var(--orange)) 30%, transparent);
-  border-radius: 20px; padding: 3px 10px; text-decoration: none;
-}
-.nav-btn:hover { opacity: 0.85; }
+/* Le bouton « 🧭 Y aller » a été retiré : c'est l'adresse, déjà affichée sur la
+   fiche repliée, qui porte l'itinéraire. Un élément en moins, et la navigation
+   ne demande plus de déplier. */
 
 /* ─── TODAY MODE ──────────────────────────────────────────── */
 .today-mode { padding: 12px 0 80px; }
@@ -2676,7 +2677,9 @@ body {
   background: var(--surface-sunken); color: var(--text-muted); cursor: pointer;
 }
 .expenses-section-btn.active {
-  background: var(--trip-accent, var(--orange)); color: #fff; border-color: var(--trip-accent, var(--orange));
+  /* Pas --trip-accent : la couleur du voyage est expressive et peut tomber
+     n'importe où ; un segment actif est du chrome, il doit rester lisible. */
+  background: var(--accent-deep); color: #fff; border-color: var(--accent-deep);
 }
 
 /* ─── EXPENSE CATEGORY BREAKDOWN ─────────────────────────── */
@@ -3685,7 +3688,8 @@ body {
   font-size: 20px; color: var(--text-muted); padding: 0 6px;
   line-height: 1; letter-spacing: 1px; opacity: 0.7;
   transition: opacity 0.1s;
-  display: flex; align-items: center; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;
 }
 .activity-card__dots-btn:active { opacity: 1; }
 .activity-card__dots-menu {
@@ -3966,7 +3970,7 @@ body {
 .expense-item-swipe { position: relative; overflow: hidden; border-radius: 14px; margin-bottom: 6px; }
 .expense-item-swipe__delete {
   position: absolute; right: 0; top: 0; bottom: 0;
-  width: 88px; background: var(--red);
+  width: 88px; background: var(--red-deep);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; color: white;
   border-radius: 0 14px 14px 0;
@@ -4175,7 +4179,10 @@ body {
 :root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-feature-settings: 'cv11' 1;
-  --orange: #35A7DD;
+  /* Cette redéclaration écrasait l'alias défini en tête de fichier et rendait
+     tous les boutons illisibles (2,72:1). Elle pointe maintenant sur le même
+     bleu dense. Voir B5 : un jeton peut être redéfini plus bas dans la feuille. */
+  --orange: var(--accent-deep);
   --yellow: #7FD1F0;
   --primary-shadow: rgba(53,167,221, 0.38);
   --text: #1C1917;
@@ -4381,7 +4388,7 @@ body {
 .trip-card__badge { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
 .trip-card__badge--active {
   background: rgba(34, 197, 94, 0.12);
-  color: #15803d;
+  color: #12692F;   /* 4,35:1 avec #15803d — il manquait un cran */
   font-weight: 700;
 }
 [data-theme="dark"] .trip-card__badge--active { background: rgba(34,197,94,0.15); color: #4ADE80; }
@@ -5037,7 +5044,10 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 .header__add-btn {
   width: 34px; height: 34px; flex-shrink: 0;
   border: none; border-radius: 50%;
-  background: #fff; color: var(--trip-accent, var(--orange));
+  /* Le ＋ sur pastille blanche : mesuré à 2,32:1 avec la couleur du voyage.
+     Le bouton d'ajout est le geste le plus fréquent de l'app — il ne se
+     décore pas, il se voit. */
+  background: #fff; color: var(--accent-deep);
   font-size: 21px; font-weight: 700; line-height: 1;
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.20);
@@ -5627,11 +5637,12 @@ button.budget-inline:active { transform: scale(0.98); }
 .tl-activity__top { gap: 6px; }
 .tl-activity__time {
   font-size: 13px; font-weight: 800;
-  color: var(--accent-deep);
+  /* 3,96:1 avec --accent-deep sur le fond creusé des lignes : c'est l'heure,
+     on la lit au soleil, elle passe sur le jeton de texte. */
+  color: var(--accent-texte);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
-[data-theme="dark"] .tl-activity__time { color: var(--accent-light); }
 .tl-activity__emoji { font-size: 15px; }
 .tl-activity__title { font-size: 13.5px; font-weight: 650; }
 .tl-activity__chevron {
@@ -5649,6 +5660,25 @@ button.budget-inline:active { transform: scale(0.98); }
   width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   color: var(--text-light);
 }
+
+/* Une adresse cliquable ouvre l'itinéraire. Le soulignement pointillé le dit
+   sans ajouter ni bouton ni pictogramme : le 📍 devant fait déjà l'affordance.
+   Le `!important` répond à celui de `.activity-card__address` plus bas ; on ne
+   touche pas au `display`, dont dépendent le `min-width` et les points de
+   suspension sur les adresses longues. Le remplissage vertical porte la cible
+   au pouce sans créer de ligne supplémentaire. */
+/* Sélecteur doublé à dessein : `.activity-card__address` pose plus bas un
+   `padding: 0 !important` que seule une spécificité supérieure peut battre. */
+.tl-activity__addr--nav,
+.activity-card__address.activity-card__address--nav {
+  color: var(--accent-texte) !important;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  padding: 10px 0 !important;
+  -webkit-tap-highlight-color: transparent;
+}
+.tl-activity__addr--nav:active,
+.activity-card__address.activity-card__address--nav:active { opacity: 0.6; }
 .tl-activity--open { background: var(--surface-raised); }
 
 /* En-tête de jour : chiffres (durée / budget / météo) plus gros */
@@ -5687,13 +5717,15 @@ button.budget-inline:active { transform: scale(0.98); }
 .debt-from, .debt-to { font-weight: 800; color: var(--text); }
 .debt-verb { color: var(--text-muted); font-weight: 500; }
 .debt-amount {
-  font-weight: 800; color: var(--red);
+  font-weight: 800; color: var(--red-texte);
   font-variant-numeric: tabular-nums; font-size: 15px;
 }
 .debt-settle-btn {
-  background: color-mix(in srgb, var(--green) 14%, transparent);
-  color: var(--green);
-  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  /* Vert sur vert pâle : 1,97:1. Rempli plutôt qu'esquissé — c'est l'action
+     qui solde une dette, elle peut se voir. */
+  background: var(--green-deep);
+  color: #fff;
+  border: 1px solid var(--green-deep);
   border-radius: 999px;
   font-size: 12px; font-weight: 800;
   padding: 6px 12px; margin-left: auto;
@@ -5961,7 +5993,7 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .reserve-assign__toggle {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 12px;
+  min-height: 44px; padding: 5px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-sunken);
@@ -6153,15 +6185,20 @@ button.budget-inline:active { transform: scale(0.98); }
 .day-detail-sheet .activity-card::before { width: 6px !important; height: 6px !important; }
 
 /* Les boutons perdent leur dégradé et leur halo : une couleur pleine, un rayon
-   franc, rien d'autre. */
+   franc, rien d'autre.
+
+   La teinte est --accent-deep, pas --accent : du blanc sur --accent tombe à
+   2,72:1, sous le seuil AA. Ce `!important` écrasait la correction faite en
+   tête de fichier — troisième fois qu'un jeton redéfini plus bas annule une
+   correction de couleur dans cette feuille (B5). */
 .btn--primary {
-  background: var(--accent) !important;
+  background: var(--accent-deep) !important;
   background-image: none !important;
   box-shadow: none !important;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-.btn--primary:active { background: color-mix(in srgb, var(--accent) 85%, black) !important; }
+.btn--primary:active { background: color-mix(in srgb, var(--accent-deep) 85%, black) !important; }
 
 /* Les séparateurs entre activités remplacent les cartes empilées : un filet
    fin, en retrait à gauche, comme dans une liste groupée iOS. */
@@ -6267,6 +6304,18 @@ button.budget-inline:active { transform: scale(0.98); }
 :root {
   --accent-deep: #287DA6;   /* blanc dessus : 4,59:1 */
   --green-deep:  #178841;   /* blanc dessus : 4,53:1 */
+  --red-deep:    #C42B2B;   /* blanc dessus : 4,52:1 */
+
+  /* Deux métiers différents, deux jetons. --accent-deep REÇOIT du blanc ;
+     --accent-texte EST du texte, posé sur les surfaces claires de l'app
+     (#EDF1F5 au plus foncé) où --accent-deep ne tenait qu'à 3,96:1. */
+  --accent-texte: #22719A;  /* sur --surface-sunken : 4,75:1 ; sur blanc : 5,39:1 */
+  --red-texte:    #B31F1F;  /* sur une carte claire : 5,4:1 */
+}
+/* En sombre, un texte d'accent doit s'éclaircir, pas s'assombrir. */
+[data-theme="dark"] {
+  --accent-texte: var(--accent-light);
+  --red-texte: #FF8A8A;
 }
 
 .tab-badge { background: var(--accent-deep) !important; color: #fff !important; }
@@ -6631,7 +6680,19 @@ button.budget-inline:active { transform: scale(0.98); }
 .reserve-etat__ferme::before { content: '○ '; }
 .reserve-etat__km { font-weight: 650; color: var(--accent-deep, var(--accent)); }
 .reserve-etat__plan { font-style: italic; }
-.reserve-etat__manque { margin-left: auto; opacity: 0.75; }
+/* C'est un bouton depuis qu'il fait quelque chose : il lance la recherche
+   pour cette fiche. Il garde l'allure d'une mention discrète — souligné
+   pointillé, comme les adresses cliquables — sans devenir un bouton de plus. */
+.reserve-etat__manque {
+  margin-left: auto;
+  border: none; background: none; font: inherit;
+  display: inline-flex; align-items: center; min-height: 44px;
+  color: var(--accent-texte);
+  text-decoration: underline dotted; text-underline-offset: 3px;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.reserve-etat__manque:disabled { color: var(--text-light); text-decoration: none; cursor: default; }
+.reserve-etat__manque:active:not(:disabled) { opacity: 0.6; }
 
 /* Déjà au programme : un liseré, rien de plus. L'idée reste utilisable —
    on peut vouloir y retourner. */
@@ -6701,19 +6762,22 @@ button.budget-inline:active { transform: scale(0.98); }
 
 /* Réordonner une journée au doigt. Même poignée que dans la Réserve : un
    seul geste à apprendre pour toute l'app. */
-.tl-act-wrap { position: relative; padding-left: 16px; }
+/* 44 × 44 réels, pas un halo : c'est la seule poignée de la ligne, elle peut
+   prendre la place. Mesurée à 20 px de large, elle demandait de viser. */
+.tl-act-wrap { position: relative; padding-left: 44px; }
 .tl-act-grip {
-  position: absolute; left: -2px; top: 50%; transform: translateY(-50%);
-  width: 20px; min-height: 44px;
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; min-height: 44px;
   border: none; background: transparent;
-  font-size: 13px; color: var(--text-light); cursor: grab;
+  font-size: 15px; color: var(--text-muted); cursor: grab;
   z-index: 2; line-height: 1;
   touch-action: none; -webkit-tap-highlight-color: transparent;
 }
 .tl-act-grip:active { cursor: grabbing; }
 .tl-act-wrap--drag { opacity: 0.4; }
 .tl-act-wrap--cible::before {
-  content: ''; position: absolute; left: 16px; right: 0; top: -2px;
+  content: ''; position: absolute; left: 44px; right: 0; top: -2px;
   height: 2px; border-radius: 2px; background: var(--accent);
 }
 
@@ -6795,20 +6859,22 @@ button.budget-inline:active { transform: scale(0.98); }
 /* ─── Coller un lien dans la Réserve ──────────────────────────────────────
    Remplir le vivier est LE geste d'avant-voyage. Sur iPhone, le menu Partager
    ne peut pas viser une app web (WebKit n'implémente pas le Web Share Target) :
-   coller est le chemin le plus court, et il marche partout. */
-.reserve-coller {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; min-height: 44px; margin-bottom: 10px;
-  border: 1px dashed var(--border-strong); border-radius: 14px;
-  background: var(--surface-raised); color: var(--accent-deep, var(--accent));
-  font-family: inherit; font-size: 14.5px; font-weight: 650;
+   coller est le chemin le plus court, et il marche partout.
+
+   Il occupait une rangée pleine largeur à lui seul, au-dessus de la première
+   idée — dans l'écran qui est le cœur du produit. Il est maintenant DANS le
+   champ de recherche, à la manière d'une croix d'effacement : même tap unique,
+   une rangée de moins avant le contenu. */
+.reserve-search-field { position: relative; flex: 1; display: flex; }
+.reserve-search-field .reserve-search-input { flex: 1; padding-right: 48px; }
+.reserve-search-coller {
+  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px;
+  border: none; background: none; font-size: 17px;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.reserve-coller:active { background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised)); }
-/* `--accent-deep` est un bleu foncé fait pour porter du blanc : posé comme
-   texte sur une surface sombre il tombe à 3,39:1. En thème sombre, c'est
-   l'accent clair qui doit écrire. */
-[data-theme="dark"] .reserve-coller { color: var(--accent); }
+.reserve-search-coller:active { opacity: 0.55; }
 
 /* ─── Les autres lieux d'un même lien ─────────────────────────────────────
    Une légende de vidéo cite rarement un seul endroit. Ils sont déjà lus :
@@ -6996,3 +7062,59 @@ button.budget-inline:active { transform: scale(0.98); }
   outline-offset: -2px;
   background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
 }
+
+/* ─── Le pli du formulaire d'ajout ────────────────────────────────────────
+   Le formulaire s'ouvrait en grand — onze champs et huit tuiles de catégorie —
+   alors que le principe du produit dit l'inverse : l'app complète elle-même, on
+   ne saisit pas. La recherche est passée en tête ; tout le reste vit ici, à un
+   tap, pour les cas où l'app ne peut pas deviner. */
+.details-pli {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  width: 100%; min-height: 52px; margin: 4px 0 12px; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface-raised); color: var(--text);
+  font-family: inherit; font-size: 15px; font-weight: 600; text-align: left;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.details-pli small { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.details-pli:active { background: var(--surface-sunken); }
+
+/* ─── Billets et réservations du voyage ───────────────────────────────────
+   Ils vivent avec les notes : même onglet, même intention — « ce qu'il me
+   faut sous la main ». Pas d'onglet ni d'entrée de menu supplémentaire. */
+.trip-docs { margin-top: 18px; }
+.trip-docs__titre {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+}
+.trip-docs__poids { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-light); }
+.trip-docs__liste { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.trip-doc {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: 12px; padding-right: 4px;
+}
+.trip-doc__ouvrir {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 0 12px;
+  border: none; background: none; font: inherit; text-align: left;
+  color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.trip-doc__icone { font-size: 18px; flex-shrink: 0; }
+.trip-doc__nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; font-weight: 600; }
+.trip-doc__retirer {
+  flex-shrink: 0; width: 44px; min-height: 44px;
+  border: none; background: none; color: var(--text-light);
+  font-size: 16px; cursor: pointer;
+}
+.trip-docs__ajout {
+  width: 100%; min-height: 48px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-texte);
+  font-family: inherit; font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.trip-docs__ajout:active { background: var(--surface-sunken); }
+.trip-docs__vide { margin-top: 8px; font-size: 13px; color: var(--text-light); }
+.trip-docs__erreur { margin-top: 8px; font-size: 13px; color: var(--red-texte); font-weight: 600; }
