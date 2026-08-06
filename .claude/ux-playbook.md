@@ -16,6 +16,18 @@ son origine devient un conseil creux qu'on applique de travers.
 > `.claude/` (playbook + compétences), puis vider `project-notes.md` et le
 > remplir pour le nouveau projet. Quand `/lecon` ajoute une règle ici, la
 > reporter dans les autres dépôts — la compétence le rappelle.
+>
+> **Se remettre à jour depuis la source, en une commande.** Provo est le dépôt
+> de référence et il est public : depuis n'importe quel autre projet,
+>
+> ```bash
+> curl -fsSL -o .claude/ux-playbook.md \
+>   https://raw.githubusercontent.com/bensmainethomaspro-commits/Provo/main/.claude/ux-playbook.md
+> ```
+>
+> Le fichier n'a aucune dépendance au projet : il s'écrase sans rien perdre.
+> Seul `project-notes.md`, lui, est propre à chaque dépôt — ne jamais le
+> recopier.
 
 ---
 
