@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { VAPID_PUBLIC_KEY } from '../lib/vapid';
 
 /**
  * Les rappels du voyage : « tu pars dans 20 minutes », « le musée ferme dans
@@ -16,7 +17,7 @@ import { supabase } from '../lib/supabase';
  * aurait personne à qui envoyer.
  */
 
-const CLE = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+const CLE = VAPID_PUBLIC_KEY;
 
 function versOctets(base64url) {
   const b64 = (base64url + '='.repeat((4 - base64url.length % 4) % 4))

@@ -1,0 +1,148 @@
+name: Installer les rappels
+
+# Pose, d'un seul geste, tout ce dont les notifications ont besoin :
+#
+#   1. la table `push_subscriptions` et ses règles d'accès ;
+#   2. une paire de clés VAPID fraîche — la privée part directement dans les
+#      secrets Supabase, la publique est commitée dans le dépôt ;
+#   3. rien d'autre. Le déclencheur (`push-tick.yml`) ne demande aucun secret.
+#
+# **La clé privée ne s'affiche jamais.** Elle est fabriquée dans le runner,
+# masquée dans les journaux, envoyée à Supabase, et le runner est détruit. Elle
+# ne transite ni par une conversation, ni par le dépôt, ni par le résumé du job.
+#
+# À lancer une fois : Actions › Installer les rappels › Run workflow.
+# Relancer est sans danger : la table est créée « si elle n'existe pas », et une
+# nouvelle paire de clés remplace proprement l'ancienne — les abonnements déjà
+# pris devront simplement être repris (l'app le fera au prochain passage sur
+# l'interrupteur).
+
+on:
+  workflow_dispatch:
+    inputs:
+      renouveler_les_cles:
+        description: "Regénérer les clés VAPID (invalide les abonnements existants)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  PROJET: usztistixgzdrvjzplqx
+
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Vérifier que le jeton Supabase est configuré
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "::error::Le secret SUPABASE_ACCESS_TOKEN est absent — c'est le même que celui du déploiement des fonctions."
+            exit 1
+          fi
+
+      - name: Créer la table des abonnements
+        env:
+          JETON: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          # L'API de gestion exécute du SQL sans avoir besoin du mot de passe de
+          # la base : c'est le même jeton que pour déployer les fonctions.
+          SQL=$(python3 -c "import json,sys; print(json.dumps({'query': open('supabase/migrations/20260806_push_subscriptions.sql').read()}))")
+          code=$(curl -s -o /tmp/sql.json -w '%{http_code}' \
+            -X POST "https://api.supabase.com/v1/projects/$PROJET/database/query" \
+            -H "Authorization: Bearer $JETON" \
+            -H "Content-Type: application/json" \
+            --max-time 90 -d "$SQL")
+          echo "HTTP $code"
+          cat /tmp/sql.json; echo
+          if [ "$code" -ge 300 ]; then
+            echo "::error::La création de la table a échoué."
+            exit 1
+          fi
+
+      - name: Fabriquer les clés et poser la privée dans Supabase
+        if: ${{ inputs.renouveler_les_cles }}
+        id: cles
+        env:
+          JETON: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          # Tout dans un seul script : la clé privée ne touche jamais une
+          # variable de shell, donc jamais un journal ni un fichier.
+          node - <<'JS'
+          const { webcrypto } = require('node:crypto');
+          const fs = require('node:fs');
+
+          (async () => {
+            const paire = await webcrypto.subtle.generateKey(
+              { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+            const pub = await webcrypto.subtle.exportKey('jwk', paire.publicKey);
+            const priv = await webcrypto.subtle.exportKey('jwk', paire.privateKey);
+
+            const b = (s) => Buffer.from(s, 'base64url');
+            const publique = Buffer
+              .concat([Buffer.from([4]), b(pub.x), b(pub.y)])
+              .toString('base64url');
+
+            const rep = await fetch(
+              `https://api.supabase.com/v1/projects/${process.env.PROJET}/secrets`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${process.env.JETON}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify([{
+                  name: 'VAPID_KEYS',
+                  value: JSON.stringify({ publicKey: pub, privateKey: priv }),
+                }]),
+              });
+
+            if (!rep.ok) {
+              console.log(`::error::Supabase a refusé le secret (HTTP ${rep.status}) : ${(await rep.text()).slice(0, 200)}`);
+              process.exit(1);
+            }
+            // Seule la publique ressort. C'est la seule des deux qui a le droit.
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `publique=${publique}\n`);
+            console.log('Clé privée déposée dans les secrets Supabase.');
+          })();
+          JS
+
+      - name: Commiter la clé publique
+        if: ${{ inputs.renouveler_les_cles }}
+        env:
+          PUBLIQUE: ${{ steps.cles.outputs.publique }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          p = pathlib.Path('src/lib/vapid.js')
+          s = p.read_text()
+          s = re.sub(r"import\.meta\.env\.VITE_VAPID_PUBLIC_KEY \|\| '[^']*'",
+                     f"import.meta.env.VITE_VAPID_PUBLIC_KEY || '{os.environ['PUBLIQUE']}'", s)
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Clé publique inchangée."
+          else
+            git add src/lib/vapid.js
+            git commit -m "chore(rappels): clé publique VAPID posée par le workflow d'installation"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+
+      - name: Récapitulatif
+        run: |
+          {
+            echo "## Rappels installés"
+            echo
+            echo "- Table \`push_subscriptions\` créée (ou déjà là)."
+            echo "- Clé privée VAPID déposée dans les secrets Supabase — elle n'apparaît nulle part ailleurs."
+            echo "- Clé publique commitée dans \`src/lib/vapid.js\` : le prochain déploiement Vercel la prendra."
+            echo
+            echo "Il ne reste qu'à ouvrir Provo **depuis l'écran d'accueil** de l'iPhone,"
+            echo "puis Mon compte → Préférences → « Rappels du voyage »."
+          } >> "$GITHUB_STEP_SUMMARY"

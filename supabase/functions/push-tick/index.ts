@@ -123,8 +123,11 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
-  // Le déclencheur est public : un secret partagé évite qu'un tiers fasse
-  // sonner les téléphones de tout le monde.
+  // Le point d'entrée peut rester ouvert sans risque : il n'accepte aucune
+  // donnée, ne rend que des compteurs, et n'envoie chaque rappel qu'une fois
+  // (colonne `envoyes`). L'appeler mille fois ne produit rien de plus qu'une.
+  // Un secret partagé reste possible si on veut fermer davantage : poser
+  // PUSH_TICK_SECRET côté Supabase suffit à l'exiger.
   const attendu = Deno.env.get("PUSH_TICK_SECRET");
   if (attendu && req.headers.get("x-provo-tick") !== attendu) {
     return json({ error: "non_autorise" }, 401);

@@ -112,15 +112,24 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   Rien entre 22 h et 7 h, **à l'heure du voyageur** (colonne `fuseau`), et un
   seul envoi par activité et par type (colonne `envoyes`).
 
-  **Mise en route — trois choses à faire une fois :**
-  1. `npm run vapid` **sur ta machine** → il imprime quoi coller où. La clé
-     privée ne doit jamais passer par une conversation ni par un dépôt.
-  2. Coller le contenu de `supabase/migrations/20260806_push_subscriptions.sql`
-     dans Supabase › SQL Editor.
-  3. Dans le dépôt, Settings › Secrets › Actions : `SUPABASE_FUNCTIONS_URL`,
-     `SUPABASE_ANON_KEY` et `PUSH_TICK_SECRET` (le même que le secret Supabase
-     du même nom). Sans eux le workflow ne fait rien et le dit — il n'échoue
-     pas.
+  **Mise en route : un seul geste.** Actions › « Installer les rappels » ›
+  Run workflow. Il crée la table par l'API de gestion Supabase, fabrique la
+  paire de clés VAPID, dépose la privée dans les secrets Supabase et commite
+  la publique dans `src/lib/vapid.js`. Aucun secret GitHub nouveau : le seul
+  utilisé est `SUPABASE_ACCESS_TOKEN`, déjà là pour le déploiement des
+  fonctions.
+
+  **La clé privée n'existe jamais ailleurs que dans le runner et Supabase.**
+  Ni dépôt, ni journal, ni conversation. La publique, elle, est faite pour être
+  dans le bundle : la commiter évite qu'un déploiement l'oublie.
+
+  `scripts/vapid.mjs` (`npm run vapid`) reste disponible pour la faire à la
+  main, mais n'est plus nécessaire.
+
+  Le déclencheur `push-tick.yml` ne demande **aucun secret** : l'adresse du
+  projet et la clé publiable sont déjà dans le dépôt, et le point d'entrée peut
+  rester ouvert — il n'accepte aucune donnée, ne rend que des compteurs, et
+  n'envoie chaque rappel qu'une fois.
 
   **Non vérifié de bout en bout depuis ici** : le bac à sable ne joint ni un
   service de push réel ni le domaine Supabase du projet. Ce qui est vérifié :

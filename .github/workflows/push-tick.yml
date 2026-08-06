@@ -7,14 +7,13 @@ name: Rappels du voyage
 # Toutes les quinze minutes : c'est la maille des rappels (« dans 25 minutes »),
 # et c'est assez peu pour rester très en dessous des quotas GitHub.
 #
-# Mise en route — une seule fois, dans Settings › Secrets and variables ›
-# Actions du dépôt :
-#   • SUPABASE_FUNCTIONS_URL  = https://<projet>.supabase.co/functions/v1
-#   • PUSH_TICK_SECRET        = une phrase au hasard, la MÊME que le secret du
-#                               même nom posé dans Supabase › Edge Functions
+# **Aucun secret à configurer.** L'adresse du projet et la clé publiable sont
+# déjà dans le dépôt (`src/lib/supabase.js`) : ce sont des valeurs publiques,
+# faites pour vivre dans le bundle du navigateur.
 #
-# Sans ces secrets le workflow ne fait rien et le dit : il ne doit jamais
-# échouer bruyamment sur un dépôt où les rappels ne sont pas configurés.
+# L'appel n'a pas besoin d'être protégé : `push-tick` n'accepte rien, ne rend
+# que des compteurs, et n'envoie chaque rappel qu'une seule fois (colonne
+# `envoyes`). L'appeler cent fois de suite ne produit rien de plus qu'une.
 
 on:
   schedule:
@@ -27,31 +26,34 @@ concurrency:
   group: push-tick
   cancel-in-progress: false
 
+env:
+  BASE: https://usztistixgzdrvjzplqx.supabase.co/functions/v1
+  PUBLIABLE: sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD
+
 jobs:
   tick:
     runs-on: ubuntu-latest
     steps:
       - name: Appeler push-tick
-        env:
-          BASE: ${{ secrets.SUPABASE_FUNCTIONS_URL }}
-          SECRET: ${{ secrets.PUSH_TICK_SECRET }}
-          ANON: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          if [ -z "$BASE" ] || [ -z "$SECRET" ]; then
-            echo "::notice::Rappels non configurés (SUPABASE_FUNCTIONS_URL ou PUSH_TICK_SECRET absent) — rien à faire."
-            exit 0
-          fi
           code=$(curl -s -o /tmp/rep.json -w '%{http_code}' -X POST "$BASE/push-tick" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $ANON" \
-            -H "x-provo-tick: $SECRET" \
+            -H "Authorization: Bearer $PUBLIABLE" \
+            -H "apikey: $PUBLIABLE" \
             --max-time 60 -d '{}')
           echo "HTTP $code"
-          cat /tmp/rep.json
-          echo
-          # Une panne passagère du service de push ne doit pas peindre le dépôt
-          # en rouge toutes les quinze minutes. Seule une erreur franche compte.
-          if [ "$code" -ge 500 ] || [ "$code" = "401" ]; then
+          cat /tmp/rep.json; echo
+          # Tant que les clés VAPID ne sont pas posées, la fonction répond
+          # « vapid_absent » en 200 : ce n'est pas une panne, c'est une
+          # installation pas encore faite. Le dire sans peindre le dépôt en
+          # rouge toutes les quinze minutes.
+          if grep -q vapid_absent /tmp/rep.json; then
+            echo "::notice::Rappels pas encore installés — lancer le workflow « Installer les rappels »."
+            exit 0
+          fi
+          # Une panne passagère du service de push ne doit pas non plus faire
+          # échouer le dépôt en boucle. Seule une erreur franche compte.
+          if [ "$code" -ge 500 ]; then
             echo "::error::push-tick a répondu $code"
             exit 1
           fi
