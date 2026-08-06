@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useReorderDrag } from '../hooks/useReorderDrag';
-import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire } from '../utils/helpers';
+import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts } from '../utils/helpers';
 
 // Déplacer une activité : UNE poignée ⠿ (réordonner dans le jour et changer de
 // jour) et, dans la fiche dépliée, des pastilles « Déplacer vers » pour ceux qui
@@ -104,6 +104,12 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
+  // Une journée qui déborde ou dont deux horaires se chevauchent ne se voyait
+  // qu'en ouvrant le détail du jour — il fallait donc soupçonner le problème
+  // pour le trouver. Le signal vit maintenant dans la rangée qui porte déjà la
+  // météo et les notes : un glyphe de plus, pas un bandeau.
+  const soucis = getLogicAlerts(day.activities, slots)
+    .filter(a => a.type === 'overload' || a.type === 'conflict');
 
   const handleDragOver = (e) => {
     if (compareMode) return;
@@ -141,6 +147,13 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
                 lue de la carte sans jamais servir à décider — le budget se
                 suit sur sa pastille et dans l'onglet Dépenses. */}
             {weather && <span>{weather.icon} {weather.max}°/{weather.min}°</span>}
+            {soucis.length > 0 && (
+              <span
+                className="tl-day__souci"
+                title={soucis.map(a => a.message).join('\n')}
+                aria-label={soucis.map(a => a.message).join(' ')}
+              >{soucis[0].icon}</span>
+            )}
             {day.notes && <span className="tl-day__note-flag" title="Notes du jour">📝</span>}
             {active.length === 0 && <span className="tl-day__empty-hint">Vide</span>}
           </div>

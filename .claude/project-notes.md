@@ -83,6 +83,21 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Zéro défaut mesuré hors carte** (août 2026). `/verif-ui` couvre maintenant
+  **huit** écrans dans les deux thèmes — l'Ajout et les Notes ont été ajoutés,
+  et c'est là qu'il a trouvé les derniers : croix de fermeture à 28 px et
+  4,22:1, raccourcis de type à 29 px, « Ouvert » en vert vif à 2,18:1.
+  `.sheet__close` était déclarée **trois fois** dans la feuille : corriger les
+  deux premières ne servait à rien (B5, quatrième occurrence).
+  Il reste 26 points, tous sur la carte, tous assumés.
+
+- **La surcharge se voit sans ouvrir le jour** (août 2026). C'était la seule
+  friction que `/parcours` signalait encore. Le glyphe ⚠️ / ⚡ se pose dans la
+  rangée d'état de la carte du jour, avec la météo et les notes — un glyphe,
+  pas un bandeau, et le message complet en `aria-label`. Le détail du jour
+  garde l'explication ; la frise donne la raison d'aller la lire.
+  **63 parcours : 0 cassé, 0 friction, 0 non joué.**
+
 - **Règle A7 en vigueur ici, sans exception** (août 2026) — « souvent tu ajoutes
   toutes les fonctionnalités, mais juste pour qu'elles y soient ». Dans ce
   projet, toute livraison doit pouvoir répondre à trois questions :

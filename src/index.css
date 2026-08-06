@@ -599,7 +599,7 @@ body {
 .sheet__handle { width: 40px; height: 4px; background: var(--border-strong); border-radius: 2px; margin: 12px auto 0; flex-shrink: 0; }
 .sheet__header { padding: 10px 20px 8px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .sheet__title { font-size: 18px; font-weight: 800; color: var(--text); }
-.sheet__close { background: var(--border); border: none; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; color: var(--text-muted); transition: background 0.1s; }
+.sheet__close { background: var(--border); border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; color: var(--text); transition: background 0.1s; }
 .sheet__close:hover { background: var(--border-strong); }
 .sheet__body { flex: 1; overflow-y: auto; padding: 6px 20px 12px; }
 .sheet__footer { padding: 10px 20px 14px; display: flex; gap: 10px; flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface-raised); }
@@ -608,7 +608,8 @@ body {
 .form-group { margin-bottom: 14px; }
 .form-label { display: block; font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
 .form-input, .form-textarea, .form-select {
-  width: 100%; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  width: 100%; min-height: 44px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
   padding: 10px 12px; font-size: 15px; color: var(--text);
   background: var(--surface-raised); transition: border-color 0.15s;
   font-family: inherit; -webkit-appearance: none;
@@ -837,7 +838,8 @@ body {
 .tool-btn:hover, .tool-btn:active { background: rgba(255,255,255,0.32); }
 .tool-btn--view-cycle {
   display: flex; align-items: center; gap: 5px;
-  padding: 5px 10px 5px 8px; border-radius: 20px;
+  min-height: 44px;
+  padding: 5px 12px 5px 10px; border-radius: 22px;
   background: rgba(255,255,255,0.22);
   font-size: 13px; font-weight: 700;
 }
@@ -2136,8 +2138,9 @@ body {
 .templates-row::-webkit-scrollbar { display: none; }
 .template-pill {
   flex-shrink: 0; background: var(--surface-sunken);
-  border: 1.5px solid var(--border-strong); border-radius: 20px;
-  padding: 6px 12px; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; min-height: 44px;
+  border: 1.5px solid var(--border-strong); border-radius: 22px;
+  padding: 6px 14px; font-size: 13px; font-weight: 600;
   color: var(--text); cursor: pointer; white-space: nowrap;
   font-family: inherit; transition: background 0.1s, border-color 0.1s;
 }
@@ -3430,9 +3433,13 @@ body {
 }
 .sheet__title { font-size: 17px; font-weight: 700; }
 .sheet__close {
+  /* 28 × 28 et 4,22:1 pendant longtemps : c'est pourtant le bouton qu'on
+     cherche quand on s'est trompé de porte. La taille est portée ici parce
+     que cette règle-ci est la dernière à parler (B5). */
+  width: 44px; height: 44px; font-size: 16px;
   background: rgba(120,120,128,0.14);
   border-radius: 50%;
-  color: var(--text-muted);
+  color: var(--text);
 }
 .sheet__close:hover { background: rgba(120,120,128,0.24); }
 .sheet__footer { border-top: 0.5px solid var(--border); }
@@ -4599,8 +4606,10 @@ body {
 .sheet__handle { width: 38px; height: 5px; background: rgba(120,120,128,0.24); border-radius: 3px; }
 .sheet__title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
 .sheet__close {
+  /* Troisième déclaration de cette classe dans la feuille, et la dernière à
+     parler : c'est elle qui la ramenait à 28 px. B5, encore. */
   background: rgba(120,120,128,0.13);
-  width: 28px; height: 28px;
+  width: 44px; height: 44px;
 }
 .sheet__close:hover { background: rgba(120,120,128,0.22); }
 
@@ -6311,11 +6320,13 @@ button.budget-inline:active { transform: scale(0.98); }
      (#EDF1F5 au plus foncé) où --accent-deep ne tenait qu'à 3,96:1. */
   --accent-texte: #22719A;  /* sur --surface-sunken : 4,75:1 ; sur blanc : 5,39:1 */
   --red-texte:    #B31F1F;  /* sur une carte claire : 5,4:1 */
+  --green-texte:  #146F35;  /* sur une carte claire : 6:1 — --green-deep n'atteignait que 4,33 */
 }
 /* En sombre, un texte d'accent doit s'éclaircir, pas s'assombrir. */
 [data-theme="dark"] {
   --accent-texte: var(--accent-light);
   --red-texte: #FF8A8A;
+  --green-texte: #4ADE80;
 }
 
 .tab-badge { background: var(--accent-deep) !important; color: #fff !important; }
@@ -6673,7 +6684,9 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .reserve-etat > * { min-width: 0; }
 .reserve-etat__ouvert {
-  color: var(--green, #15803d); font-weight: 700;
+  /* --green (#22c55e) est fait pour remplir, pas pour écrire : 2,18:1 sur une
+     carte claire. --green-deep tient le seuil. */
+  color: var(--green-texte); font-weight: 700;
 }
 .reserve-etat__ouvert::before { content: '● '; }
 .reserve-etat__ferme { color: var(--text-light); font-weight: 600; }
@@ -7118,3 +7131,12 @@ button.budget-inline:active { transform: scale(0.98); }
 .trip-docs__ajout:active { background: var(--surface-sunken); }
 .trip-docs__vide { margin-top: 8px; font-size: 13px; color: var(--text-light); }
 .trip-docs__erreur { margin-top: 8px; font-size: 13px; color: var(--red-texte); font-weight: 600; }
+
+/* Le ⋯ de l'en-tête mesurait 41 px de large pour 44 de haut : il manquait
+   trois pixels, et c'est le bouton qui ouvre tout le reste du voyage. */
+.header .btn--ghost-white.btn--sm { min-width: 44px; }
+
+/* Journée qui déborde ou horaires qui se chevauchent : le signal se pose dans
+   la rangée d'état du jour, avec la météo et les notes. Il ne remplace pas le
+   détail — il donne la raison d'aller le lire. */
+.tl-day__souci { font-size: 13px; line-height: 1; }
