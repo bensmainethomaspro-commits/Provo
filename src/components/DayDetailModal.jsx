@@ -9,7 +9,7 @@ export default function DayDetailModal({
   onReorder, onStartTimeChange, onEdit, onAddActivity,
   days, onDuplicate,
   compareMode, compareSelectedIds, onToggleCompare,
-  onNotesChange, onSweep, routeGain, onOptimizeRoute,
+  onNotesChange, onSweep, routeGain, onOptimizeRoute, enVoiture,
 }) {
   const [closing, setClosing] = useState(false);
   // Ouvertes d'emblée seulement si elles contiennent déjà quelque chose.
@@ -93,6 +93,7 @@ export default function DayDetailModal({
                     key={activity.id}
                     activity={activity}
                     context="day"
+                    enVoiture={enVoiture}
                     isLastDay={dayIndex === totalDays - 1}
                     slot={slots[activity.id]}
                     isPastTrip={isPastTrip}

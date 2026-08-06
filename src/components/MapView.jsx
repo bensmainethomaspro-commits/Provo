@@ -9,12 +9,15 @@ import { useLiveLocation, formatDistance, formatMarche } from '../hooks/useLiveL
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function markerIcon(category) {
+function markerIcon(category, titre = '') {
   const color = CATEGORY_COLORS[category] || '#35A7DD';
-  const { emoji } = getCategoryMeta(category);
+  const { emoji, label } = getCategoryMeta(category);
+  // Un point de carte qui ne dit que son émoji est muet pour une synthèse
+  // vocale — et l'émoji seul ne dit pas de quel lieu il s'agit.
+  const nom = esc(titre ? `${titre} — ${label}` : label);
   return L.divIcon({
     className: '',
-    html: `<div style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,0.35);border:2px solid #fff;">${emoji}</div>`,
+    html: `<div role="img" aria-label="${nom}" title="${nom}" style="background:${color};color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,0.35);border:2px solid #fff;">${emoji}</div>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
     popupAnchor: [0, -18],
@@ -43,7 +46,7 @@ function cadrer(map, bounds) {
 function homeIcon() {
   return L.divIcon({
     className: '',
-    html: `<div style="background:#1a1a2e;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,0.45);border:2.5px solid #fff;">🏠</div>`,
+    html: `<div role="img" aria-label="Hébergement" title="Hébergement" style="background:#1a1a2e;color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 2px 10px rgba(0,0,0,0.45);border:2.5px solid #fff;">🏠</div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18],
     popupAnchor: [0, -20],
@@ -178,7 +181,12 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     geoActs.forEach((a, idx) => {
       // Une épingle sans issue oblige à retrouver l'activité dans une autre
       // liste pour la corriger. La bulle ouvre désormais sa fiche.
-      const marker = L.marker([a.lat, a.lon], { icon: markerIcon(a.category) })
+      // `title` porte le nom accessible du point : Leaflet le pose sur l'élément
+      // cliquable lui-même, là où une synthèse vocale va le chercher.
+      const marker = L.marker([a.lat, a.lon], {
+        icon: markerIcon(a.category, a.title),
+        title: `${a.title || 'Lieu'} — ${getCategoryMeta(a.category).label}`,
+      })
         .addTo(couche)
         .bindPopup(
           `<strong>${esc(a.title)}</strong>`
@@ -233,7 +241,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
 
     // Accommodation marker (🏠) from trip settings
     if (accom && accom.lat != null) {
-      L.marker([accom.lat, accom.lon], { icon: homeIcon(), zIndexOffset: 200 })
+      L.marker([accom.lat, accom.lon], { icon: homeIcon(), zIndexOffset: 200, title: 'Hébergement' })
         .addTo(couche)
         .bindPopup(`<strong>🏠 Hébergement</strong>${accom.address ? `<br><small style="color:#888">${accom.address}</small>` : ''}`);
       bounds.push([accom.lat, accom.lon]);

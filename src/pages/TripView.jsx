@@ -43,154 +43,6 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
-function useTouchDnd({ tripId, tripRef, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve }) {
-  const stateRef = useRef({ id: null, ghost: null, offset: { x: 0, y: 0 }, sourceEl: null, dropZone: null });
-
-  const handleTouchDragStart = (activityId, touch, sourceEl) => {
-    const s = stateRef.current;
-    s.id = activityId;
-    s.sourceEl = sourceEl;
-    const rect = sourceEl.getBoundingClientRect();
-    s.offset = { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-    const ghost = sourceEl.cloneNode(true);
-    Object.assign(ghost.style, {
-      position: 'fixed', left: rect.left + 'px', top: rect.top + 'px',
-      width: rect.width + 'px', pointerEvents: 'none', zIndex: '9999',
-      opacity: '0.88', transform: 'scale(1.03) rotate(1deg)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.3)', transition: 'none', borderRadius: '16px',
-    });
-    document.body.appendChild(ghost);
-    s.ghost = ghost;
-    sourceEl.classList.add('activity-card--dragging');
-    // Disable scroll-snap on the timeline so the horizontal auto-scroll is smooth.
-    document.body.classList.add('dnd-active');
-  };
-
-  // Sur la timeline, les jours défilent horizontalement : la carte voisine ne
-  // dépasse souvent que de quelques pixels à l'écran. Viser cette lisière au
-  // doigt est impossible — si le point touché ne tombe sur aucune zone, on
-  // rattrape le dépôt sur la carte la plus proche, à condition de rester à la
-  // hauteur de la timeline. Le geste devient tolérant sans devenir hasardeux.
-  const resolveZone = (x, y) => {
-    const el = document.elementFromPoint(x, y);
-    const direct = el?.closest('[data-drop-zone="true"]');
-    if (direct) return direct;
-    const wrap = document.querySelector('.timeline-view-wrap');
-    if (!wrap) return null;
-    const r = wrap.getBoundingClientRect();
-    if (y < r.top || y > r.bottom) return null;
-    let best = null, bestDist = Infinity;
-    wrap.querySelectorAll('[data-drop-zone="true"]').forEach(z => {
-      const zr = z.getBoundingClientRect();
-      const d = x < zr.left ? zr.left - x : x > zr.right ? x - zr.right : 0;
-      if (d < bestDist) { bestDist = d; best = z; }
-    });
-    return bestDist <= 120 ? best : null;
-  };
-
-  useEffect(() => {
-    const onMove = (e) => {
-      const s = stateRef.current;
-      if (!s.ghost) return;
-      e.preventDefault();
-      const touch = e.touches[0];
-      s.ghost.style.left = (touch.clientX - s.offset.x) + 'px';
-      s.ghost.style.top = (touch.clientY - s.offset.y) + 'px';
-
-      // Vertical auto-scroll (Liste / Agenda). Use the container's own bounding box for the
-      // edge zones — otherwise the sticky header eats the top zone and you can't drag an
-      // activity *upward* onto an earlier day.
-      const sc = s.scrollContainer || (s.scrollContainer = document.querySelector('.tab-content'));
-      if (sc) {
-        const r = sc.getBoundingClientRect();
-        const EDGE = 110, MAX = 20;
-        const y = touch.clientY;
-        if (y < r.top + EDGE) {
-          const k = Math.min(1, (r.top + EDGE - y) / EDGE);
-          sc.scrollTop -= Math.round(MAX * Math.pow(k, 1.4));
-        } else if (y > r.bottom - EDGE) {
-          const k = Math.min(1, (y - (r.bottom - EDGE)) / EDGE);
-          sc.scrollTop += Math.round(MAX * Math.pow(k, 1.4));
-        }
-      }
-      // Horizontal auto-scroll for the Timeline, where days are laid out left-to-right.
-      // Lets you drag an activity onto a day several days further along.
-      if (s.timelineWrap === undefined) s.timelineWrap = document.querySelector('.timeline-view-wrap') || null;
-      const tl = s.timelineWrap;
-      if (tl) {
-        const r = tl.getBoundingClientRect();
-        const HEDGE = 84, HMAX = 20;
-        const x = touch.clientX;
-        if (x < r.left + HEDGE) {
-          const k = Math.min(1, (r.left + HEDGE - x) / HEDGE);
-          tl.scrollLeft -= Math.round(HMAX * Math.pow(k, 1.4));
-        } else if (x > r.right - HEDGE) {
-          const k = Math.min(1, (x - (r.right - HEDGE)) / HEDGE);
-          tl.scrollLeft += Math.round(HMAX * Math.pow(k, 1.4));
-        }
-      }
-
-      s.ghost.style.visibility = 'hidden';
-      const newZone = resolveZone(touch.clientX, touch.clientY);
-      s.ghost.style.visibility = '';
-      if (newZone !== s.dropZone) {
-        s.dropZone?.classList.remove('day-section__body--drop-target');
-        newZone?.classList.add('day-section__body--drop-target');
-        s.dropZone = newZone;
-      }
-    };
-
-    const onEnd = (e) => {
-      const s = stateRef.current;
-      if (!s.ghost) return;
-      const touch = e.changedTouches[0];
-      s.ghost.style.visibility = 'hidden';
-      const zone = resolveZone(touch.clientX, touch.clientY) || s.dropZone;
-      s.ghost.style.visibility = '';
-      if (zone && s.id) {
-        const zoneType = zone.dataset.zoneType;
-        const dayId = zone.dataset.dayId;
-        const itemId = s.id;
-        const trip = tripRef.current;
-        if (zoneType === 'day' && dayId) {
-          const isInReserve = trip.reserve.some(a => a.id === itemId);
-          if (isInReserve) {
-            pushUndo(trip, 'Idée placée dans la journée');
-            moveFromReserveToDay(tripId, dayId, itemId);
-          } else {
-            const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
-            if (srcDay && srcDay.id !== dayId) {
-              pushUndo(trip, 'Activité déplacée');
-              moveDayToDay(tripId, srcDay.id, dayId, itemId);
-            }
-          }
-        } else if (zoneType === 'reserve') {
-          const srcDay = trip.days.find(d => d.activities.some(a => a.id === itemId));
-          if (srcDay) {
-            pushUndo(trip, 'Activité renvoyée en réserve');
-            moveToReserve(tripId, srcDay.id, itemId);
-          }
-        }
-      }
-      s.dropZone?.classList.remove('day-section__body--drop-target');
-      zone?.classList.remove('day-section__body--drop-target');
-      if (s.ghost) { s.ghost.remove(); s.ghost = null; }
-      s.sourceEl?.classList.remove('activity-card--dragging');
-      document.body.classList.remove('dnd-active');
-      s.id = null; s.sourceEl = null; s.dropZone = null; s.scrollContainer = null; s.timelineWrap = undefined;
-    };
-
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd);
-    return () => {
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
-    };
-  }, [tripId, pushUndo, moveFromReserveToDay, moveDayToDay, moveToReserve]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return handleTouchDragStart;
-}
-
 export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
@@ -422,11 +274,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     }
     fetchTripMembers(tripId).then(members => setTripMembers(members || []));
   };
-
-  const handleTouchDragStart = useTouchDnd({
-    tripId, tripRef, pushUndo,
-    moveFromReserveToDay, moveDayToDay, moveToReserve,
-  });
 
   // Auto-scroll during HTML5 (mouse / touch-PC) drag near the edges — vertically
   // for Liste/Agenda and horizontally for the Timeline (days laid out left→right).
@@ -729,6 +576,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // L'agent ne travaillait qu'à l'ajout. Or une information se périme : un
   // restaurant change ses horaires, un musée ses tarifs. On repasse donc sur
   // l'existant — à la demande, et jamais sans montrer ce qu'on a trouvé.
+  const [completionEnCours, setCompletionEnCours] = useState(() => new Set());
+
   const fouiller = async () => {
     const liste = aEnrichir(tripRef.current);
     if (!liste.length) return;
@@ -741,6 +590,25 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
     setFouilleEnCours(null);
     if (propositions.length) setEnrichProps(propositions);
+  };
+
+  // « 2 infos à compléter » ne disait que le problème. Le même élément lance
+  // maintenant la recherche pour cette fiche-là : c'est un bouton, pas un
+  // constat. Le principe produit dit que l'app complète elle-même — afficher
+  // un décompte sans l'offrir, c'était le contraire.
+  const completerUneFiche = async (activite) => {
+    if (completionEnCours.has(activite.id)) return;
+    setCompletionEnCours(s => new Set(s).add(activite.id));
+    const emplacement = { type: 'reserve' };
+    try {
+      const { propositions, marques } = await fouillerLesFiches(
+        [{ activite, emplacement, ou: 'Réserve' }], {});
+      marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
+      if (propositions.length) setEnrichProps(propositions);
+      else await autoEnrich(activite, activite.id, emplacement);
+    } finally {
+      setCompletionEnCours(s => { const n = new Set(s); n.delete(activite.id); return n; });
+    }
   };
 
   const openAddSheet = (dayId = null) => {
@@ -824,8 +692,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
   const detailDay_ = detailDay ? trip.days.find(d => d.id === detailDay.id) : null;
 
+  // À pied, sauf en road trip. Le voyage porte déjà l'information : demander le
+  // mode à chaque itinéraire serait un choix de plus à faire sur le trottoir.
+  const enVoiture = !!trip.roadTripMode;
+
   const sharedDayProps = {
     days: trip.days,
+    enVoiture,
     onDuplicate: handleDuplicate,
     compareMode,
     compareSelectedIds,
@@ -1120,10 +993,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 onDrop={handleDropOnDay}
                 onMoveToDay={undoableMoveDayToDay}
                 onMoveToReserve={undoableMoveToReserve}
+                enVoiture={enVoiture}
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
                 onToggleCompare={toggleCompare}
-                onTouchDragStart={handleTouchDragStart}
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
                 onDeplacerEntreJours={deplacerEntreJours}
@@ -1170,17 +1043,28 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 {/* Remplir le vivier est le geste le plus fréquent avant le
                     départ. Sur iPhone, le menu Partager ne peut pas viser une
                     app web (WebKit n'implémente pas le Web Share Target) :
-                    coller reste le chemin le plus court, et il marche partout. */}
-                <button className="reserve-coller" onClick={collerUnLien}>
-                  📋 Coller un lien
-                </button>
+                    coller reste le chemin le plus court, et il marche partout.
+
+                    Il occupait un bloc pleine largeur à lui seul, au-dessus de
+                    la première idée. Il vit maintenant DANS le champ de
+                    recherche, comme la croix d'effacement : une rangée de moins
+                    avant le contenu, et toujours un seul tap. */}
                 <div className="reserve-search-bar">
-                  <input
-                    className="reserve-search-input"
-                    placeholder="🔍 Rechercher…"
-                    value={reserveSearch}
-                    onChange={e => setReserveSearch(e.target.value)}
-                  />
+                  <div className="reserve-search-field">
+                    <input
+                      className="reserve-search-input"
+                      placeholder="🔍 Chercher, ou coller un lien"
+                      value={reserveSearch}
+                      onChange={e => setReserveSearch(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="reserve-search-coller"
+                      onClick={collerUnLien}
+                      title="Coller un lien depuis le presse-papier"
+                      aria-label="Coller un lien depuis le presse-papier"
+                    >📋</button>
+                  </div>
                   <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
                     <option value="default">Ordre d'ajout</option>
                     <option value="alpha">A–Z</option>
@@ -1207,12 +1091,17 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     aria-pressed={grouper}
                     title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
                   >{grouper ? '⊞ Groupé' : '☰ Liste'}</button>
-                  {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
+                  {/* En vue groupée, chaque en-tête porte déjà « 🍽 RESTO · 3 » :
+                      ces pastilles disaient la même chose sur une deuxième
+                      rangée, juste au-dessus. Elles ne servent qu'en vue liste. */}
+                  {!grouper && CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
                     const count = trip.reserve.filter(a => a.category === cat.id).length;
                     return (
                       <button key={cat.id}
                         className={`reserve-filter__pill${reserveFilter === cat.id ? ' reserve-filter__pill--active' : ''}`}
                         onClick={() => setReserveFilter(cat.id)}
+                        aria-label={`${cat.label} — ${count} idée${count > 1 ? 's' : ''}`}
+                        aria-pressed={reserveFilter === cat.id}
                       >{cat.emoji} {count}</button>
                     );
                   })}
@@ -1324,15 +1213,24 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                             </span>
                           )}
                           {m.length > 0 && (
-                            <span className="reserve-etat__manque" title={`Manque : ${m.join(', ')}`}>
-                              {m.length} info{m.length > 1 ? 's' : ''} à compléter
-                            </span>
+                            <button
+                              type="button"
+                              className="reserve-etat__manque"
+                              title={`Manque : ${m.join(', ')} — toucher pour chercher`}
+                              disabled={completionEnCours.has(activity.id)}
+                              onClick={(e) => { e.stopPropagation(); completerUneFiche(activity); }}
+                            >
+                              {completionEnCours.has(activity.id)
+                                ? 'Recherche…'
+                                : `${m.length} info${m.length > 1 ? 's' : ''} à compléter`}
+                            </button>
                           )}
                         </div>
                       );
                     })()}
                     <ActivityCard
                       activity={activity}
+                      enVoiture={enVoiture}
                       context="reserve"
                       isPastTrip={isPast}
                       onStatusChange={(s) => setActivityStatus(tripId, { type: 'reserve' }, activity.id, s)}

@@ -924,6 +924,58 @@ export function haversineKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+/**
+ * Le nom d'un lieu, séparé de son adresse.
+ *
+ * Une fiche importée s'appelait « Café bel étage, Kärntner Straße 38, 1010
+ * Vienna Austria » : trois lignes de titre, suivies de la même adresse répétée
+ * juste en dessous. Ce qu'on colle est presque toujours « nom, rue, ville » ;
+ * le nom est ce qui précède la première virgule.
+ *
+ * Prudent par construction — on ne coupe que si le résultat reste un nom
+ * plausible et que la suite ressemble bien à une adresse (un chiffre, ou au
+ * moins deux segments). « Da Enzo al 29 », sans virgule, sort intact.
+ */
+export function nomDeLieu(texte) {
+  const t = (texte || '').trim();
+  const bouts = t.split(',').map(x => x.trim()).filter(Boolean);
+  if (bouts.length < 2) return t;
+  const nom = bouts[0];
+  if (nom.length < 3 || nom.length > 60) return t;
+  const suite = bouts.slice(1).join(', ');
+  // Une vraie adresse porte un numéro, un code postal, ou au moins deux
+  // segments. « Chez Marie, le meilleur » n'en est pas une.
+  if (!/\d/.test(suite) && bouts.length < 3) return t;
+  return nom;
+}
+
+/**
+ * L'itinéraire vers un lieu, tel qu'une application de navigation l'attend.
+ *
+ * **Pas de point de départ.** C'est délibéré : sans `origin`, Maps part de la
+ * position réelle *et la recalcule à mesure qu'on marche*. Y injecter les
+ * coordonnées relevées au moment du tap fige le départ — trente mètres plus
+ * loin, l'itinéraire est déjà faux, et il faut le refaire.
+ *
+ * Le format `maps/dir/?api=1` est un lien universel : il ouvre l'application
+ * Maps installée, sur iPhone comme sur Android, au lieu de passer par le web
+ * puis un bandeau « ouvrir dans l'app ».
+ *
+ * Le mode par défaut est **à pied** : Provo sert surtout des séjours en ville,
+ * où l'ancien `directionsmode=driving` proposait de prendre la voiture pour
+ * quatre cents mètres. En road trip, le voyage le dit lui-même.
+ */
+export function lienItineraire(activity, { enVoiture = false } = {}) {
+  if (!activity) return null;
+  const cible = Number.isFinite(activity.lat) && Number.isFinite(activity.lon)
+    ? `${activity.lat},${activity.lon}`
+    : (activity.address || '').trim();
+  if (!cible) return null;
+  return 'https://www.google.com/maps/dir/?api=1'
+    + `&destination=${encodeURIComponent(cible)}`
+    + `&travelmode=${enVoiture ? 'driving' : 'walking'}`;
+}
+
 // ─── Logic alerts ─────────────────────────────────────────
 export function getLogicAlerts(activities, slots) {
   const alerts = [];

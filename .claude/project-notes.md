@@ -83,6 +83,58 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Règle A7 en vigueur ici, sans exception** (août 2026) — « souvent tu ajoutes
+  toutes les fonctionnalités, mais juste pour qu'elles y soient ». Dans ce
+  projet, toute livraison doit pouvoir répondre à trois questions :
+  1. quel élément **déjà à l'écran** porte la nouveauté ?
+  2. si un élément est créé, **lequel disparaît** en échange ?
+  3. le nombre d'éléments visibles par écran a-t-il **baissé ou stagné** ?
+
+  Provo a une identité épurée : peu d'éléments, gros caractères, action évidente.
+  C'est ce qui le distingue de Wanderlog, dont le reproche n°1 en 2026 est d'être
+  « chaotique et encombré ». Une fonctionnalité utile mal insérée coûte plus que
+  ce qu'elle rapporte.
+
+- **Deux jetons de bleu, deux métiers** (août 2026). `--accent` (#35A7DD) est la
+  teinte de marque : traits, bordures, surfaces. Elle **ne peut porter aucun
+  texte** — 2,72:1 contre le blanc, dans les deux sens. `--accent-deep`
+  (#287DA6) reçoit du blanc ; `--accent-texte` (#22719A, clair en thème sombre)
+  *est* du texte. Idem `--red-deep` / `--red-texte`, `--green-deep`.
+  Trois fois de suite, une correction de couleur a été annulée par une
+  redéclaration plus bas dans `index.css` (B5) : chercher `--orange:` et
+  `!important` avant de conclure qu'un correctif ne marche pas.
+
+- **Un seul geste par intention** (août 2026). Il existait **quatre** façons de
+  déplacer une activité du planning : deux poignées ⠿ identiques côte à côte,
+  un appui long, et les pastilles « Déplacer vers ». Il en reste **une**
+  (poignée 44 × 44) plus les pastilles, qui sont aussi le seul chemin vers la
+  Réserve. `useTouchDnd` supprimé (146 lignes).
+
+- **La barre d'onglets masquait les dépôts** (août 2026). `elementFromPoint`
+  renvoyait la barre flottante, la cible passait à « rien », et relâcher là ne
+  déplaçait rien — sans un mot. `useReorderDrag` garde maintenant la dernière
+  cible connue quand le doigt passe sous un calque `position: fixed`. Le vide
+  reste l'échappatoire.
+
+- **Le formulaire d'ajout est derrière un pli** (août 2026). La recherche de
+  lieu est passée en tête et cherche à la frappe ; titre, catégorie, durée,
+  horaires, prix et notes vivent sous « ▾ Détails ». Onze champs et huit tuiles
+  ne s'ouvrent plus à chaque ajout alors que le principe produit dit que l'app
+  remplit elle-même.
+
+- **La carte reste à 32 px, sciemment.** Les 26 points restants de `/verif-ui`
+  sont tous là : marqueurs Leaflet 32 × 32 et les deux liens d'attribution
+  OpenStreetMap, obligatoires par licence. Les élargir à 44 px les ferait se
+  chevaucher en zone dense — le doigt toucherait le mauvais lieu, ce qui est
+  pire que viser. Tout le reste de l'app est à zéro dans les deux thèmes.
+
+- **`/verif-ui` détecte les plantages et ignore les émojis** (août 2026). Il
+  mesurait l'écran d'erreur sans broncher — tout au vert alors que l'app était
+  tombée. Il comptait aussi les émojis couleur comme des défauts de contraste
+  (1,11:1) alors qu'ils peignent leurs propres pixels. Les glyphes monochromes
+  — ⠿, ▼, ＋ — restent mesurés : c'est ainsi qu'une poignée invisible a été
+  trouvée.
+
 - **L'onglet « Aujourd'hui » a été retiré** (août 2026). Le planning place déjà
   le jour J au centre à l'ouverture ; un onglet séparé dédoublait la question.
   `TodayMode.jsx` supprimé. Ce qui s'y faisait vit dans le menu ⋯

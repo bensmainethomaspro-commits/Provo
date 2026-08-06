@@ -123,6 +123,21 @@ const SONDES = `(() => {
     const fg = parse(s.color); if (!fg) return;
     const cle = propre.slice(0, 30) + '|' + el.className;
     if (vus.has(cle)) return;
+    // Un émoji couleur peint ses propres pixels et ignore \`color\` : mesurer la
+    // couleur de texte héritée contre le fond ne dit rien de ce qu'on voit. Ces
+    // éléments sortaient à 1,11:1 alors qu'ils s'affichent parfaitement. Un
+    // outil qui invente des défauts finit par ne plus être lu.
+    //
+    // On ne retire QUE les émojis couleur. Les glyphes monochromes — ⠿, ▼, ＋ —
+    // suivent \`color\` et restent mesurés : c'est ainsi qu'une poignée à 1,08:1
+    // a été trouvée.
+    const sansEmoji = propre.replace(
+      /[\\p{Emoji_Presentation}\\p{Extended_Pictographic}\\uFE0F\\uFE0E\\u200D\\u{1F3FB}-\\u{1F3FF}]/gu, '').trim();
+    if (!sansEmoji) {
+      vus.add(cle);
+      incertains.push({ texte: propre.slice(0, 40) + ' (émoji seul)', classe: String(el.className).slice(0, 38) });
+      return;
+    }
     const fond = fondReel(el);
     if (fond.incertain) {
       vus.add(cle);
@@ -143,6 +158,11 @@ const SONDES = `(() => {
   });
 
   // 2 · Cibles tactiles — un pouce ne vise pas mieux que 44 px.
+  //
+  // Sauf pour un lien posé dans une ligne de texte : sa hauteur est celle de la
+  // ligne, et l'agrandir à 44 px gonflerait chaque carte sans rien rendre plus
+  // atteignable. WCAG 2.5.8 les exempte explicitement et fixe le plancher à
+  // 24 px — c'est cette barre-là qu'on leur applique.
   //
   // Le dessin d'un bouton et sa zone sensible sont deux choses différentes :
   // un pseudo-élément peut étendre la seconde sans toucher au premier, ce qui
@@ -168,7 +188,13 @@ const SONDES = `(() => {
     .forEach(el => {
       if (!visible(el)) return;
       const r = el.getBoundingClientRect();
-      if (Math.min(r.width, r.height) >= ${CIBLE_MIN} - 0.5) return;
+      // Un lien dans une ligne de texte : sa hauteur est celle de la ligne.
+      // WCAG 2.5.8 l'exempte et fixe le plancher à 24 px.
+      const dansDuTexte = el.tagName === 'A'
+        && !!el.textContent.trim()
+        && getComputedStyle(el).position === 'static';
+      const seuil = dansDuTexte ? 24 : ${CIBLE_MIN};
+      if (Math.min(r.width, r.height) >= seuil - 0.5) return;
       if (atteignable(el, r)) return;
       const cle = String(el.className) + '|' + nomme(el);
       if (vusC.has(cle)) return;
@@ -289,8 +315,13 @@ for (const theme of ['light', 'dark']) {
     await p.waitForTimeout(900);
     try { await ecran.aller(p); } catch { /* écran absent : rien à mesurer */ }
     await p.waitForTimeout(400);
+    // Quand l'app tombe, la barrière d'erreur affiche un écran sobre — deux
+    // textes et un bouton — que cet outil mesure sans broncher : tout passe au
+    // vert alors que plus rien ne marche. C'est arrivé, et j'ai failli livrer
+    // le résultat. Un plantage doit sortir plus fort qu'un défaut de contraste.
+    const plante = await p.locator('.error-screen').count().catch(() => 0);
     const r = await p.evaluate(SONDES);
-    rapport.push({ theme, ecran: ecran.nom, ...r, erreurs: [...erreurs] });
+    rapport.push({ theme, ecran: ecran.nom, ...r, plante: plante > 0, erreurs: [...erreurs] });
     erreurs.length = 0;
   }
   await ctx.close();
@@ -338,8 +369,18 @@ if (JSON_OUT) {
     x => `« ${x.texte} » [${x.classe}]`);
 }
 
+const plantes = rapport.filter(l => l.plante);
 const total = rapport.reduce((n, l) =>
   n + l.contraste.length + l.cibles.length + (l.deborde ? 1 : 0)
     + l.horsEcran.length + l.muets.length + l.erreurs.length, 0);
-if (!JSON_OUT) console.log(`\n${total === 0 ? '✅ Rien à signaler.' : `⚠️  ${total} points mesurés à trancher.`}\n`);
-process.exit(total === 0 ? 0 : 1);
+if (!JSON_OUT) {
+  // En tête, avant les chiffres : sur un écran planté, tous les autres comptes
+  // sont faux — il n'y a plus d'interface à mesurer.
+  if (plantes.length) {
+    console.log(`\n🛑 L'APPLICATION TOMBE sur ${plantes.length} écran(s) : `
+      + [...new Set(plantes.map(l => `${l.ecran}/${l.theme}`))].join(', '));
+    console.log('   Les mesures ci-dessus portent sur l’écran d’erreur, pas sur l’app.');
+  }
+  console.log(`\n${total === 0 && !plantes.length ? '✅ Rien à signaler.' : `⚠️  ${total} points mesurés à trancher.`}\n`);
+}
+process.exit(total === 0 && !plantes.length ? 0 : 1);

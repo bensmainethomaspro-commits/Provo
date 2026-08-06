@@ -1,18 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
 import { useReorderDrag } from '../hooks/useReorderDrag';
-import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots } from '../utils/helpers';
+import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire } from '../utils/helpers';
 
-// Appui long avant de déclencher le glisser : assez court pour rester fluide,
-// assez long pour ne pas se déclencher pendant un défilement.
-const LONG_PRESS_MS = 380;
-const MOVE_TOLERANCE = 10;
+// Déplacer une activité : UNE poignée ⠿ (réordonner dans le jour et changer de
+// jour) et, dans la fiche dépliée, des pastilles « Déplacer vers » pour ceux qui
+// préfèrent taper — c'est aussi le seul chemin vers la Réserve.
+//
+// Il y en avait quatre : deux poignées ⠿ identiques côte à côte (l'ancienne à
+// 1,08:1 de contraste, invisible), un appui long n'importe où, et les pastilles.
+// Chaque geste avait été ajouté à côté du précédent au lieu de le remplacer.
 
 function TlActivity({
   activity, slot, dayId, days, onMoveToDay, onMoveToReserve,
-  compareMode, compareSelected, onToggleCompare, onTouchDragStart,
+  compareMode, compareSelected, onToggleCompare, enVoiture,
 }) {
   const [open, setOpen] = useState(false);
-  const press = useRef({ timer: null, x: 0, y: 0, dragged: false });
   const meta = getCategoryMeta(activity.category);
   const dur = (activity.durationHours || 0) * 60 + (activity.durationMinutes || 0);
   // Replié, on ne montre que l'essentiel (heure + titre). Le détail (durée, prix,
@@ -20,36 +22,7 @@ function TlActivity({
   const hasDetails = dur > 0 || activity.price > 0 || !!activity.address;
   const canMove = !!onMoveToDay && days?.length > 1;
   const canOpen = hasDetails || canMove;
-
-  useEffect(() => () => clearTimeout(press.current.timer), []);
-
-  // Glisser au doigt : viser la petite poignée ⠿ demandait trop de précision.
-  // Un appui long n'importe où sur l'activité démarre maintenant le glisser.
-  const cancelPress = () => { clearTimeout(press.current.timer); press.current.timer = null; };
-
-  const onTouchStart = (e) => {
-    if (compareMode || !onTouchDragStart) return;
-    const t = e.touches[0];
-    const el = e.currentTarget; // capturé maintenant : nul dans le setTimeout
-    press.current.x = t.clientX;
-    press.current.y = t.clientY;
-    press.current.dragged = false;
-    cancelPress();
-    press.current.timer = setTimeout(() => {
-      press.current.timer = null;
-      press.current.dragged = true;
-      navigator.vibrate?.(12);
-      onTouchDragStart(activity.id, { clientX: press.current.x, clientY: press.current.y }, el);
-    }, LONG_PRESS_MS);
-  };
-
-  const onTouchMove = (e) => {
-    if (!press.current.timer) return;
-    const t = e.touches[0];
-    // L'utilisateur fait défiler la liste : ce n'est pas un appui long.
-    if (Math.abs(t.clientX - press.current.x) > MOVE_TOLERANCE
-      || Math.abs(t.clientY - press.current.y) > MOVE_TOLERANCE) cancelPress();
-  };
+  const itineraire = lienItineraire(activity, { enVoiture });
 
   return (
     <div
@@ -62,34 +35,19 @@ function TlActivity({
         e.dataTransfer.setData('text/plain', activity.id);
         e.dataTransfer.effectAllowed = 'move';
       }}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={cancelPress}
-      onTouchCancel={cancelPress}
       onClick={(e) => {
         if (compareMode) { e.stopPropagation(); onToggleCompare?.(); return; }
         // Ne pas laisser le tap remonter jusqu'à la carte du jour (qui ouvre la modale)
         e.stopPropagation();
-        // Le clic qui suit un glisser ne doit pas déplier la fiche.
-        if (press.current.dragged) { press.current.dragged = false; return; }
         if (canOpen) setOpen(o => !o);
       }}
     >
       <div className="tl-activity__top">
-        {compareMode ? (
+        {compareMode && (
           <div className={`tl-activity__compare-check${compareSelected ? ' tl-activity__compare-check--on' : ''}`}>
             {compareSelected ? '☑' : '☐'}
           </div>
-        ) : onTouchDragStart ? (
-          <div
-            className="tl-activity__drag-handle"
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation(); // sinon l'appui long démarrerait un second glisser
-              onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.tl-activity'));
-            }}
-          >⠿</div>
-        ) : null}
+        )}
         {slot && <span className="tl-activity__time">{slot.start}</span>}
         <span className="tl-activity__emoji">{meta.emoji}</span>
         <span className="tl-activity__title">{activity.title}</span>
@@ -101,7 +59,19 @@ function TlActivity({
         <div className="tl-activity__meta">
           {dur > 0 && <span className="tl-activity__dur">⏱ {formatDuration(dur)}</span>}
           {activity.price > 0 && <span className="tl-activity__price">💶 {formatPrice(parseFloat(activity.price))}</span>}
-          {activity.address && <span className="tl-activity__addr">📍 {activity.address}</span>}
+          {activity.address && (itineraire
+            ? (
+              <a
+                className="tl-activity__addr tl-activity__addr--nav"
+                href={itineraire}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={e => e.stopPropagation()}
+                aria-label={`Itinéraire vers ${activity.title}`}
+              >📍 {activity.address}</a>
+            )
+            : <span className="tl-activity__addr">📍 {activity.address}</span>
+          )}
         </div>
       )}
       {/* Repli sans glisser : un jour se choisit en un tap, ce qui reste le plus
@@ -130,7 +100,7 @@ function TlActivity({
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weather, passe, aujourdhui, refJour, onReordonner, reorder }) {
+function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weather, passe, aujourdhui, refJour, onReordonner, reorder }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
@@ -207,7 +177,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
               compareMode={compareMode}
               compareSelected={compareSelectedIds?.has(a.id)}
               onToggleCompare={() => onToggleCompare?.(a.id)}
-              onTouchDragStart={onTouchDragStart}
+              enVoiture={enVoiture}
             />
             </div>
           ))
@@ -217,7 +187,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, compareMode, compareSelectedIds, onToggleCompare, onTouchDragStart, weatherByDate, onReordonner, onDeplacerEntreJours }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weatherByDate, onReordonner, onDeplacerEntreJours }) {
   const wrapRef = useRef(null);
   // Un seul glissement pour toute la frise : borné à une journée, il ne pouvait
   // pas traverser, et déplacer une activité au lendemain passait par un menu.
@@ -264,7 +234,7 @@ export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, 
           compareMode={compareMode}
           compareSelectedIds={compareSelectedIds}
           onToggleCompare={onToggleCompare}
-          onTouchDragStart={onTouchDragStart}
+          enVoiture={enVoiture}
           weather={weatherByDate?.[day.date]}
           passe={idxAuj >= 0 && i < idxAuj}
           aujourdhui={i === idxAuj}
