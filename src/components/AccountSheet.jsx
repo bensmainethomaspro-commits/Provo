@@ -120,14 +120,20 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
             </label>
             {/* Troisième interrupteur de la même rangée : les rappels sont une
                 préférence d'appareil, ils vivent avec le thème et les
-                vibrations. Aucun écran ni entrée de menu de plus. */}
-            {userId && (
+                vibrations. Aucun écran ni entrée de menu de plus.
+
+                Quand ils ne sont pas possibles, on n'affiche PAS d'interrupteur
+                grisé : « je ne peux pas cocher, comme si le bouton n'en était
+                pas un ». Un contrôle mort se lit comme une panne. On met à sa
+                place la phrase qui dit quoi faire — un élément au lieu de
+                deux. */}
+            {userId && (notifs.etat.possible ? (
               <>
                 <label className="settings-toggle" style={{ marginTop: 10 }}>
                   <input
                     type="checkbox"
                     checked={notifs.actives}
-                    disabled={!notifs.etat.possible || notifs.enCours}
+                    disabled={notifs.enCours}
                     onChange={e => (e.target.checked ? notifs.activer() : notifs.desactiver())}
                   />
                   <span className="settings-toggle__track"><span className="settings-toggle__thumb" /></span>
@@ -135,21 +141,22 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
                     Rappels du voyage{notifs.enCours ? ' …' : ''}
                   </span>
                 </label>
-                {/* Une limite annoncée vaut mieux qu'un interrupteur mort. */}
-                {!notifs.etat.possible && (
-                  <p className="settings-section__desc" style={{ marginTop: 6 }}>
-                    {notifs.etat.raison === 'ios_onglet'
-                      ? "Sur iPhone, les rappels demandent que Provo soit sur l'écran d'accueil : Partager → « Sur l'écran d'accueil »."
-                      : notifs.etat.raison === 'non_configure'
-                        ? "Les rappels ne sont pas configurés sur ce déploiement."
-                        : "Ce navigateur ne sait pas recevoir de notifications."}
-                  </p>
-                )}
                 {notifs.message && (
                   <p className="settings-section__desc" style={{ marginTop: 6 }}>{notifs.message}</p>
                 )}
               </>
-            )}
+            ) : (
+              <div className="settings-note" style={{ marginTop: 10 }}>
+                <span className="settings-note__titre">🔔 Rappels du voyage</span>
+                <span className="settings-note__texte">
+                  {notifs.etat.raison === 'ios_onglet'
+                    ? "Indisponibles dans un onglet Safari — c'est une limite d'iOS, pas un réglage. Pour les activer : bouton Partager, puis « Sur l'écran d'accueil ». Rouvre Provo depuis l'icône, et l'interrupteur sera là."
+                    : notifs.etat.raison === 'non_configure'
+                      ? "Pas encore configurés sur ce déploiement."
+                      : "Ce navigateur ne sait pas recevoir de notifications."}
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* App */}
