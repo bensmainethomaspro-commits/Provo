@@ -2358,10 +2358,20 @@ body {
 }
 
 /* ─── SETTINGS TOGGLE ────────────────────────────────────── */
+/* Chaque réglage prend sa ligne. En `inline-flex`, deux libellés se posaient
+   côte à côte et se chevauchaient : sur un iPhone, l'interrupteur des
+   vibrations était dessiné par-dessus le mot « Mode clair ».
+   Libellé à gauche, interrupteur à droite — comme dans tous les réglages
+   d'iOS, et comme la rangée des rappels juste en dessous. */
 .settings-toggle {
-  display: inline-flex; align-items: center; gap: 10px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 48px; cursor: pointer;
   user-select: none; margin-top: 8px;
 }
+/* L'ordre du DOM place la piste avant le libellé (le `<input>` doit précéder
+   son frère pour `:checked ~`). On rétablit l'ordre visuel sans y toucher. */
+.settings-toggle__label { order: -1; flex: 1; min-width: 0; }
+.settings-toggle__track { order: 1; }
 .settings-toggle input { display: none; }
 .settings-toggle__track {
   width: 42px; height: 24px; border-radius: 12px;
@@ -2376,7 +2386,7 @@ body {
   transition: transform 0.2s;
 }
 .settings-toggle input:checked ~ .settings-toggle__track .settings-toggle__thumb { transform: translateX(18px); }
-.settings-toggle__label { font-size: 13px; font-weight: 600; color: var(--text); }
+.settings-toggle__label { font-size: 15px; font-weight: 500; color: var(--text); }
 
 /* ─── SETTINGS SECTIONS ──────────────────────────────────── */
 .settings-section {

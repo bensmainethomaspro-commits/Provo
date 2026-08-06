@@ -83,6 +83,16 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **La feuille Compte est l'angle mort des outils** (août 2026). Ni
+  `/verif-ui` ni `/parcours` ne savent l'ouvrir : elle demande une session
+  authentifiée. Deux défauts y ont donc échappé et n'ont été vus que sur une
+  capture d'iPhone — un interrupteur grisé, puis deux rangées de réglages qui
+  se chevauchaient (`display: inline-flex` les posait côte à côte ; sur 390 px
+  l'interrupteur des vibrations passait par-dessus le mot « Mode clair »).
+  Chaque réglage prend maintenant sa ligne : libellé à gauche, interrupteur à
+  droite, 48 px — mesuré dans les deux thèmes.
+  **À vérifier à l'œil après toute modification de cet écran.**
+
 - **Un parcours ne doit pas dépendre de l'heure qu'il est** (août 2026). Deux
   d'entre eux rougissaient à midi et passaient le matin : l'un visait la
   pastille « Ouvert » (qui dépend des horaires d'ouverture), l'autre exigeait
