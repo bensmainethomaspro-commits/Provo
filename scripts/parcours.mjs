@@ -556,17 +556,28 @@ const PARCOURS = [
       await t.onglet(/Réserve/i);
       const total = await t.combien('.reserve-card');
       t.verifier('les idées sont listées', total > 0, `${total} fiches`);
-      const filtres = await t.combien('.reserve-filter__pill');
-      if (!filtres) t.injouable('aucun filtre de réserve');
-      const pills = t.p.locator('.reserve-filter__pill');
-      // Un filtre de catégorie doit réduire la liste, pas la laisser telle quelle.
-      let reduit = false;
-      for (let i = 1; i < Math.min(filtres, 4); i++) {
-        await pills.nth(i).click(); await t.p.waitForTimeout(500);
+      // Les pastilles de catégorie ne s'affichent qu'en vue liste : en vue
+      // groupée, les en-têtes disent déjà la même chose. On bascule donc avant
+      // de filtrer — et surtout on vise une CATÉGORIE, pas la pastille
+      // voisine : « Ouvert » dépend de l'heure qu'il est, et un parcours qui
+      // passe le matin et rougit à midi finit par ne plus être lu.
+      await t.clic('.reserve-filter__pill', { texte: /Group/, delai: 600, obligatoire: false });
+      // Les pastilles de catégorie portent leur libellé en `aria-label`
+      // (« Resto — 3 idées ») : c'est le seul repère stable, la liste se
+      // reconstruit à chaque clic et un index gardé en main pointe dans le vide.
+      const SEL = '.reserve-filter__pill[aria-label*="idée"]';
+      const noms = await t.p.$$eval(SEL, ns => ns.map(n => n.getAttribute('aria-label')));
+      if (!noms.length) t.injouable('aucune pastille de catégorie en vue liste');
+      let reduit = false, essais = [];
+      for (const nom of noms.slice(0, 4)) {
+        await t.p.locator(`${SEL}[aria-label="${nom}"]`).first().click();
+        await t.p.waitForTimeout(500);
         const n = await t.combien('.reserve-card');
+        essais.push(`${nom} → ${n}`);
         if (n < total && n > 0) { reduit = true; break; }
       }
-      t.verifier('un filtre réduit bien la liste', reduit);
+      t.verifier('un filtre de catégorie réduit bien la liste', reduit,
+        `${total} au départ · ${essais.join(' · ')}`);
     } },
 
   { groupe: 'Réserve', nom: 'Réordonner la Réserve au doigt', depart: 'voyage',
@@ -1532,9 +1543,18 @@ const PARCOURS = [
       t.verifier('le lieu à 80 km est écarté', !titres.includes('Abbaye de Melk'), titres.join(' · '));
       t.verifier('la randonnée de 9 h est écartée',
         !titres.some(x => /Kahlenberg/.test(x)), titres.join(' · '));
-      t.verifier('il reste des idées à proposer', titres.length > 0, titres.join(' · '));
       t.verifier('ce qui a été écarté est dit',
         /écart/i.test(await t.p.evaluate(() => document.querySelector('.sheet--pioche')?.innerText || '')));
+
+      // En fin de journée il ne reste légitimement plus rien qui tienne dans le
+      // temps disponible : c'est la bonne réponse, pas une panne. Le parcours
+      // tourne à toute heure, il doit donc distinguer les deux.
+      if (!titres.length) {
+        t.verifier('quand rien ne tient, la feuille le dit',
+          /rien|plus de temps|aucune/i.test(
+            await t.p.evaluate(() => document.querySelector('.sheet--pioche')?.innerText || '')));
+        return;
+      }
 
       // Et piocher depuis la feuille doit poser l'idée dans la journée.
       const avant = (await t.voyage()).days[0].activities.length;

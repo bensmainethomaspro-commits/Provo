@@ -7152,3 +7152,18 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .settings-note__titre { font-size: 15px; font-weight: 650; color: var(--text); }
 .settings-note__texte { font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+
+/* L'interrupteur des rappels est un vrai bouton, pas une case dans un label :
+   sur iOS la demande de permission doit partir d'un geste, et l'événement
+   `change` synthétisé par un label perd parfois cette attribution. */
+.settings-switch {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 48px; margin-top: 10px; padding: 0;
+  border: none; background: none; font: inherit; text-align: left;
+  color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.settings-switch__label { font-size: 15px; font-weight: 500; }
+.settings-switch:disabled { opacity: 0.55; cursor: default; }
+.settings-switch .settings-toggle__track { flex-shrink: 0; }
+.settings-switch--on .settings-toggle__track { background: var(--accent-deep); }
+.settings-switch--on .settings-toggle__thumb { transform: translateX(18px); }

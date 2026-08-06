@@ -52,22 +52,49 @@ export function useNotifications(userId) {
       .catch(() => {});
   }, [etat.possible]);
 
+  // `serviceWorker.ready` ne se résout jamais si aucun worker n'a été
+  // enregistré dans ce contexte — et une app fraîchement posée sur l'écran
+  // d'accueil démarre avec son propre stockage, donc son propre worker. Sans
+  // délai maximum, l'interrupteur reste sur « … » indéfiniment : ça se lit
+  // comme une panne, sans jamais dire laquelle.
+  const workerPret = () => Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((_, ko) => setTimeout(() => ko(new Error('worker_absent')), 8000)),
+  ]);
+
   const activer = useCallback(async () => {
     setMessage('');
     setEnCours(true);
+    // Chaque étape porte son nom : quand ça casse, on sait OÙ, au lieu de
+    // « ça ne marche pas ». Trois fois dans ce projet un correctif a été livré
+    // sur une cause supposée ; ici la panne se désigne elle-même.
+    let etape = 'permission';
     try {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
         setMessage(permission === 'denied'
-          ? "Les notifications sont refusées pour Provo. Ça se rouvre dans les réglages du téléphone."
-          : 'Rien de changé.');
+          ? "iOS a refusé — Réglages › Notifications › Provo pour rouvrir."
+          : "La demande n'a pas abouti. Retouche l'interrupteur.");
         return;
       }
-      const reg = await navigator.serviceWorker.ready;
+
+      etape = 'worker';
+      const reg = await workerPret();
+
+      etape = 'abonnement';
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: versOctets(CLE),
       });
+
+      etape = 'compte';
+      if (!userId) {
+        await sub.unsubscribe().catch(() => {});
+        setMessage("Il faut être connecté : c'est le compte qui dit quels voyages surveiller.");
+        return;
+      }
+
+      etape = 'enregistrement';
       const j = sub.toJSON();
       const { error } = await supabase.from('push_subscriptions').upsert({
         endpoint: j.endpoint,
@@ -80,12 +107,15 @@ export function useNotifications(userId) {
       }, { onConflict: 'endpoint' });
       if (error) {
         await sub.unsubscribe().catch(() => {});
-        setMessage("L'abonnement n'a pas pu être enregistré. Réessaie plus tard.");
+        setMessage(`Enregistrement refusé : ${String(error.message || error).slice(0, 90)}`);
         return;
       }
       setActives(true);
     } catch (e) {
-      setMessage(`L'abonnement a échoué (${String(e.message || e).slice(0, 60)}).`);
+      const brut = String(e?.message || e);
+      setMessage(brut.includes('worker_absent')
+        ? "Le service en arrière-plan n'a pas démarré. Ferme complètement Provo, rouvre-le depuis l'icône, et réessaie."
+        : `Bloqué à l'étape « ${etape} » : ${brut.slice(0, 90)}`);
     } finally {
       setEnCours(false);
     }

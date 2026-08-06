@@ -83,6 +83,15 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Un parcours ne doit pas dépendre de l'heure qu'il est** (août 2026). Deux
+  d'entre eux rougissaient à midi et passaient le matin : l'un visait la
+  pastille « Ouvert » (qui dépend des horaires d'ouverture), l'autre exigeait
+  que la pioche ait toujours quelque chose à proposer — faux en fin de
+  journée, et c'est la bonne réponse, pas une panne. Une suite qui rougit à
+  l'heure du déjeuner cesse d'être lue. Les pastilles de catégorie se visent
+  maintenant par leur `aria-label`, seul repère stable puisque la liste se
+  reconstruit à chaque clic.
+
 - **67 parcours** (août 2026). Les trois fonctionnalités d'août n'avaient
   aucune couverture : billets du voyage, pré-chargement de la carte,
   confirmations collées. Quatre parcours de plus, et l'un d'eux a trouvé un
