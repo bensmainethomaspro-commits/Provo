@@ -95,6 +95,38 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   « chaotique et encombré ». Une fonctionnalité utile mal insérée coûte plus que
   ce qu'elle rapporte.
 
+- **Les rappels du voyage** (août 2026). Le Web Push marche sur iPhone depuis
+  iOS 16.4, **mais seulement pour une app ajoutée à l'écran d'accueil** — en
+  onglet Safari, `PushManager` n'existe pas. L'interrupteur le dit au lieu de
+  rester mort. Un refus précédent fondé sur « bloqué sur iOS » était périmé.
+
+  Chaîne : `useNotifications.js` (abonnement) → table `push_subscriptions`
+  → `push-tick` (fonction Edge) → `.github/workflows/push-tick.yml` toutes les
+  15 min. Le serveur lit les voyages dans `trips.data`, d'où la nécessité d'un
+  compte connecté — sans compte, rien n'est proposé.
+
+  **Trois rappels seulement**, chacun lié à une décision à prendre à cet
+  instant : « il est temps de partir » (25 min avant), « ça ferme bientôt »
+  (1 h avant), « c'est demain » (la veille à 18 h). Pas de résumé, pas de bonne
+  journée : une notification qui n'aide pas fait désactiver toutes les autres.
+  Rien entre 22 h et 7 h, **à l'heure du voyageur** (colonne `fuseau`), et un
+  seul envoi par activité et par type (colonne `envoyes`).
+
+  **Mise en route — trois choses à faire une fois :**
+  1. `npm run vapid` **sur ta machine** → il imprime quoi coller où. La clé
+     privée ne doit jamais passer par une conversation ni par un dépôt.
+  2. Coller le contenu de `supabase/migrations/20260806_push_subscriptions.sql`
+     dans Supabase › SQL Editor.
+  3. Dans le dépôt, Settings › Secrets › Actions : `SUPABASE_FUNCTIONS_URL`,
+     `SUPABASE_ANON_KEY` et `PUSH_TICK_SECRET` (le même que le secret Supabase
+     du même nom). Sans eux le workflow ne fait rien et le dit — il n'échoue
+     pas.
+
+  **Non vérifié de bout en bout depuis ici** : le bac à sable ne joint ni un
+  service de push réel ni le domaine Supabase du projet. Ce qui est vérifié :
+  l'app se construit, les 63 parcours passent, et l'interrupteur affiche la
+  bonne raison quand la clé publique est absente.
+
 - **La carte se garde toute seule** (août 2026). Ouvrir l'onglet Carte quand le
   départ est à moins de dix jours pré-charge les tuiles autour des lieux du
   voyage — **sans aucune interface** : ni bouton, ni bandeau, ni pop-up. Une

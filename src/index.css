@@ -1231,7 +1231,9 @@ body {
 .notes-tab {
   display: flex;
   flex-direction: column;
-  padding: 12px 16px 24px;
+  /* Marge basse au-delà de la barre d'onglets flottante : les billets sont
+     sous les notes, et ils passaient dessous. */
+  padding: 12px 16px 110px;
   gap: 10px;
   flex: 1;
 }
@@ -1240,8 +1242,11 @@ body {
   font-style: italic; line-height: 1.5;
 }
 .notes-textarea {
-  flex: 1;
-  min-height: 55vh;
+  /* Elle prenait 55 % de la hauteur d'écran à elle seule et repoussait les
+     billets hors du champ. Trois lignes suffisent à commencer ; elle
+     s'agrandit à l'usage. */
+  flex: 0 0 auto;
+  min-height: 26vh;
   width: 100%;
   padding: 14px 16px;
   font-size: 14px;

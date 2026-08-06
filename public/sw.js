@@ -84,3 +84,43 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+
+// ─── Notifications ────────────────────────────────────────────────────────
+//
+// Le Web Push fonctionne sur iPhone depuis iOS 16.4, mais **seulement** pour
+// une app ajoutée à l'écran d'accueil. En onglet Safari, l'abonnement échoue :
+// c'est une limite du système, pas un bug, et le client le dit franchement.
+//
+// Ce que l'app envoie tient en une phrase — « Le Belvédère ferme dans 1 h » —
+// parce qu'une notification se lit d'un coup d'oeil, sur un écran verrouillé,
+// en marchant.
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { corps: e.data && e.data.text() }; }
+  const titre = d.titre || 'Provo';
+  e.waitUntil(self.registration.showNotification(titre, {
+    body: d.corps || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    // Une même alerte remplace la précédente au lieu de s'empiler : trois
+    // rappels pour la même activité, c'est trois fois moins lu.
+    tag: d.tag || 'provo',
+    renotify: false,
+    data: { url: d.url || '/' },
+  }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const cible = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((liste) => {
+      // Rouvrir une fenêtre déjà là plutôt qu'en créer une : l'app garde son
+      // état, et on retombe sur l'écran qu'on avait laissé.
+      for (const c of liste) {
+        if ('focus' in c) { c.navigate && c.navigate(cible); return c.focus(); }
+      }
+      return self.clients.openWindow(cible);
+    })
+  );
+});

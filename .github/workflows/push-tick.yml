@@ -1,0 +1,57 @@
+name: Rappels du voyage
+
+# Les notifications ont besoin d'un réveil régulier : rien, côté navigateur, ne
+# peut se déclencher quand l'app est fermée. Ce workflow appelle simplement la
+# fonction « push-tick », qui décide seule s'il y a quelque chose à dire.
+#
+# Toutes les quinze minutes : c'est la maille des rappels (« dans 25 minutes »),
+# et c'est assez peu pour rester très en dessous des quotas GitHub.
+#
+# Mise en route — une seule fois, dans Settings › Secrets and variables ›
+# Actions du dépôt :
+#   • SUPABASE_FUNCTIONS_URL  = https://<projet>.supabase.co/functions/v1
+#   • PUSH_TICK_SECRET        = une phrase au hasard, la MÊME que le secret du
+#                               même nom posé dans Supabase › Edge Functions
+#
+# Sans ces secrets le workflow ne fait rien et le dit : il ne doit jamais
+# échouer bruyamment sur un dépôt où les rappels ne sont pas configurés.
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+# Un seul passage à la fois : deux appels simultanés enverraient deux fois le
+# même rappel avant que la marque « déjà envoyé » ne soit écrite.
+concurrency:
+  group: push-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler push-tick
+        env:
+          BASE: ${{ secrets.SUPABASE_FUNCTIONS_URL }}
+          SECRET: ${{ secrets.PUSH_TICK_SECRET }}
+          ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$BASE" ] || [ -z "$SECRET" ]; then
+            echo "::notice::Rappels non configurés (SUPABASE_FUNCTIONS_URL ou PUSH_TICK_SECRET absent) — rien à faire."
+            exit 0
+          fi
+          code=$(curl -s -o /tmp/rep.json -w '%{http_code}' -X POST "$BASE/push-tick" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $ANON" \
+            -H "x-provo-tick: $SECRET" \
+            --max-time 60 -d '{}')
+          echo "HTTP $code"
+          cat /tmp/rep.json
+          echo
+          # Une panne passagère du service de push ne doit pas peindre le dépôt
+          # en rouge toutes les quinze minutes. Seule une erreur franche compte.
+          if [ "$code" -ge 500 ] || [ "$code" = "401" ]; then
+            echo "::error::push-tick a répondu $code"
+            exit 1
+          fi
