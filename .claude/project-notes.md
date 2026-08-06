@@ -83,6 +83,14 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **67 parcours** (août 2026). Les trois fonctionnalités d'août n'avaient
+  aucune couverture : billets du voyage, pré-chargement de la carte,
+  confirmations collées. Quatre parcours de plus, et l'un d'eux a trouvé un
+  vrai défaut — le pré-chargement s'obstinait onze secondes salve après salve
+  même quand aucune tuile n'arrivait. Il s'arrête maintenant après deux salves
+  bredouilles, ne marque pas le voyage comme fait, et réessaie six heures plus
+  tard. Sans ça, la carte pouvait rester vide pour toujours.
+
 - **Zéro défaut mesuré hors carte** (août 2026). `/verif-ui` couvre maintenant
   **huit** écrans dans les deux thèmes — l'Ajout et les Notes ont été ajoutés,
   et c'est là qu'il a trouvé les derniers : croix de fermeture à 28 px et

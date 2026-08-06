@@ -344,7 +344,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
       if (!offre || ctrl.signal.aborted) return;
       const obtenues = await telechargerCarte(offre.urls, { arret: ctrl.signal });
       if (ctrl.signal.aborted) return;
-      updateTrip(tripId, { carteHorsLigne: { le: new Date().toISOString(), tuiles: obtenues } });
+      // Rien n'a pu être rangé : on ne marque pas le voyage comme fait, sinon
+      // la carte resterait vide pour toujours sans jamais réessayer.
+      updateTrip(tripId, {
+        carteHorsLigne: obtenues > 0
+          ? { le: new Date().toISOString(), tuiles: obtenues }
+          : { echec: new Date().toISOString() },
+      });
     })();
     return () => ctrl.abort();
   }, [tab, trip?.id, trip?.carteHorsLigne]); // eslint-disable-line react-hooks/exhaustive-deps

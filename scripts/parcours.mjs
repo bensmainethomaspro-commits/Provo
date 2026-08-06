@@ -624,6 +624,82 @@ const PARCOURS = [
         await t.visible('input[placeholder*="Déjeuner au marché"]'));
     } },
 
+  // ── Ce qui est arrivé en août 2026 et n'était couvert par rien ─────────────
+
+  { groupe: 'Documents', nom: 'Attacher un billet au voyage', depart: 'voyage',
+    intention: "Ranger un billet de train, qui n'appartient à aucune activité.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Notes/);
+      t.verifier("les billets ont leur place dans les notes", await t.visible('.trip-docs'));
+      const champ = t.p.locator('.trip-docs input[type="file"]');
+      if (!(await champ.count())) t.injouable('pas de champ fichier');
+      await champ.setInputFiles({
+        name: 'billet-train.pdf', mimeType: 'application/pdf',
+        buffer: Buffer.from('%PDF-1.4\n%%EOF\n'),
+      });
+      await t.p.waitForTimeout(700);
+      t.verifier('le billet apparaît', (await t.texte()).includes('billet-train.pdf'));
+      const v = await t.voyage();
+      t.verifier('il est enregistré dans le voyage', (v.documents || []).length === 1,
+        `${(v.documents || []).length} document(s)`);
+      t.verifier("il est lisible sans réseau (stocké, pas lié)",
+        String(v.documents?.[0]?.data || '').startsWith('data:'));
+      await t.clic('.trip-doc__retirer', { delai: 500 });
+      t.verifier('et il se retire', ((await t.voyage()).documents || []).length === 0);
+    } },
+
+  { groupe: 'Documents', nom: 'Un fichier refusé dit pourquoi', depart: 'voyage',
+    intention: "Déposer autre chose qu'une image ou un PDF.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Notes/);
+      const champ = t.p.locator('.trip-docs input[type="file"]');
+      if (!(await champ.count())) t.injouable('pas de champ fichier');
+      await champ.setInputFiles({
+        name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('bonjour'),
+      });
+      await t.p.waitForTimeout(600);
+      const msg = await t.texte('.trip-docs__erreur');
+      t.verifier('la raison est dite', /ni une image ni un PDF/i.test(msg), msg || '(rien)');
+      t.verifier("rien n'est enregistré", ((await t.voyage()).documents || []).length === 0);
+    } },
+
+  { groupe: 'Carte', nom: "La carte se garde toute seule avant le départ", depart: 'voyage',
+    intention: "Ouvrir la carte à l'approche du voyage doit préparer le hors-ligne.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Carte/i);
+      // Le pré-chargement est volontairement lent (six tuiles, pause entre
+      // chaque salve) : on attend son verdict au lieu d'un délai au jugé.
+      const fin = Date.now() + 25000;
+      let v = await t.voyage();
+      while (!v.carteHorsLigne && Date.now() < fin) {
+        await t.p.waitForTimeout(700);
+        v = await t.voyage();
+      }
+      t.verifier('le pré-chargement a eu lieu et est retenu', !!v.carteHorsLigne,
+        JSON.stringify(v.carteHorsLigne || null));
+      // Le point capital : ça ne doit pas recommencer à chaque ouverture.
+      await t.onglet(/Planning/i);
+      await t.onglet(/Carte/i);
+      await t.p.waitForTimeout(1200);
+      const apres = await t.voyage();
+      t.verifier('et ne recommence pas au second passage',
+        JSON.stringify(apres.carteHorsLigne) === JSON.stringify(v.carteHorsLigne));
+      t.verifier("aucune interface n'a été ajoutée pour ça",
+        !(await t.combien('.confirm-box')) && !/Télécharger la carte/i.test(await t.texte()));
+    } },
+
+  { groupe: 'Carte', nom: "Un voyage lointain ne télécharge rien", depart: PAS_PARTI,
+    intention: "Le pré-chargement ne doit pas consommer des données un mois à l'avance.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Carte/i);
+      await t.p.waitForTimeout(2200);
+      t.verifier('rien n\'a été téléchargé', !(await t.voyage()).carteHorsLigne);
+    } },
+
   { groupe: 'Dépenses', nom: 'Ajouter une dépense et voir qui doit quoi', depart: 'voyage',
     intention: "Payer une addition et savoir immédiatement comment on se répartit.",
     async faire(t) {

@@ -122,6 +122,11 @@ export async function telecharger(urls, { onProgres, arret } = {}) {
     }));
     faites += salve.length;
     onProgres?.({ faites, total: urls.length });
+    // Deux salves entières sans une seule tuile : le réseau ne répond pas, ou
+    // le serveur nous refuse. Insister quarante-huit fois de plus ne ferait que
+    // brûler de la batterie en silence — on s'arrête et on réessaiera à la
+    // prochaine ouverture de la carte.
+    if (faites >= PAR_SALVE * 2 && obtenues === 0) break;
     if (i + PAR_SALVE < urls.length) await new Promise(r => setTimeout(r, PAUSE_MS));
   }
   return obtenues;
@@ -134,7 +139,13 @@ export async function telecharger(urls, { onProgres, arret } = {}) {
  * un clic réflexe.
  */
 export async function aProposer(trip, { maintenant = new Date() } = {}) {
-  if (!navigator.onLine || !trip || trip.carteHorsLigne) return null;
+  if (!navigator.onLine || !trip) return null;
+  const fait = trip.carteHorsLigne;
+  // Déjà rangée : on n'y revient pas. Échec précédent : on réessaie, mais pas
+  // avant six heures — un réseau qui refuse maintenant refusera dans dix
+  // secondes, et l'utilisateur ouvre la carte plusieurs fois par jour.
+  if (fait?.tuiles) return null;
+  if (fait?.echec && Date.now() - new Date(fait.echec).getTime() < 6 * 3600000) return null;
   // Économiseur de données activé : c'est un refus explicite de l'utilisateur,
   // au niveau du système. On n'a pas à le contourner.
   if (navigator.connection?.saveData) return null;
