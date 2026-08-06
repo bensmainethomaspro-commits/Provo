@@ -95,6 +95,26 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   « chaotique et encombré ». Une fonctionnalité utile mal insérée coûte plus que
   ce qu'elle rapporte.
 
+- **La carte se garde toute seule** (août 2026). Ouvrir l'onglet Carte quand le
+  départ est à moins de dix jours pré-charge les tuiles autour des lieux du
+  voyage — **sans aucune interface** : ni bouton, ni bandeau, ni pop-up. Une
+  boîte de dialogue à l'arrivée sur la carte a été écrite puis retirée : elle
+  bloquait l'écran et demandait une décision que personne ne peut prendre (qui
+  sait ce que pèsent des tuiles ?). Limites tenues dans
+  `utils/carteHorsLigne.js` : 300 tuiles maximum (~4,5 Mo), six à la fois avec
+  une pause — les CGU d'OpenStreetMap découragent le téléchargement en masse —
+  et rien du tout si l'économiseur de données du système est actif.
+
+- **Coller une confirmation remplit la fiche** (août 2026). Le champ de
+  recherche de la feuille d'ajout reconnaît un courriel de réservation
+  (`ressembleAUneReservation`) et le fait lire par `read-booking`. Même champ,
+  même bouton : aucun écran ni bouton « importer une réservation » à côté.
+
+- **Les hooks après le `return` anticipé** — quatrième occurrence dans
+  `TripView.jsx`, dont une déjà livrée. Le fichier a une garde `if (!trip)`
+  vers la ligne 330 : **tout `useState` / `useEffect` doit être au-dessus**.
+  `npx eslint src/pages/TripView.jsx` le dit ; le lancer avant de commiter.
+
 - **Deux jetons de bleu, deux métiers** (août 2026). `--accent` (#35A7DD) est la
   teinte de marque : traits, bordures, surfaces. Elle **ne peut porter aucun
   texte** — 2,72:1 contre le blanc, dans les deux sens. `--accent-deep`

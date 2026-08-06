@@ -52,6 +52,13 @@ export function useReorderDrag(onDeplacer) {
 
     const cible = (ev) => {
       const t = ev.touches?.[0] || ev;
+      // Le doigt est sorti de l'écran par le bas ou par le côté. Ce n'est pas
+      // « le vide » : c'est le bord. On garde la dernière cible connue, sinon
+      // un geste qui dépasse d'un pixel annule tout.
+      if (t.clientX < 0 || t.clientY < 0
+        || t.clientX > window.innerWidth || t.clientY > window.innerHeight) {
+        return etat.current.sur;
+      }
       const el = document.elementFromPoint(t.clientX, t.clientY);
       // Sur une fiche : on se place devant elle.
       const fiche = el?.closest('[data-reorder-id]');

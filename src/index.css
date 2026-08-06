@@ -7073,3 +7073,43 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .details-pli small { font-size: 12px; font-weight: 400; color: var(--text-muted); }
 .details-pli:active { background: var(--surface-sunken); }
+
+/* ─── Billets et réservations du voyage ───────────────────────────────────
+   Ils vivent avec les notes : même onglet, même intention — « ce qu'il me
+   faut sous la main ». Pas d'onglet ni d'entrée de menu supplémentaire. */
+.trip-docs { margin-top: 18px; }
+.trip-docs__titre {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
+}
+.trip-docs__poids { font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text-light); }
+.trip-docs__liste { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.trip-doc {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: 12px; padding-right: 4px;
+}
+.trip-doc__ouvrir {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 0 12px;
+  border: none; background: none; font: inherit; text-align: left;
+  color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.trip-doc__icone { font-size: 18px; flex-shrink: 0; }
+.trip-doc__nom { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; font-weight: 600; }
+.trip-doc__retirer {
+  flex-shrink: 0; width: 44px; min-height: 44px;
+  border: none; background: none; color: var(--text-light);
+  font-size: 16px; cursor: pointer;
+}
+.trip-docs__ajout {
+  width: 100%; min-height: 48px;
+  border: 1px dashed var(--border-strong); border-radius: 14px;
+  background: var(--surface-raised); color: var(--accent-texte);
+  font-family: inherit; font-size: 14.5px; font-weight: 650;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.trip-docs__ajout:active { background: var(--surface-sunken); }
+.trip-docs__vide { margin-top: 8px; font-size: 13px; color: var(--text-light); }
+.trip-docs__erreur { margin-top: 8px; font-size: 13px; color: var(--red-texte); font-weight: 600; }

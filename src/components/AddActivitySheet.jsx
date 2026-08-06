@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu} from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation} from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 
@@ -193,7 +193,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   useEffect(() => {
     if (isEdit) return undefined;
     const q = importUrl.trim();
-    if (q.length < 3 || /^https?:\/\//i.test(q) || /\s?\w+\.\w{2,}\//.test(q)) {
+    if (q.length < 3 || q.length > 120 || /^https?:\/\//i.test(q) || /\s?\w+\.\w{2,}\//.test(q)) {
       setCandidats([]);
       return undefined;
     }
@@ -273,6 +273,49 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         set('link', normalized);
         setImportMsg("Ce lien n'a pas pu être lu — les liens courts Google sont souvent protégés. "
           + "Ouvre-le, copie le nom ou l'adresse du lieu et colle-les ici : le lien, lui, est déjà enregistré.");
+        return;
+      }
+
+      // Une confirmation collée n'est ni une adresse ni un nom : c'est un
+      // courriel entier. Le même champ la reconnaît et la lit — pas de bouton
+      // « importer une réservation » à côté, pas d'écran de plus. C'est le
+      // travail de saisie le plus ingrat du voyage, et il disparaît.
+      if (ressembleAUneReservation(raw)) {
+        const r = await lireReservation(raw);
+        if (r?.ok) {
+          applyResult({
+            title: r.titre,
+            address: r.adresse || r.lieu,
+            category: r.categorie === 'autre' ? 'trajet' : r.categorie,
+            notes: r.reference ? `Réf. ${r.reference}` : '',
+          }, raw);
+          if (r.heure) set('fixedStart', r.heure);
+          if (r.fin) set('fixedEnd', r.fin);
+          // La date choisit la journée : c'est tout l'intérêt d'une
+          // confirmation, elle sait quand ça se passe.
+          const jour = (days || []).find(d => d.date === r.date);
+          if (jour) { setDest('day'); setSelectedDayId(jour.id); }
+          setImportMsg(r.confiance === 'basse'
+            ? `Réservation lue — mais j'ai un doute${r.date ? ` sur le ${r.date}` : ''}. Ouvre les détails et vérifie.`
+            : `Réservation lue ✓${r.date ? ` — ${r.date}` : ''}${jour ? '' : r.date ? ' (hors des dates du voyage)' : ''}`);
+          if (r.confiance === 'basse') setDetailsOuverts(true);
+          // Le lieu part quand même en recherche : une confirmation donne
+          // rarement des coordonnées, et la fiche doit finir complète.
+          if (r.lieu) {
+            const trouve = await searchPlaces(
+              tripDestination ? `${r.lieu}, ${tripDestination}` : r.lieu,
+              { lat: tripLat, lon: tripLon });
+            if (trouve.length === 1) {
+              setForm(f => ({ ...f, lat: trouve[0].lat, lon: trouve[0].lon,
+                address: f.address || trouve[0].address }));
+            }
+          }
+          return;
+        }
+        setImportMsg(r?.error === 'cle_absente'
+          ? "La lecture des réservations n'est pas configurée sur ce compte."
+          : "Ce texte n'a pas pu être lu comme une réservation — remplis les détails à la main, rien n'est perdu.");
+        setDetailsOuverts(true);
         return;
       }
 
@@ -481,7 +524,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               elle attendait qu'on appuie sur un bouton, sous une rangée de
               raccourcis, au milieu d'un formulaire de onze champs. */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Cherche un lieu, ou colle un lien</label>
+            <label className="form-label">📍 Cherche un lieu — ou colle un lien, ou une confirmation</label>
             <div className="import-row">
               <input
                 className="form-input"

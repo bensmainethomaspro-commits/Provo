@@ -187,7 +187,11 @@ function outils(p, journal) {
       const g = await p.locator('.tl-act-grip, .reserve-card__grip, .activity-card__drag-handle')
         .nth(deIdx).boundingBox();
       if (!g) t.injouable('poignée de déplacement introuvable');
-      const x = g.x + g.width / 2, y0 = g.y + g.height / 2, y1 = cibles[versIdx].y;
+      // La cible peut être hors écran quand les fiches sont hautes : on vise
+      // au plus bas point encore visible, comme un doigt le ferait — le
+      // défilement au bord amène le reste.
+      const x = g.x + g.width / 2, y0 = g.y + g.height / 2;
+      const y1 = Math.min(cibles[versIdx].y, p.viewportSize().height - 110);
       await p.mouse.move(x, y0);
       await p.mouse.down();
       await p.waitForTimeout(120);
@@ -582,6 +586,42 @@ const PARCOURS = [
       t.verifier('aucune idée perdue', apres.length === avant.length && apres.every(Boolean),
         `${avant.length} → ${apres.length}`);
       t.verifier("l'ordre a changé", apres.join() !== avant.join());
+    } },
+
+  { groupe: 'Réseau', nom: 'Coller une confirmation remplit la fiche', depart: 'voyage',
+    reseau: { reservation: 'ok' },
+    intention: "Coller le courriel de l'hôtel au lieu de retaper nom, adresse et heure.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'Confirmation de reservation Hotel Sacher Wien. Votre reservation est confirmee du 12/09/2026 au 15/09/2026, arrivee a partir de 15:00. Numero de dossier ABC12345. Philharmoniker Strasse 4, 1010 Wien, Autriche. Merci de presenter cette confirmation a l\'arrivee.');
+      await t.clic('.import-row button', { delai: 2400, obligatoire: false });
+      t.verifier('le lecteur de réservations est appelé', (t.appels().reservation || 0) > 0,
+        `${t.appels().reservation || 0} appels`);
+      await t.ouvrirDetails();
+      const rempli = await t.p.evaluate(() => {
+        const q = (s) => document.querySelector(s)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'),
+                 adresse: q('input[placeholder="Lieu"]'),
+                 debut: q('input[type="time"]') };
+      });
+      t.verifier('le titre vient de la confirmation', /Sacher/i.test(rempli.titre), rempli.titre || '(vide)');
+      t.verifier("l'adresse aussi", rempli.adresse.length > 5, rempli.adresse || '(vide)');
+      t.verifier("l'heure d'arrivée est reprise", rempli.debut === '15:00', rempli.debut || '(vide)');
+    } },
+
+  { groupe: 'Réseau', nom: "Une confirmation illisible ne perd pas le texte", depart: 'voyage',
+    reseau: { reservation: 'aucun' },
+    intention: "Coller un texte que le lecteur ne comprend pas.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'Confirmation de reservation Hotel Sacher Wien. Votre reservation est confirmee du 12/09/2026 au 15/09/2026, arrivee a partir de 15:00. Numero de dossier ABC12345. Philharmoniker Strasse 4, 1010 Wien, Autriche. Merci de presenter cette confirmation a l\'arrivee.');
+      await t.clic('.import-row button', { delai: 2400, obligatoire: false });
+      const msg = await t.texte('.import-msg');
+      t.verifier('on dit que ça n\'a pas pu être lu', /pas pu être lu|réservation/i.test(msg), msg || '(rien)');
+      t.verifier('le formulaire est ouvert pour finir à la main',
+        await t.visible('input[placeholder*="Déjeuner au marché"]'));
     } },
 
   { groupe: 'Dépenses', nom: 'Ajouter une dépense et voir qui doit quoi', depart: 'voyage',

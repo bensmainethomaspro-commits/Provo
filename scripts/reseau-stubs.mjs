@@ -80,6 +80,17 @@ export const REPONSES = {
   recuIllisible: { ok: true, montant: null, devise: '', commerce: '', date: '',
     categorie: 'autre', confiance: 'basse' },
 
+  // Edge Function `read-booking` : ce qu'une confirmation collée donne.
+  reservation: { ok: true, titre: 'Hôtel Sacher', lieu: 'Hotel Sacher Wien',
+    adresse: 'Philharmoniker Str. 4, 1010 Wien', date: '', heure: '15:00', fin: '',
+    reference: 'ABC12345', categorie: 'repos', confiance: 'haute' },
+  // Le texte a été lu, mais la date ou le lieu restent flous : la fiche
+  // s'ouvre en grand pour qu'on vérifie.
+  reservationDouteuse: { ok: true, titre: 'Hôtel', lieu: '', adresse: '', date: '',
+    heure: '', fin: '', reference: '', categorie: 'repos', confiance: 'basse' },
+  // Ce n'était pas une réservation.
+  pasUneReservation: { error: 'pas_une_reservation' },
+
   wikipedia: { query: { search: [{ title: 'Hofburg', snippet: 'Palais impérial de Vienne' }] } },
 
   // Nager.Date : les jours fériés du pays. `global: false` = fête régionale,
@@ -122,6 +133,8 @@ export const VARIANTES = {
   nominatim: { aucun: [] },
   recu: { douteux: REPONSES.recuDouteux, illisible: REPONSES.recuIllisible,
     sansCle: { error: 'cle_absente' } },
+  reservation: { douteux: REPONSES.reservationDouteuse,
+    aucun: REPONSES.pasUneReservation, sansCle: { error: 'cle_absente' } },
   overpass: { aucun: { elements: [] } },
 };
 
@@ -237,6 +250,7 @@ export async function brancherReseau(page, base, plan = {}) {
     if (url.includes('extract-place')) return servir(route, 'extractPlace', REPONSES.extractPlace);
     if (url.includes('enrich-place')) return servir(route, 'enrichPlace', REPONSES.enrichPlace);
     if (url.includes('read-receipt')) return servir(route, 'recu', REPONSES.recu);
+    if (url.includes('read-booking')) return servir(route, 'reservation', REPONSES.reservation);
     return route.fulfill(json({ ok: false }));
   });
 

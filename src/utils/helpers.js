@@ -1216,6 +1216,45 @@ export function reduireImage(fichier, largeurMax = 1000, qualite = 0.75) {
 }
 
 /**
+ * Fait lire une confirmation de réservation collée.
+ *
+ * Rend ce qui a été lu, jamais une fiche enregistrée : le client remplit le
+ * formulaire et l'utilisateur valide. Une date de vol fausse se découvre le
+ * jour du départ.
+ */
+export async function lireReservation(texte) {
+  try {
+    const { data, error } = await supabase.functions.invoke('read-booking', {
+      body: { texte },
+    });
+    if (error) return { error: 'appel_impossible' };
+    return data || { error: 'reponse_vide' };
+  } catch {
+    return { error: 'hors_ligne' };
+  }
+}
+
+/**
+ * Un texte collé ressemble-t-il à une confirmation plutôt qu'à un nom de lieu ?
+ *
+ * Le seuil est volontairement haut : « Hôtel Sacher Wien Philharmonikerstraße »
+ * doit rester une recherche de lieu. Une confirmation, elle, arrive avec ses
+ * dates, ses numéros et ses formules.
+ */
+export function ressembleAUneReservation(texte) {
+  const t = (texte || '').trim();
+  if (t.length < 120) return false;
+  if (/^https?:\/\//i.test(t)) return false;
+  const indices = [
+    /r[ée]servation|confirmation|booking|billet|dossier|itin[ée]raire/i,
+    /\b\d{1,2}[\/. -](\d{1,2}|janv|f[ée]vr|mars|avr|mai|juin|juil|ao[ûu]t|sept|oct|nov|d[ée]c)/i,
+    /\b([01]?\d|2[0-3])[h:][0-5]\d\b/,
+    /\b[A-Z0-9]{5,8}\b/,
+  ].filter(r => r.test(t)).length;
+  return indices >= 2;
+}
+
+/**
  * Fait lire un ticket de caisse. Rend ce qui a été lu — jamais une dépense
  * enregistrée : c'est l'utilisateur qui valide, après relecture.
  */

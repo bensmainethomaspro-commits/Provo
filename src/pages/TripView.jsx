@@ -23,13 +23,15 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, formatDate, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
 import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
 import PropositionSheet from '../components/PropositionSheet';
+import TripDocuments from '../components/TripDocuments';
+import { aProposer as carteAProposer, telecharger as telechargerCarte } from '../utils/carteHorsLigne';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
 import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
@@ -324,6 +326,29 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     if (compareSelectedIds.size >= 2) setShowCompare(true);
   }, [compareSelectedIds.size]);
 
+  const [completionEnCours, setCompletionEnCours] = useState(() => new Set());
+
+  // La carte du voyage, gardée pour le jour où il n'y aura pas de réseau.
+  //
+  // Sans interface : ni bouton, ni bandeau, ni pop-up. Ouvrir l'onglet Carte
+  // télécharge déjà des tuiles ; on continue simplement autour des lieux du
+  // voyage, une fois, à débit modeste. Une boîte de dialogue à l'arrivée sur
+  // la carte serait exactement le clic réflexe que le playbook interdit (D3),
+  // et elle demanderait une décision que l'utilisateur n'a pas de quoi
+  // prendre — il ne sait pas ce que pèsent des tuiles.
+  useEffect(() => {
+    if (tab !== 'map' || !trip) return undefined;
+    const ctrl = new AbortController();
+    (async () => {
+      const offre = await carteAProposer(trip);
+      if (!offre || ctrl.signal.aborted) return;
+      const obtenues = await telechargerCarte(offre.urls, { arret: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      updateTrip(tripId, { carteHorsLigne: { le: new Date().toISOString(), tuiles: obtenues } });
+    })();
+    return () => ctrl.abort();
+  }, [tab, trip?.id, trip?.carteHorsLigne]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!trip) return (
     <div className="trip-view">
       <div className="header">
@@ -576,8 +601,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // L'agent ne travaillait qu'à l'ajout. Or une information se périme : un
   // restaurant change ses horaires, un musée ses tarifs. On repasse donc sur
   // l'existant — à la demande, et jamais sans montrer ce qu'on a trouvé.
-  const [completionEnCours, setCompletionEnCours] = useState(() => new Set());
-
   const fouiller = async () => {
     const liste = aEnrichir(tripRef.current);
     if (!liste.length) return;
@@ -764,7 +787,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
-                  📝 Notes du voyage{trip.tripNotes?.trim() ? ' •' : ''}
+                  📝 Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('valise'); setTripMenuOpen(false); }}>
                   🎒 Valise{(trip.packingList?.length || 0) > 0
@@ -896,6 +919,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
           <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('notes')}>
             <span className="tab-btn__icon">📝</span>
             <span className="tab-btn__label">Notes</span>
+            {trip.documents?.length > 0 && (
+              <span className="tab-badge" aria-label={`${trip.documents.length} documents`}>{trip.documents.length}</span>
+            )}
           </button>
         )}
         {tab === 'valise' && (
@@ -1296,6 +1322,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
               placeholder={'Ex:\n✈️ Vol: AB1234 — départ 14h30 Terminal 2\n🏨 Hôtel Le Palais — 5 rue Victor Hugo\n📞 Urgence: +33 6 12 34 56 78\n\n☐ Passeport\n☐ Assurance voyage\n☐ Adaptateur prise'}
               value={trip.tripNotes || ''}
               onChange={e => updateTrip(tripId, { tripNotes: e.target.value })}
+            />
+            {/* Un billet de train n'appartient à aucune activité : il vit ici,
+                avec le reste de ce qu'on veut sous la main. Pas d'onglet ni
+                d'entrée de menu en plus — c'est la même intention. */}
+            <TripDocuments
+              documents={trip.documents}
+              onChange={docs => updateTrip(tripId, { documents: docs })}
             />
           </div>
         )}
