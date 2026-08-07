@@ -1103,6 +1103,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       aria-label="Coller un lien depuis le presse-papier"
                     >📋</button>
                   </div>
+                </div>
+                <div className="reserve-filter">
+                  {/* Le tri vivait à côté du champ de recherche : il en mangeait
+                      la largeur — le mot « lien » s'y coupait en « lier » — et
+                      débordait lui-même du cadre. Trier n'est pas chercher :
+                      il rejoint la rangée où l'on range, et la recherche
+                      récupère toute la largeur. */}
                   <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
                     <option value="default">Ordre d'ajout</option>
                     <option value="alpha">A–Z</option>
@@ -1110,8 +1117,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     <option value="price">Prix</option>
                     {geoReserve.position && <option value="proche">Le plus proche</option>}
                   </select>
-                </div>
-                <div className="reserve-filter">
                   <button
                     className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
                     onClick={() => setReserveFilter('all')}

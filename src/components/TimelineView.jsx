@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useReorderDrag } from '../hooks/useReorderDrag';
-import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts } from '../utils/helpers';
+import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts, nomDeLieu } from '../utils/helpers';
 
 // Déplacer une activité : UNE poignée ⠿ (réordonner dans le jour et changer de
 // jour) et, dans la fiche dépliée, des pastilles « Déplacer vers » pour ceux qui
@@ -50,7 +50,7 @@ function TlActivity({
         )}
         {slot && <span className="tl-activity__time">{slot.start}</span>}
         <span className="tl-activity__emoji">{meta.emoji}</span>
-        <span className="tl-activity__title">{activity.title}</span>
+        <span className="tl-activity__title">{nomDeLieu(activity.title)}</span>
         {canOpen && !compareMode && (
           <span className="tl-activity__chevron" aria-hidden="true">{open ? '▴' : '▾'}</span>
         )}
@@ -67,7 +67,7 @@ function TlActivity({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={e => e.stopPropagation()}
-                aria-label={`Itinéraire vers ${activity.title}`}
+                aria-label={`Itinéraire vers ${nomDeLieu(activity.title)}`}
               >📍 {activity.address}</a>
             )
             : <span className="tl-activity__addr">📍 {activity.address}</span>
@@ -177,7 +177,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
                   className="tl-act-grip"
                   onPointerDown={(e) => reorder.demarrer(a.id, e)}
                   data-jour-source={day.id}
-                  aria-label={`Déplacer ${a.title}`}
+                  aria-label={`Déplacer ${nomDeLieu(a.title)}`}
                 >⠿</button>
               )}
             <TlActivity

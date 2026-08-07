@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
-import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire } from '../utils/helpers';
+import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 
@@ -185,7 +185,13 @@ function ActivityCard({
                     aria-hidden="true"
                   />
                 )}
-                {activity.title}
+                {/* Un titre est un nom, jamais une adresse. « Café bel étage,
+                    Kärntner Straße 38, 1010 Vienna Austria » tenait sur trois
+                    lignes ici, avec la même adresse répétée juste dessous. Le
+                    nettoyage existait déjà — mais seulement à l'import : les
+                    fiches déjà enregistrées, elles, restaient illisibles. Le
+                    faire à l'affichage les répare toutes, sans rien réécrire. */}
+                {nomDeLieu(activity.title)}
               </div>
               <div className="activity-card__meta">
                 {/* Les métadonnées se lisent, elles ne se décorent pas : l'émoji
@@ -203,7 +209,7 @@ function ActivityCard({
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      aria-label={`Itinéraire vers ${activity.title}`}
+                      aria-label={`Itinéraire vers ${nomDeLieu(activity.title)}`}
                     >{activity.address}</a>
                   )
                   : <span className="activity-card__address">{activity.address}</span>
