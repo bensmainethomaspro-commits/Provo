@@ -83,6 +83,54 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Un outil ne trouve que sur les écrans qu'on lui montre** (août 2026).
+  `/verif-ui` déclarait « rien à signaler » alors que « ✅ Ajouter » passait
+  sous la barre d'onglets sur ses 29 derniers pixels : le formulaire d'ajout
+  d'une dépense n'était tout simplement jamais ouvert par la sonde. L'écran
+  `Dépense (ajout)` a été ajouté — il a immédiatement sorti un contraste à
+  3,39:1 sur les pastilles de voyageur en thème sombre, invisible depuis
+  toujours. **Avant d'ajouter une sonde, vérifier qu'un écran l'exerce.**
+
+- **Trois nouvelles sondes, nées de trois erreurs de mesure** (août 2026) :
+  1. *Recouvert par un calque du bas* — un bouton dans le cadre mais caché
+     derrière la barre flottante. Restreinte aux actions principales : passée
+     sur tous les éléments cliquables, elle signalait chaque carte qui longe
+     la barre au fil du défilement.
+  2. *« Ancré en bas » se juge sur le haut du calque* — la barre d'onglets de
+     Provo est une pastille flottante dont le bas est à 834 px pour un écran
+     de 844. Un test `bottom >= innerHeight` ne l'aurait jamais reconnue.
+  3. *Un conteneur qui défile découpe ce qui en sort* — et
+     `getBoundingClientRect` l'ignore. « ✓ Remboursé » sortait comme cible
+     inatteignable de 105 × 28 px alors qu'il était remonté derrière
+     l'en-tête, donc absent de l'écran.
+
+- **Une sonde neuve se prouve contre le code d'avant** (août 2026). La
+  première version de la sonde « recouvert » ne trouvait rien — parce que la
+  correction livrée dans le même lot avait déjà raccourci le formulaire. Il a
+  fallu remiser les changements applicatifs (`git stash`) et rejouer la sonde
+  seule sur le code d'origine pour voir qu'elle était muette, puis qu'elle
+  parlait. **Une sonde qui n'a jamais rougi n'est pas une sonde vérifiée.**
+
+- **Un glissement de suppression armait aussi la navigation entre onglets**
+  (août 2026). `onTabTouchStart` excluait `.activity-card-swipe` mais pas
+  `.expense-item-swipe` : parti du bord droit — exactement là où le pouce le
+  commence — le glissement supprimait la dépense **et** basculait sur l'onglet
+  Carte. Mesuré, pas supposé : `Dépenses` → `Carte`. Toute nouvelle rangée
+  glissable doit s'ajouter à cette liste d'exclusion.
+
+- **La ligne EST le bouton** (août 2026, règle A7). Chaque dépense portait un
+  crayon et une corbeille, tous deux forcés à 44 × 44 px parce que leurs halos
+  se seraient recouverts. Le glissement supprimait déjà, le tap ouvrait déjà.
+  Les deux icônes sont parties ; supprimer vit dans la fiche qu'on vient
+  d'ouvrir. Une cible qu'on n'a pas à agrandir vaut mieux qu'une cible
+  agrandie.
+
+- **Le formulaire de dépense s'ouvre sur le montant** (août 2026). C'est ce
+  qu'on a sous les yeux, écrit sur le ticket qu'on tient. Catégorie, partage
+  et activité liée sont derrière le même pli « Détails » que la fiche
+  d'activité — dont le résumé annonce le contenu, donc rien n'est caché.
+  Mesuré : 653 → 432 px de haut, 9 → 6 blocs, 14 → 5 boutons.
+
 - **La feuille Compte est l'angle mort des outils** (août 2026). Ni
   `/verif-ui` ni `/parcours` ne savent l'ouvrir : elle demande une session
   authentifiée. Deux défauts y ont donc échappé et n'ont été vus que sur une

@@ -10,6 +10,7 @@
  *   2. cibles tactiles (44 px)          — atteignable avec un pouce ?
  *   3. débordement horizontal           — la page part-elle en travers ?
  *   4. action principale hors écran     — faut-il scroller pour valider ?
+ *   5. action principale recouverte     — passe-t-elle sous un calque flottant ?
  *
  * Les deux thèmes sont parcourus, sur le plus petit écran cible.
  * Sortie : un tableau de chiffres et un code de sortie. 0 = rien à signaler.
@@ -95,7 +96,8 @@ const SONDES = `(() => {
   //    c'est le cas du bandeau d'annulation au repos. Ses boutons étaient
   //    mesurés alors que personne ne les voit.
   // 2. Un élément peut avoir défilé hors du cadre. Une cible à top: -332
-  //    n'est pas une cible trop petite, c'est une cible absente.
+  //    n'est pas une cible trop petite, c'est une cible absente. Et le cadre
+  //    en question n'est pas toujours l'écran — voir le point 3 plus bas.
   const visible = (el) => {
     for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
       const s = getComputedStyle(n);
@@ -103,8 +105,22 @@ const SONDES = `(() => {
     }
     const r = el.getBoundingClientRect();
     if (r.width <= 0 || r.height <= 0) return false;
-    return r.bottom > 0 && r.top < window.innerHeight
-        && r.right > 0 && r.left < window.innerWidth;
+    if (!(r.bottom > 0 && r.top < window.innerHeight
+       && r.right > 0 && r.left < window.innerWidth)) return false;
+    // 3. Un conteneur qui défile découpe ce qui en sort — et
+    //    \`getBoundingClientRect\` l'ignore complètement. Un bouton remonté
+    //    au-dessus du cadre de défilement garde donc des coordonnées à
+    //    l'écran alors que plus un pixel n'en est peint : c'est l'en-tête
+    //    qu'on voit à sa place. Mesuré ainsi, « ✓ Remboursé » sortait comme
+    //    cible inatteignable de 105 × 28 alors qu'il n'était pas là.
+    for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (!/auto|scroll|hidden/.test(s.overflowY + ' ' + s.overflowX)) continue;
+      const q = n.getBoundingClientRect();
+      if (r.bottom <= q.top + 1 || r.top >= q.bottom - 1
+       || r.right <= q.left + 1 || r.left >= q.right - 1) return false;
+    }
+    return true;
   };
   const nomme = (el) =>
     (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '')
@@ -157,6 +173,48 @@ const SONDES = `(() => {
     }
   });
 
+  // Un calque flottant — barre d'onglets, en-tête collant — peut passer
+  // par-dessus n'importe quoi. Deux situations très différentes :
+  //
+  //   · calque en HAUT : le contenu défile dessous. C'est le fonctionnement
+  //     normal d'un en-tête, rien à signaler.
+  //   · calque en BAS  : l'élément est posé dans la bande où la barre flotte.
+  //     Il se voit à moitié, il ne se touche pas, et rien ne dit pourquoi.
+  //
+  // Un voile de modale prend tout l'écran : il recouvre volontairement ce
+  // qu'il y a dessous, on l'écarte aussi.
+  const calqueSous = (el) => {
+    const r = el.getBoundingClientRect();
+    const points = [
+      [r.left + r.width / 2, r.top + 3],
+      [r.left + r.width / 2, r.bottom - 3],
+      [r.left + 3, r.top + r.height / 2],
+      [r.right - 3, r.top + r.height / 2],
+    ];
+    for (const [x, y] of points) {
+      if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+      const sur = document.elementFromPoint(x, y);
+      if (!sur || sur === el || el.contains(sur) || sur.contains(el)) continue;
+      let calque = null;
+      for (let n = sur; n && n !== document.body; n = n.parentElement) {
+        const p = getComputedStyle(n).position;
+        if (p === 'fixed' || p === 'sticky') { calque = n; break; }
+      }
+      if (!calque) continue;
+      const q = calque.getBoundingClientRect();
+      if (q.height > window.innerHeight * 0.6) continue;
+      // « Ancré en bas » se juge sur le haut du calque, pas sur son bas : la
+      // barre d'onglets de Provo est une pastille flottante qui garde 10 px
+      // sous elle. Un \`bottom >= innerHeight\` ne l'aurait jamais reconnue —
+      // et la sonde serait restée muette sur le défaut qui l'a fait naître.
+      return {
+        nom: String(calque.className || calque.tagName).slice(0, 38),
+        enBas: q.top > window.innerHeight / 2,
+      };
+    }
+    return null;
+  };
+
   // 2 · Cibles tactiles — un pouce ne vise pas mieux que 44 px.
   //
   // Sauf pour un lien posé dans une ligne de texte : sa hauteur est celle de la
@@ -188,6 +246,7 @@ const SONDES = `(() => {
     .forEach(el => {
       if (!visible(el)) return;
       const r = el.getBoundingClientRect();
+      const calque = calqueSous(el);
       // Un lien dans une ligne de texte : sa hauteur est celle de la ligne.
       // WCAG 2.5.8 l'exempte et fixe le plancher à 24 px.
       const dansDuTexte = el.tagName === 'A'
@@ -196,6 +255,10 @@ const SONDES = `(() => {
       const seuil = dansDuTexte ? 24 : ${CIBLE_MIN};
       if (Math.min(r.width, r.height) >= seuil - 0.5) return;
       if (atteignable(el, r)) return;
+      // Recouvert, ce n'est pas trop petit : l'agrandir n'y changerait rien.
+      // Un bouton passé sous l'en-tête au défilement n'est pas un défaut de
+      // dessin — il est simplement plus haut que le cadre.
+      if (calque) return;
       const cle = String(el.className) + '|' + nomme(el);
       if (vusC.has(cle)) return;
       vusC.add(cle);
@@ -219,13 +282,29 @@ const SONDES = `(() => {
   }
 
   // 4 · Action principale hors écran — « il faut scroller pour rien ».
-  const horsEcran = [];
+  //
+  // Même question, deuxième forme : l'action est dans le cadre, mais RECOUVERTE
+  // par la barre flottante du bas. Ce script disait « rien à signaler » sur un
+  // écran où « ✅ Ajouter » passait dessous sur ses 29 derniers pixels — il ne
+  // regardait que \`top >= innerHeight\`. C'est pourtant le pire des deux cas :
+  // hors écran, on comprend qu'il faut défiler ; à moitié caché, on croit
+  // pouvoir toucher.
+  //
+  // Restreint aux actions principales, comme la sonde qu'elle prolonge. Passée
+  // sur tous les éléments cliquables, elle signalait chaque carte qui longe la
+  // barre au fil du défilement — du bruit, et le bruit finit par ne plus être lu.
+  const horsEcran = [], recouverts = [];
   document.querySelectorAll('.btn--primary, [type="submit"], .sheet__footer button')
     .forEach(el => {
       if (!visible(el)) return;
       const r = el.getBoundingClientRect();
       if (r.top >= window.innerHeight - 4) {
         horsEcran.push({ libelle: nomme(el), bas: Math.round(r.bottom), ecran: window.innerHeight });
+        return;
+      }
+      const calque = calqueSous(el);
+      if (calque?.enBas) {
+        recouverts.push({ libelle: nomme(el), par: calque.nom, bas: Math.round(r.bottom) });
       }
     });
 
@@ -241,7 +320,7 @@ const SONDES = `(() => {
     }
   });
 
-  return { contraste, incertains, cibles, deborde, coupables, horsEcran, muets };
+  return { contraste, incertains, cibles, deborde, coupables, horsEcran, recouverts, muets };
 })()`;
 
 // ── Parcours ─────────────────────────────────────────────────────────────────
@@ -252,6 +331,18 @@ const ECRANS = [
   { nom: 'Planning', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Planning/i); } },
   { nom: 'Réserve', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Réserve/i); } },
   { nom: 'Dépenses', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Dépenses/i); } },
+  // Le formulaire d'ajout d'une dépense n'était jamais ouvert ici : c'est
+  // pour ça que ses deux boutons ont pu passer sous la barre d'onglets sans
+  // que rien ne le dise. Une sonde ne trouve que sur les écrans qu'on lui
+  // montre — ajouter la sonde sans ajouter l'écran n'aurait rien changé.
+  {
+    nom: 'Dépense (ajout)',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Dépenses/i);
+      await p.locator('.expenses-add-top').click().catch(() => {});
+      await p.waitForTimeout(800);
+    },
+  },
   { nom: 'Carte', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200); } },
   // Deux écrans arrivés en août 2026 et jamais mesurés : le pli du formulaire
   // d'ajout, et les billets du voyage. Le débordement de la zone de notes
@@ -356,12 +447,14 @@ if (JSON_OUT) {
 } else {
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\n' + pad('écran', 18) + pad('thème', 8) + pad('contraste', 11)
-    + pad('cibles', 9) + pad('déborde', 9) + pad('hors écran', 12) + 'muets');
-  console.log('─'.repeat(76));
+    + pad('cibles', 9) + pad('déborde', 9) + pad('hors écran', 12)
+    + pad('recouvert', 11) + 'muets');
+  console.log('─'.repeat(87));
   for (const l of rapport) {
     console.log(pad(l.ecran, 18) + pad(l.theme, 8) + pad(l.contraste.length || '·', 11)
       + pad(l.cibles.length || '·', 9) + pad(l.deborde ? l.deborde + ' px' : '·', 9)
-      + pad(l.horsEcran.length || '·', 12) + (l.muets.length || '·'));
+      + pad(l.horsEcran.length || '·', 12) + pad(l.recouverts.length || '·', 11)
+      + (l.muets.length || '·'));
   }
 
   const detail = (titre, tirer, format) => {
@@ -382,6 +475,8 @@ if (JSON_OUT) {
     x => `${x.gauche} → ${x.droite} [${x.classe}]`);
   detail("Action principale sous la ligne de flottaison", l => l.horsEcran,
     x => `« ${x.libelle} » à ${x.bas} px pour un écran de ${x.ecran}`);
+  detail('Action principale recouverte par un calque flottant', l => l.recouverts,
+    x => `« ${x.libelle} » (bas à ${x.bas} px) passe sous [${x.par}]`);
   detail('Boutons sans nom accessible', l => l.muets,
     x => `« ${x.contenu} » [${x.classe}]`);
   detail('Erreurs JavaScript', l => l.erreurs, x => x);
@@ -394,7 +489,7 @@ if (JSON_OUT) {
 const plantes = rapport.filter(l => l.plante);
 const total = rapport.reduce((n, l) =>
   n + l.contraste.length + l.cibles.length + (l.deborde ? 1 : 0)
-    + l.horsEcran.length + l.muets.length + l.erreurs.length, 0);
+    + l.horsEcran.length + l.recouverts.length + l.muets.length + l.erreurs.length, 0);
 if (!JSON_OUT) {
   // En tête, avant les chiffres : sur un écran planté, tous les autres comptes
   // sont faux — il n'y a plus d'interface à mesurer.
