@@ -462,6 +462,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const onTabTouchStart = (e) => {
     if (
       e.target.closest('.activity-card-swipe') ||
+      // Une dépense se supprime en la faisant glisser vers la gauche. Ce
+      // geste-là n'était pas exclu : parti du bord droit — c'est-à-dire
+      // exactement là où le pouce le commence — il supprimait la dépense ET
+      // faisait basculer sur l'onglet suivant. Mesuré : « Dépenses » → « Carte »
+      // sur un simple glissement.
+      e.target.closest('.expense-item-swipe') ||
       e.target.closest('.day-section__header') ||
       e.target.closest('.leaflet-container') ||
       e.target.closest('input') ||

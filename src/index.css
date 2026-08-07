@@ -2354,7 +2354,12 @@ body {
 }
 .traveler-assign-chip--on {
   background: color-mix(in srgb, var(--orange) 15%, transparent);
-  border-color: var(--orange); color: var(--orange);
+  border-color: var(--orange);
+  /* Le bleu de marque servait ici de couleur de texte : 3,39:1 en sombre,
+     mesuré le jour où le formulaire de dépense est enfin passé sous l'outil.
+     `--accent-texte` est le jeton fait pour ça — et il s'éclaircit tout seul
+     en thème sombre, ce que `--orange` ne fait pas. */
+  color: var(--accent-texte);
 }
 
 /* ─── SETTINGS TOGGLE ────────────────────────────────────── */
@@ -2550,8 +2555,14 @@ body {
 .expense-item__linked { color: var(--blue, #3b82f6); }
 .expense-item__participants { display: flex; gap: 2px; margin-top: 4px; font-size: 14px; }
 .expense-participant { font-size: 14px; }
-.expense-item__delete { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 14px; padding: 2px 4px; flex-shrink: 0; }
-.expense-item__delete:hover { color: var(--red); }
+/* La ligne EST le bouton : plus de crayon ni de corbeille à côté du texte.
+   Elle garde exactement le dessin d'une carte — seul son rôle change. */
+.expense-item--ouvrable {
+  display: block; width: 100%; text-align: left;
+  font: inherit; color: inherit; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.expense-item--ouvrable:active { background: var(--surface-sunken); }
 .expense-form {
   background: var(--surface-raised); border-radius: var(--radius-md);
   border: 1px solid var(--border); padding: 14px; margin-top: 8px;
@@ -5781,11 +5792,14 @@ button.budget-inline:active { transform: scale(0.98); }
 .my-balance__line strong { font-variant-numeric: tabular-nums; }
 .my-balance__line--owe strong { color: var(--red); }
 .my-balance__line--get strong { color: var(--green); }
-.expense-item__edit {
+/* Supprimer, depuis la fiche qu'on vient d'ouvrir. Discret : c'est une sortie,
+   pas une action qu'on propose. */
+.expense-form__supprimer {
+  display: block; width: 100%; min-height: 44px; margin-top: 10px;
   background: none; border: none; cursor: pointer;
-  font-size: 15px; padding: 2px 4px; opacity: 0.75;
+  font-family: inherit; font-size: 13.5px; font-weight: 700; color: var(--red-texte);
 }
-.expense-item__edit:hover { opacity: 1; }
+.expense-form__supprimer:active { opacity: 0.6; }
 
 /* Compte à rebours avant le départ + brief de la veille */
 .countdown-banner {
@@ -6554,15 +6568,11 @@ button.budget-inline:active { transform: scale(0.98); }
 .expenses-section-btn,
 .debts-card__detail-btn,
 .debt-settle-btn,
-.expense-item__edit,
-.expense-item__delete,
 .traveler-assign-chip { position: relative; }
 
 .expenses-section-btn::after,
 .debts-card__detail-btn::after,
 .debt-settle-btn::after,
-.expense-item__edit::after,
-.expense-item__delete::after,
 .traveler-assign-chip::after {
   content: '';
   position: absolute;
@@ -6989,19 +6999,14 @@ button.budget-inline:active { transform: scale(0.98); }
 .expense-item { contain-intrinsic-size: auto 76px; }
 
 /* ─── Cibles de moins de 44 px, mesurées par /verif-ui ────────────────────
-   Modifier et supprimer une dépense (27 × 22 et 25 × 20 px), l'adresse sur
-   l'écran du jour (42 px de haut), et le détail des dettes (60 × 18). Ce sont
-   des actions courantes ; la pastille reste fine, la zone touchée fait 44 px
-   et rien ne bouge à l'écran. */
-/* Modifier et Supprimer sont côte à côte : agrandir leur zone par un halo les
-   ferait se recouvrir, et le doigt toucherait le mauvais. Il leur faut donc
-   une vraie taille, pas une zone invisible. */
-.expense-item__edit,
-.expense-item__delete {
-  min-width: 44px; min-height: 44px;
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0;
-}
+   L'adresse sur l'écran du jour (42 px de haut) et le détail des dettes
+   (60 × 18). Ce sont des actions courantes ; la pastille reste fine, la zone
+   touchée fait 44 px et rien ne bouge à l'écran.
+
+   Modifier et Supprimer une dépense figuraient ici, forcés à 44 × 44 chacun
+   parce que leurs halos se seraient recouverts. Ils n'existent plus : la
+   ligne entière ouvre la fiche, le glissement supprime. Une cible qu'on
+   n'a pas à agrandir est toujours meilleure qu'une cible agrandie. */
 /* Isolé, celui-ci peut garder sa zone étendue. */
 .debts-card__detail-btn { position: relative; }
 .debts-card__detail-btn::after {

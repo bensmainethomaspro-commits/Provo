@@ -7,6 +7,10 @@ import SpinWheel from './SpinWheel';
 function SwipeableExpenseItem({ exp, onDelete, children }) {
   const [offset, setOffset] = useState(0);
   const swRef = useRef({ startX: null, startY: null, dragging: false });
+  // Un glissement se termine par un clic de synthèse. Depuis que la ligne
+  // elle-même ouvre la fiche, ce clic rouvrirait la dépense qu'on vient de
+  // supprimer — ou en ouvrirait une autre au relâchement. On l'avale.
+  const apresGlissement = useRef(false);
   const THRESHOLD = 72;
   const MAX = 88;
 
@@ -27,7 +31,15 @@ function SwipeableExpenseItem({ exp, onDelete, children }) {
     setOffset(Math.max(-MAX, Math.min(0, dx)));
   };
   const onTouchEnd = () => {
+    const glisse = swRef.current.dragging;
     swRef.current.startX = null;
+    // Remis à plat ici, sinon le retour en place se fait sans transition :
+    // la ligne saute au lieu de revenir.
+    swRef.current.dragging = false;
+    if (glisse) {
+      apresGlissement.current = true;
+      setTimeout(() => { apresGlissement.current = false; }, 400);
+    }
     if (offset < -THRESHOLD) { onDelete(); setOffset(0); }
     else setOffset(0);
   };
@@ -40,6 +52,11 @@ function SwipeableExpenseItem({ exp, onDelete, children }) {
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
+        onClickCapture={e => {
+          if (!apresGlissement.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
       >
         {children}
       </div>
@@ -190,6 +207,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [showDebtDetail, setShowDebtDetail] = useState(false);
   const [editingId, setEditingId] = useState(null); // dépense en cours de modification
+  const [detailsOuverts, setDetailsOuverts] = useState(false);
   const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
@@ -203,9 +221,13 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     set('participantIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   };
 
+  // `block: 'center'` centrait un formulaire plus haut que l'écran : ses deux
+  // boutons tombaient sous la barre d'onglets flottante — mesuré à 29 px
+  // recouverts — et rien ne le laissait voir. On amène le haut du formulaire
+  // en haut du cadre : c'est là qu'on va taper, et la validation reste dedans.
   const scrollToForm = () => {
     requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
   };
 
@@ -221,6 +243,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     });
     setEditingId(exp.id);
     setError('');
+    setDetailsOuverts(false);
     setShowForm(true);
     scrollToForm();
   };
@@ -270,6 +293,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
     setEditingId(null);
     setError('');
+    setDetailsOuverts(false);
     setShowForm(true);
     // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
     // voit rien se passer au clic sur « Ajouter une dépense ».
@@ -291,6 +315,24 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       return `${formatPrice(eur)} pour ${only ? only.name : '1 personne'} seul·e`;
     }
     return `${formatPrice(eur)} ÷ ${n} = ${formatPrice(eur / n)} par personne`;
+  })();
+
+  // Ce que le pli « Détails » contient, écrit sur sa propre ligne : replier
+  // n'a le droit de faire gagner de la place que si on continue à voir ce
+  // qu'on est en train d'enregistrer.
+  const resumeDetails = (() => {
+    const cat = EXPENSE_CATEGORIES.find(c => c.id === form.expenseCategory) || CAT_DEFAUT;
+    const n = form.participantIds.length;
+    const partage = !hasTravelers ? null
+      : n === 0 ? 'partagé avec personne'
+      : n === travelers.length ? 'partagé avec tout le monde'
+      : n === 1 ? `pour ${getName(form.participantIds[0])} seul·e`
+      : `partagé entre ${n}`;
+    const liee = form.activityId
+      ? allActivities.find(a => a.id === form.activityId)?.title
+      : null;
+    return [`${cat.emoji} ${cat.label}`, partage, liee && `🔗 ${liee}`]
+      .filter(Boolean).join(' · ');
   })();
 
   const handleAdd = () => {
@@ -593,9 +635,19 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               // Le repli se cherchait par index : insérer une catégorie avant
               // « Autre » l'aurait silencieusement remplacé par la nouvelle.
               : (EXPENSE_CATEGORIES.find(c => c.id === exp.expenseCategory) || CAT_DEFAUT);
+            // Un remboursement ne se modifie pas : il découle des dépenses.
+            const modifiable = !exp.isSettlement && !!onUpdateExpense;
+            const Ligne = modifiable ? 'button' : 'div';
             return (
               <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
-                <div className="expense-item">
+                <Ligne
+                  className={`expense-item${modifiable ? ' expense-item--ouvrable' : ''}`}
+                  {...(modifiable ? {
+                    type: 'button',
+                    onClick: () => openEditForm(exp),
+                    'aria-label': `Modifier ${exp.description}`,
+                  } : {})}
+                >
                   <div className="expense-item__main">
                     <span className="expense-item__emoji">{catMeta.emoji}</span>
                     <div className="expense-item__info">
@@ -625,22 +677,8 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                         </div>
                       )}
                     </div>
-                  {/* Les remboursements ne se modifient pas : ils découlent des dépenses */}
-                  {!exp.isSettlement && onUpdateExpense && (
-                    <button
-                      className="expense-item__edit"
-                      onClick={e => { e.stopPropagation(); openEditForm(exp); }}
-                      title="Modifier"
-                      aria-label={`Modifier ${exp.description}`}
-                    >✏️</button>
-                  )}
-                  <button
-                    className="expense-item__delete"
-                    onClick={e => { e.stopPropagation(); onDeleteExpense(exp.id); }}
-                    title="Supprimer"
-                  >🗑️</button>
                   </div>
-                </div>
+                </Ligne>
               </SwipeableExpenseItem>
             );
           })}
@@ -664,27 +702,16 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               {recuMsg && <p className="recu__msg">{recuMsg}</p>}
             </div>
           )}
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}
-              onChange={e => set('description', e.target.value)} autoFocus />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Catégorie</label>
-            <div className="traveler-assign-row" style={{ flexWrap: 'wrap' }}>
-              {EXPENSE_CATEGORIES.map(cat => (
-                <button key={cat.id} type="button"
-                  className={`traveler-assign-chip${form.expenseCategory === cat.id ? ' traveler-assign-chip--on' : ''}`}
-                  onClick={() => set('expenseCategory', cat.id)}>
-                  {cat.emoji} {cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Le montant d'abord : on l'a sous les yeux, écrit sur le ticket
+              qu'on tient. Le curseur y arrive directement, clavier numérique
+              ouvert — on tape 24, on valide, c'est fini. La description
+              venait avant et coûtait deux champs de traversée pour un texte
+              qu'on écrit rarement. */}
           <div className="form-row">
             <div className="form-group" style={{ flex: 2 }}>
               <label className="form-label">Montant</label>
-              <input className="form-input" type="number" min="0" step="0.5" placeholder="0.00"
+              <input className="form-input" type="number" inputMode="decimal" min="0" step="0.5"
+                placeholder="0.00" autoFocus
                 value={form.amount} onChange={e => set('amount', e.target.value)} />
             </div>
             <div className="form-group" style={{ flex: 1 }}>
@@ -701,6 +728,16 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
             </div>
           )}
+          {/* Le partage se lit sous le montant, là où on vient de taper — même
+              quand le détail du partage est replié. */}
+          {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
+
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}
+              onChange={e => set('description', e.target.value)} />
+          </div>
+
           {hasTravelers && (
             <div className="form-group">
               <label className="form-label">Qui a payé ?</label>
@@ -715,6 +752,34 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               </div>
             </div>
           )}
+
+          {/* Même pli que la fiche d'activité, même intention : la catégorie
+              par défaut convient presque toujours, le partage est déjà « tout
+              le monde », et lier une activité est explicitement optionnel.
+              Le résumé dit ce qu'il y a dessous — rien n'est caché, c'est
+              seulement rangé. */}
+          <button
+            type="button"
+            className="details-pli"
+            onClick={() => setDetailsOuverts(o => !o)}
+            aria-expanded={detailsOuverts}
+          >
+            <span>{detailsOuverts ? '▴' : '▾'} Détails</span>
+            <small>{resumeDetails}</small>
+          </button>
+          {detailsOuverts && (<>
+          <div className="form-group">
+            <label className="form-label">Catégorie</label>
+            <div className="traveler-assign-row" style={{ flexWrap: 'wrap' }}>
+              {EXPENSE_CATEGORIES.map(cat => (
+                <button key={cat.id} type="button"
+                  className={`traveler-assign-chip${form.expenseCategory === cat.id ? ' traveler-assign-chip--on' : ''}`}
+                  onClick={() => set('expenseCategory', cat.id)}>
+                  {cat.emoji} {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {hasTravelers && (
             <div className="form-group">
               <label className="form-label">
@@ -737,8 +802,6 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                   </button>
                 ))}
               </div>
-              {/* Aperçu en direct : on voit tout de suite ce que ça donne par personne */}
-              {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
             </div>
           )}
           {(activitiesByDay.length > 0 || (trip.reserve || []).length > 0) && (
@@ -763,6 +826,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               </select>
             </div>
           )}
+          </>)}
           {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button className="btn btn--secondary btn--full" onClick={() => { setShowForm(false); setEditingId(null); }}>Annuler</button>
@@ -770,6 +834,15 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               {editingId ? '✅ Enregistrer' : '✅ Ajouter'}
             </button>
           </div>
+          {/* La corbeille a quitté chaque ligne de la liste — sept fois moins
+              d'icônes à l'écran. Supprimer reste possible de deux façons : le
+              glissement, et ici, dans la fiche qu'on a justement ouverte. */}
+          {editingId && (
+            <button type="button" className="expense-form__supprimer"
+              onClick={() => { onDeleteExpense(editingId); setEditingId(null); setShowForm(false); }}>
+              Supprimer cette dépense
+            </button>
+          )}
         </div>
       ) : null}
     </div>

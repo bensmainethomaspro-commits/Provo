@@ -717,7 +717,7 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
-      await t.saisir('input.form-input', 'Café Central');
+      await t.saisir('input.form-input:not([type="number"])', 'Café Central');
       const montant = t.p.locator('input[type="number"]').first();
       if (!(await montant.count())) t.injouable('pas de champ montant');
       await montant.fill('24');
@@ -736,8 +736,53 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
+      // Les catégories vivent derrière le pli « Détails » : le formulaire
+      // s'ouvre sur montant + description, et rien d'autre. Le pli annonce
+      // ce qu'il contient, donc on vérifie les deux — l'annonce et le contenu.
+      t.verifier('la catégorie retenue est annoncée sans déplier',
+        /Autre|Transport|Repas/.test(await t.p.locator('.details-pli small').innerText()));
+      await t.clic('.details-pli', { delai: 500 });
       t.verifier('« Verre » est proposée',
         (await t.texte()).match(/Verre/i) !== null);
+    } },
+
+  { groupe: 'Dépenses', nom: "Glisser une dépense la supprime sans changer d'onglet", depart: 'voyage',
+    intention: "Supprimer d'un geste — et rester là où on était.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      const avant = (await t.voyage()).expenses.length;
+      if (!avant) t.injouable('aucune dépense à glisser');
+      // Le glissement part du bord droit, là où le pouce le commence. C'est
+      // précisément ce départ-là qui armait AUSSI la navigation entre onglets :
+      // la dépense partait, et l'app basculait sur la Carte.
+      const apres = await t.p.evaluate(async () => {
+        const cible = document.querySelector('.expense-item-swipe')?.lastElementChild;
+        if (!cible) return null;
+        const b = cible.getBoundingClientRect();
+        const x0 = b.left + b.width - 20, y = b.top + b.height / 2;
+        const doigt = (x) => new Touch({ identifier: 1, target: cible, clientX: x, clientY: y });
+        const env = (type, x) => cible.dispatchEvent(new TouchEvent(type, {
+          bubbles: true, cancelable: true,
+          touches: type === 'touchend' ? [] : [doigt(x)],
+          targetTouches: type === 'touchend' ? [] : [doigt(x)],
+          changedTouches: [doigt(x)],
+        }));
+        env('touchstart', x0);
+        for (let i = 1; i <= 8; i++) { env('touchmove', x0 - (110 * i) / 8); await new Promise(r => setTimeout(r, 16)); }
+        env('touchend', x0 - 110);
+        // Le clic de synthèse qu'un navigateur envoie après le relâchement.
+        cible.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        await new Promise(r => setTimeout(r, 500));
+        return { onglet: document.querySelector('.tab-btn--active')?.textContent || '',
+          fiche: document.querySelectorAll('.expense-form').length };
+      });
+      if (!apres) t.injouable('aucune ligne glissable');
+      t.verifier('la dépense est supprimée',
+        (await t.voyage()).expenses.length === avant - 1,
+        `${avant} → ${(await t.voyage()).expenses.length}`);
+      t.verifier("on reste sur l'onglet Dépenses", /Dépenses/.test(apres.onglet), apres.onglet.trim());
+      t.verifier("le glissement n'ouvre pas la fiche derrière", apres.fiche === 0);
     } },
 
   { groupe: 'Dépenses', nom: 'Les trois vues des dépenses', depart: 'voyage',
@@ -763,15 +808,17 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       const avant = (await t.voyage()).expenses.length;
-      if (!(await t.clic('button', { texte: '✏️', delai: 700, obligatoire: false })))
-        t.injouable('aucun bouton de modification');
+      // Le crayon et la corbeille ont quitté chaque ligne : la ligne EST le
+      // bouton, et supprimer vit dans la fiche qu'on vient d'ouvrir.
+      if (!(await t.clic('.expense-item--ouvrable', { delai: 700, obligatoire: false })))
+        t.injouable('aucune dépense modifiable');
       const montant = t.p.locator('input[type="number"]').first();
       await montant.fill('99');
       await t.clic('button', { texte: /Enregistrer|Ajouter|✅/, delai: 900 });
       const modifiee = (await t.voyage()).expenses.some(e => Number(e.amount) === 99);
       t.verifier('la modification est enregistrée', modifiee);
-      await t.clic('button', { texte: '🗑️', delai: 600, obligatoire: false });
-      await t.clic('button', { texte: /Supprimer|Confirmer|Oui/, delai: 800, obligatoire: false });
+      await t.clic('.expense-item--ouvrable', { delai: 700, obligatoire: false });
+      await t.clic('.expense-form__supprimer', { delai: 800, obligatoire: false });
       const apres = (await t.voyage()).expenses.length;
       t.verifier('la suppression fonctionne', apres === avant - 1, `${avant} → ${apres}`);
     } },
@@ -1356,7 +1403,7 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top', { delai: 900 });
-      await t.saisir('input.form-input', 'Taxi');
+      await t.saisir('input.form-input:not([type="number"])', 'Taxi');
       await t.p.locator('input[type="number"]').first().fill('18');
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1200 });
       t.verifier('la dépense est enregistrée malgré tout',
@@ -1625,7 +1672,7 @@ const PARCOURS = [
       t.verifier('aucun montant inventé', champs.montant === '', champs.montant || '(vide, correct)');
       t.verifier('on le dit franchement', champs.message.length > 10, champs.message.slice(0, 70));
       // Et la saisie manuelle doit rester possible juste après.
-      await t.saisir('.expense-form input.form-input', 'Taxi');
+      await t.saisir('.expense-form input.form-input:not([type="number"])', 'Taxi');
       await t.p.locator('.expense-form input[type="number"]').first().fill('22');
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1300 });
       t.verifier('la saisie à la main reste possible',
