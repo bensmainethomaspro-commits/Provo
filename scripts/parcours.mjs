@@ -357,6 +357,42 @@ const VECU = (() => {
   return t;
 })();
 
+/**
+ * Le dernier soir : tout est fait, plus rien devant.
+ *
+ * Le voyage porte exprès les trois pièges qui gonflaient l'estimation :
+ * des idées en Réserve qu'on n'a jamais programmées, une activité annulée,
+ * et une activité dont la dépense a été saisie en plus de son prix prévu.
+ */
+const DERNIER_SOIR = (() => {
+  const t = JSON.parse(JSON.stringify(TRIP));
+  t.initialBudget = 500;
+  // Toutes les journées sont derrière : le voyage est fini.
+  t.days = joursVides(3, -3).map((d) => ({ ...d, activities: [] }));
+  t.days[0].activities = [
+    { id: 'a1', title: 'Musée', category: 'visite', status: 'done', price: '20',
+      durationHours: 1, durationMinutes: 0, travelerIds: [] },
+    { id: 'a2', title: 'Dîner', category: 'resto', status: 'done', price: '40',
+      durationHours: 1, durationMinutes: 30, travelerIds: [] },
+  ];
+  t.days[2].activities = [
+    { id: 'a3', title: 'Visite annulée', category: 'visite', status: 'nogo', price: '90',
+      durationHours: 2, durationMinutes: 0, travelerIds: [] },
+  ];
+  // Le dîner a été réglé : sa dépense doit remplacer son prix, pas s'y ajouter.
+  t.expenses = [{ id: 'e1', description: 'Dîner', amount: 40, eurAmount: 40, currency: 'EUR',
+    expenseCategory: 'repas', payerId: 't1', date: jour(-2), participantIds: ['t1', 't2'],
+    activityId: 'a2' }];
+  // Des idées jamais programmées : 300 € qui ne doivent apparaître nulle part.
+  t.reserve = [
+    { id: 'r1', title: 'Idée chère', category: 'visite', status: 'todo', price: '200',
+      durationHours: 2, durationMinutes: 0, travelerIds: [] },
+    { id: 'r2', title: 'Autre idée', category: 'fun', status: 'todo', price: '100',
+      durationHours: 1, durationMinutes: 0, travelerIds: [] },
+  ];
+  return t;
+})();
+
 // ── Les parcours ────────────────────────────────────────────────────────────
 // Chacun est une intention d'utilisateur, pas un test unitaire. `depart` dit
 // dans quel état l'app démarre : 'vierge' (aucun voyage), 'voyage' (le voyage
@@ -744,6 +780,32 @@ const PARCOURS = [
       await t.clic('.details-pli', { delai: 500 });
       t.verifier('« Verre » est proposée',
         (await t.texte()).match(/Verre/i) !== null);
+    } },
+
+  { groupe: 'Dépenses', nom: "Le dernier soir, l'estimé rejoint le dépensé", depart: DERNIER_SOIR,
+    intention: "Savoir ce que le voyage a coûté, quand il est fini.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Repliée, la pastille ne montre que le chiffre principal : on la déplie
+      // pour lire l'estimation, qui est justement ce qu'on vérifie ici.
+      await t.clic('.budget-inline', { delai: 600 });
+      const budget = (await t.p.locator('.budget-inline').innerText())
+        .replace(/[\s ]+/g, ' ');
+      const lire = (re) => {
+        const m = budget.match(re);
+        return m ? Number(m[1].replace(/[\s ]/g, '')) : null;
+      };
+      const estime = lire(/(\d[\d ]*) € estimé/);
+      const restant = lire(/(\d[\d ]*) € restants/);
+
+      // Dépensé = 20 € (musée fait) + 40 € (dépense du dîner) = 60 €.
+      // N'ont RIEN à y faire : la Réserve (300 €), l'activité annulée (90 €),
+      // et le prix prévu du dîner déjà réglé par une dépense (40 € de plus).
+      t.verifier('le voyage est fini : estimé = dépensé = 60 €', estime === 60, budget);
+      t.verifier('il reste 440 € sur les 500 € du budget', restant === 440, budget);
+      t.verifier("la Réserve n'entre pas dans le budget", estime !== 360 && estime !== 260);
+      t.verifier("l'activité annulée n'entre pas", estime !== 150);
+      t.verifier("l'activité réglée n'est pas comptée deux fois", estime !== 100);
     } },
 
   { groupe: 'Dépenses', nom: "Glisser une dépense la supprime sans changer d'onglet", depart: 'voyage',

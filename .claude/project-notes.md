@@ -85,6 +85,30 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **« Estimé » comptait trois choses qui n'ont rien à y faire** (août 2026).
+  Constaté sur un vrai voyage, le dernier soir : **1 111 € dépensés et
+  « 1 461 € estimé »** alors qu'il ne restait rien à faire. Le calcul
+  additionnait le prix de *toutes* les activités connues plus *toutes* les
+  dépenses :
+  1. **la Réserve** — un vivier d'idées, pas un programme ; dix-huit idées
+     gardées « au cas où » entraient dans le budget ;
+  2. **les activités annulées** (`status: 'nogo'`), que `budgetStats()` prend
+     pourtant soin d'écarter — deux calculs du même chiffre, deux règles ;
+  3. **les activités déjà réglées**, comptées deux fois : leur prix prévu *et*
+     la dépense saisie pour elles.
+
+  Et une quatrième, trouvée en mesurant : **l'app insère deux repas par jour à
+  20 €**, et ils étaient comptés « à venir » même sur des journées écoulées —
+  120 € fantômes sur trois jours passés.
+
+  Règle tenue désormais : `estimé = déjà dépensé + ce qui reste au programme
+  des jours qui n'ont pas encore eu lieu`. Une journée passée ne peut plus
+  rien coûter : ses activités non cochées ne comptent **ni** comme dépensé
+  **ni** comme à venir — ce qui a réellement été payé est dans l'onglet
+  Dépenses, et c'est lui qui fait foi. **Quand la dernière activité est
+  cochée, l'estimé rejoint le dépensé** — verrouillé par le parcours
+  « Le dernier soir, l'estimé rejoint le dépensé ».
+
 - **Une échelle, pas un empilement de décisions ponctuelles** (août 2026).
   Mesuré avant : **32 tailles de texte, 9 graisses, 23 rayons**, avec des
   valeurs comme 9,75 px, 12,5 px ou 16,5 px — des résultats de multiplication,
