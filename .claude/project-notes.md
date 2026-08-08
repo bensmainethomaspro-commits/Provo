@@ -23,8 +23,8 @@ trace de ce qu'on a sciemment écarté.
 | A1 · 5 onglets max | Barre du bas ; Notes et Valise dans le menu `⋯` |
 | A2 · Fusionner le rare | Menu `⋯` ; 4 entrées inutilisées supprimées |
 | A3 · Replié par défaut | `TlActivity` : heure + titre, détail au tap |
-| A4 · Chiffre principal | Budget, soldes, compte à rebours |
-| A5 · Contenu qui remplit | Cartes de jour pleine hauteur ; dates d'en-tête retirées |
+| A4 · Chiffre principal | Budget, soldes, compte à rebours ; titre d'activité > date du jour |
+| A5 · Contenu qui remplit | Dates d'en-tête retirées ; la carte de jour prend la hauteur de son contenu |
 | A6 · Pas de doublon | Bloc « Réserve d'idées » retiré du Planning |
 | B1 · Contraste réel | Badge horaire corrigé (accent sur accent) |
 | B2 · Grille unique | `.trip-controls` : une rangée, espaceurs explicites |
@@ -40,6 +40,8 @@ trace de ce qu'on a sciemment écarté.
 | D4 · Annulable | `withUndo` dans `TripView` |
 | D5 · Confirmer | « ↩ Action annulée » |
 | E2 · Mesurer, pas deviner | `.github/workflows/diagnose-link.yml` |
+| E6 · Prouver qu'on est arrivé | Champ `repere` de chaque écran dans `verif-ui.mjs` |
+| E7 · Une échelle récitable | `--t-xs…--t-3xl`, 3 graisses, `--radius-xs…lg` + `pill` |
 | F1 · Cache PWA | `vercel.json` |
 
 ## Détection de lieux — ce qui a été mesuré
@@ -82,6 +84,69 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
+
+- **« Estimé » comptait trois choses qui n'ont rien à y faire** (août 2026).
+  Constaté sur un vrai voyage, le dernier soir : **1 111 € dépensés et
+  « 1 461 € estimé »** alors qu'il ne restait rien à faire. Le calcul
+  additionnait le prix de *toutes* les activités connues plus *toutes* les
+  dépenses :
+  1. **la Réserve** — un vivier d'idées, pas un programme ; dix-huit idées
+     gardées « au cas où » entraient dans le budget ;
+  2. **les activités annulées** (`status: 'nogo'`), que `budgetStats()` prend
+     pourtant soin d'écarter — deux calculs du même chiffre, deux règles ;
+  3. **les activités déjà réglées**, comptées deux fois : leur prix prévu *et*
+     la dépense saisie pour elles.
+
+  Et une quatrième, trouvée en mesurant : **l'app insère deux repas par jour à
+  20 €**, et ils étaient comptés « à venir » même sur des journées écoulées —
+  120 € fantômes sur trois jours passés.
+
+  Règle tenue désormais : `estimé = déjà dépensé + ce qui reste au programme
+  des jours qui n'ont pas encore eu lieu`. Une journée passée ne peut plus
+  rien coûter : ses activités non cochées ne comptent **ni** comme dépensé
+  **ni** comme à venir — ce qui a réellement été payé est dans l'onglet
+  Dépenses, et c'est lui qui fait foi. **Quand la dernière activité est
+  cochée, l'estimé rejoint le dépensé** — verrouillé par le parcours
+  « Le dernier soir, l'estimé rejoint le dépensé ».
+
+- **Une échelle, pas un empilement de décisions ponctuelles** (août 2026).
+  Mesuré avant : **32 tailles de texte, 9 graisses, 23 rayons**, avec des
+  valeurs comme 9,75 px, 12,5 px ou 16,5 px — des résultats de multiplication,
+  pas des choix. Jusqu'à **31 couples taille/graisse sur le seul jour ouvert**.
+  Après : sept pas (`--t-xs` … `--t-3xl`, rapport ≈ 1,2), trois graisses
+  (400 / 600 / 800), quatre rayons (`--radius-xs/sm/md/lg` + `pill`).
+  **Aucune taille ni aucun rayon en dur ne doit réapparaître dans `index.css`.**
+  700 a rejoint 600 : la hiérarchie se porte par la taille.
+
+- **Le thème sombre arrondissait plus que le clair, sans que personne l'ait
+  décidé** (août 2026). Les jetons `--radius-*` étaient déclarés **quatre
+  fois** ; les blocs `[data-theme="dark"]` posaient 12/18/26 là où le clair
+  avait 10/14/20. Cinquième occurrence de B5 dans ce fichier. Une seule
+  déclaration désormais, en haut, identique pour les deux thèmes.
+
+- **La carte du jour hurlait la date et chuchotait le programme** (août 2026).
+  Date à 16,5/800, titre d'activité à 13,5/600. Inversé : titre à 15/600, date
+  à 13/600, heure passée de 800 à 600. Et la carte tenait **530 px pour 150 px
+  de contenu** — 315 px de blanc, 59 % — parce qu'elle était étirée à toute la
+  hauteur disponible. Elle prend maintenant la hauteur de son contenu, entre un
+  plancher de 232 px et un plafond de `100dvh - 300px`.
+
+- **Un titre est un nom, jamais une adresse** (août 2026). `nomDeLieu()`
+  existait mais n'était appliqué qu'**à l'import** : les fiches déjà
+  enregistrées gardaient « Café bel étage, Kärntner Straße 38, 1010 Vienna
+  Austria » sur trois lignes, avec la même adresse répétée juste dessous. Le
+  nettoyage se fait maintenant **à l'affichage** (`ActivityCard`,
+  `TimelineView`) : il répare aussi l'existant, sans réécrire une donnée.
+
+- **Le jour ouvert et la fiche d'activité n'étaient mesurés nulle part**
+  (août 2026). Sept cibles sous 44 px y vivaient, dont la pastille « fait » à
+  **27 × 27** — l'action la plus répétée du voyage. Pire : le parcours
+  « Fiche activité » de `/verif-ui` cherchait `.activity-card` sur le Planning,
+  qui n'en contient aucune (la frise est faite de `.tl-activity`) — il cliquait
+  dans le vide et remesurait le Planning sous un faux nom. **Neuf écrans
+  annoncés, sept distincts.** D'où le champ `repere` : chaque écran affirme
+  désormais un sélecteur qui n'existe que là, et l'outil crie quand il n'y est
+  pas (règle E6 du playbook). Dix écrans réels aujourd'hui.
 
 - **Un outil ne trouve que sur les écrans qu'on lui montre** (août 2026).
   `/verif-ui` déclarait « rien à signaler » alors que « ✅ Ajouter » passait

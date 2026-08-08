@@ -744,13 +744,57 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const expenses = trip.expenses || [];
   // Settlements (remboursements entre voyageurs) are transfers, not spending.
   const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
-  const totalActivitiesCost = allActivities.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
-  const totalTripCost = totalActivitiesCost + totalExpenses;
-  const doneActivitiesCost = trip.days
-    .flatMap(d => d.activities)
-    .filter(a => a.status === 'done')
-    .reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  /* ─── Budget ────────────────────────────────────────────────────────────
+     « Estimé » veut dire : ce que ce voyage aura coûté en tout. Il additionnait
+     en réalité le prix de TOUTES les activités connues plus TOUTES les
+     dépenses — ce qui gonflait le chiffre de trois façons à la fois :
+
+     1. **La Réserve était comptée.** C'est un vivier d'idées, pas un
+        programme : dix-huit idées gardées « au cas où » ajoutaient leur prix à
+        un voyage qui ne les ferait jamais. C'est l'écart principal.
+     2. **Les activités annulées aussi** (`status: 'nogo'`), alors que
+        `budgetStats()` prend soin de les écarter — deux calculs du même
+        chiffre, avec deux règles différentes.
+     3. **Une activité réglée comptait deux fois** : son prix prévu, et la
+        dépense saisie pour elle. Un dîner à 40 € en pesait 80.
+
+     Résultat mesuré sur un vrai voyage, le dernier soir : 1 111 € dépensés,
+     « 1 461 € estimé » — alors qu'il ne restait plus rien à faire.
+
+     Un estimé se lit comme une prévision : déjà déboursé + ce qui reste à
+     débourser. Quand la dernière activité est cochée, il rejoint le dépensé.
+     C'est ce qui rend le chiffre digne de confiance en fin de séjour. */
+
+  // Une dépense rattachée à une activité REMPLACE son prix prévu.
+  const activitesReglees = new Set(expenses.filter(e => e.activityId).map(e => e.activityId));
+  const prixDe = (liste) => liste.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
+  // Le programme, c'est ce qui est posé dans les jours — la Réserve n'en est pas.
+  const auProgramme = trip.days.flatMap(d => d.activities).filter(a => a.status !== 'nogo');
+
+  const doneActivitiesCost = prixDe(
+    auProgramme.filter(a => a.status === 'done' && !activitesReglees.has(a.id)));
   const alreadySpent = doneActivitiesCost + totalExpenses;
+
+  /* Ce qui reste à débourser — et « reste » se juge sur la date, pas sur la
+     case à cocher. Une journée passée ne peut plus rien coûter : ses activités
+     non cochées sont un programme périmé, pas une dépense à venir. Sans cette
+     règle, l'app insère deux repas par jour à 20 € et les compte jusqu'au bout
+     — six repas oubliés sur trois jours écoulés, et l'estimation gonfle de
+     120 € sur un voyage terminé.
+
+     Ces activités-là ne comptent donc NI comme dépensé (on ne sait pas ce qui
+     a réellement été payé) NI comme à venir. Ce qui a vraiment été payé est
+     dans l'onglet Dépenses ; c'est lui qui fait foi. */
+  const aujourdhui = (() => {
+    const n = new Date(); n.setHours(0, 0, 0, 0);
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  })();
+  const resteADebourser = prixDe(
+    trip.days
+      .filter(d => !d.date || d.date >= aujourdhui)
+      .flatMap(d => d.activities)
+      .filter(a => a.status !== 'nogo' && a.status !== 'done' && !activitesReglees.has(a.id)));
+  const totalTripCost = alreadySpent + resteADebourser;
   const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
   // Budget « dépliant » : le chiffre principal (restant / dépassé, sinon estimé)
@@ -1103,6 +1147,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       aria-label="Coller un lien depuis le presse-papier"
                     >📋</button>
                   </div>
+                </div>
+                <div className="reserve-filter">
+                  {/* Le tri vivait à côté du champ de recherche : il en mangeait
+                      la largeur — le mot « lien » s'y coupait en « lier » — et
+                      débordait lui-même du cadre. Trier n'est pas chercher :
+                      il rejoint la rangée où l'on range, et la recherche
+                      récupère toute la largeur. */}
                   <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
                     <option value="default">Ordre d'ajout</option>
                     <option value="alpha">A–Z</option>
@@ -1110,8 +1161,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     <option value="price">Prix</option>
                     {geoReserve.position && <option value="proche">Le plus proche</option>}
                   </select>
-                </div>
-                <div className="reserve-filter">
                   <button
                     className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
                     onClick={() => setReserveFilter('all')}

@@ -366,14 +366,31 @@ const ECRANS = [
       await p.waitForTimeout(600);
     },
   },
+  // Le jour ouvert : l'écran où l'on coche « fait », où l'on règle l'heure de
+  // départ, où l'on renvoie la journée en Réserve. Il n'était mesuré nulle
+  // part — sept cibles y vivaient sous 44 px, dont la pastille « fait » à
+  // 27 × 27, la plus tapée du voyage.
   {
-    nom: 'Fiche activité',
+    nom: 'Jour ouvert',
+    repere: '.day-detail-overlay',
     aller: async (p) => {
       await ouvrirVoyage(p); await onglet(p, /Planning/i);
-      const c = p.locator('.activity-card').first();
-      if (await c.count()) { await c.click(); await p.waitForTimeout(500); }
-      const e = p.locator('button', { hasText: /Modifier|✏️/ }).first();
-      if (await e.count()) { await e.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(700); }
+      await p.locator('.tl-day__open, .tl-day__header').first().click().catch(() => {});
+      await p.waitForTimeout(800);
+    },
+  },
+  {
+    nom: 'Fiche activité',
+    repere: '.activity-card--expanded',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Planning/i);
+      // Le Planning ne contient pas de `.activity-card` : sa frise est faite de
+      // `.tl-activity`. Ce parcours cliquait donc dans le vide et remesurait le
+      // Planning sous un faux nom — neuf écrans annoncés, sept distincts.
+      await p.locator('.tl-day__open, .tl-day__header').first().click().catch(() => {});
+      await p.waitForTimeout(700);
+      const c = p.locator('.day-detail-overlay .activity-card').first();
+      if (await c.count()) { await c.click(); await p.waitForTimeout(600); }
     },
   },
 ];
@@ -433,8 +450,16 @@ for (const theme of ['light', 'dark']) {
     // vert alors que plus rien ne marche. C'est arrivé, et j'ai failli livrer
     // le résultat. Un plantage doit sortir plus fort qu'un défaut de contraste.
     const plante = await p.locator('.error-screen').count().catch(() => 0);
+    // Un écran doit prouver qu'il est arrivé. Sans ce repère, un sélecteur
+    // périmé fait remesurer l'écran précédent sous un autre nom : tout passe
+    // au vert et la couverture annoncée est fausse. C'est exactement ce qui
+    // est arrivé au parcours « Fiche activité », qui cliquait dans le vide.
+    const perdu = ecran.repere
+      ? (await p.locator(ecran.repere).count().catch(() => 0)) === 0
+      : false;
     const r = await p.evaluate(SONDES);
-    rapport.push({ theme, ecran: ecran.nom, ...r, plante: plante > 0, erreurs: [...erreurs] });
+    rapport.push({ theme, ecran: ecran.nom, ...r, plante: plante > 0, perdu,
+      repere: ecran.repere, erreurs: [...erreurs] });
     erreurs.length = 0;
   }
   await ctx.close();
@@ -487,6 +512,7 @@ if (JSON_OUT) {
 }
 
 const plantes = rapport.filter(l => l.plante);
+const perdus = rapport.filter(l => l.perdu);
 const total = rapport.reduce((n, l) =>
   n + l.contraste.length + l.cibles.length + (l.deborde ? 1 : 0)
     + l.horsEcran.length + l.recouverts.length + l.muets.length + l.erreurs.length, 0);
@@ -498,6 +524,13 @@ if (!JSON_OUT) {
       + [...new Set(plantes.map(l => `${l.ecran}/${l.theme}`))].join(', '));
     console.log('   Les mesures ci-dessus portent sur l’écran d’erreur, pas sur l’app.');
   }
-  console.log(`\n${total === 0 && !plantes.length ? '✅ Rien à signaler.' : `⚠️  ${total} points mesurés à trancher.`}\n`);
+  if (perdus.length) {
+    console.log(`\n🧭 ${perdus.length} parcours n'atteignent pas leur écran :`);
+    [...new Set(perdus.map(l => `   ${l.ecran} — repère « ${l.repere} » absent`))]
+      .forEach(l => console.log(l));
+    console.log('   Ces lignes mesurent autre chose. Leur « rien à signaler » ne vaut rien.');
+  }
+  console.log(`\n${total === 0 && !plantes.length && !perdus.length
+    ? '✅ Rien à signaler.' : `⚠️  ${total} points mesurés à trancher.`}\n`);
 }
-process.exit(total === 0 && !plantes.length ? 0 : 1);
+process.exit(total === 0 && !plantes.length && !perdus.length ? 0 : 1);

@@ -202,6 +202,28 @@ défaut réel du sélecteur mal choisi avant de modifier le code.
 **E5. Chercher la cause en amont d'un symptôme qui revient.** Deux correctifs
 successifs qui ne tiennent pas = mauvaise cause.
 
+**E6. Un contrôle automatisé doit prouver qu'il est arrivé sur l'écran qu'il
+prétend mesurer.** Chaque étape affirme un repère qui n'existe que là. Sans
+cette assertion, un sélecteur périmé fait remesurer l'écran précédent sous un
+autre nom : tout passe au vert, et la couverture annoncée est fausse.
+*Origine : un parcours « Fiche activité » cherchait une classe absente de
+l'écran depuis une refonte. Il ne cliquait sur rien, mesurait l'écran d'avant,
+et n'a jamais rien signalé — pendant que la vraie fiche accumulait trois cibles
+sous 44 px et l'écran voisin sept autres. Corollaire : une sonde neuve se
+prouve contre le code d'avant. Si elle ne rougit pas là où le défaut existait,
+elle ne mesure rien.*
+
+**E7. Une échelle qu'on ne peut pas réciter n'est pas une échelle.** Tailles de
+texte, graisses, rayons, espacements : chaque famille tient en une poignée de
+valeurs nommées, déclarées une seule fois. Au-delà, ce n'est plus une
+hiérarchie, c'est du désordre — et c'est ce qui fait dire « ça fait brouillon »
+sans que personne sache désigner quoi.
+*Origine : 32 tailles, 9 graisses et 23 rayons coexistaient, avec des valeurs
+comme 9,75 px ou 12,5 px qui sont des résultats de multiplication et non des
+décisions. Jusqu'à 31 couples taille/graisse sur un seul écran. Les jetons de
+rayon étaient en plus redéclarés quatre fois — le thème sombre arrondissait
+tout davantage que le clair, sans que personne l'ait voulu (voir B5).*
+
 ---
 
 ## F · Livraison
@@ -258,6 +280,8 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-07 | « ça ne fonctionne toujours pas […] une solution dont tu es sûre ! » (3ᵉ fois) | E2 (affinée), F4 |
 | 2026-08 | « tu ajoutes toutes les fonctionnalités, juste pour qu'elles y soient » (5ᵉ sur la densité) | A7 |
 | 2026-08 | « je ne peux pas cocher comme si le bouton n'en était pas » | A8 |
+| 2026-08 | un parcours de vérification qui ne cliquait sur rien passait au vert | E6 |
+| 2026-08 | « fluidifier et améliorer l'UX/UI », pas « aller plus vite » | E7 |
 
 ### Récidives repérées
 
@@ -275,6 +299,12 @@ revient trois fois est un problème structurel, pas un détail.
   le raisonnement n'avait pas envisagée. → **ne rien annoncer comme corrigé sans
   une mesure** ; quand l'environnement empêche de mesurer, c'est l'environnement
   qu'il faut changer, pas la mesure qu'il faut sauter (E2, F4).
+- **Un écran qu'aucun outil n'ouvre accumule des défauts invisibles** : deux
+  fois en une semaine (formulaire de dépense, puis jour ouvert et fiche
+  d'activité). À chaque fois la sonde annonçait « rien à signaler » sur un
+  écran qu'elle ne regardait pas — et la troisième fois, sur un écran qu'elle
+  croyait regarder. → E6, et vérifier qu'un écran exerce chaque sonde avant de
+  l'ajouter.
 - **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
   une version périmée, preview inaccessible sans compte, mémoire partagée
   laissée sur une branche. À chaque fois le travail était fait *et* hors de
