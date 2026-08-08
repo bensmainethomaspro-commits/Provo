@@ -782,6 +782,29 @@ const PARCOURS = [
         (await t.texte()).match(/Verre/i) !== null);
     } },
 
+  { groupe: 'Planning', nom: 'Corriger une activité sans quitter le Planning', depart: 'voyage',
+    intention: "Une heure fausse, un prix oublié : on corrige là où on l'a vu.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const avant = (await t.voyage()).days.flatMap(d => d.activities).find(a => a.title);
+      await t.clic('.tl-activity', { delai: 700 });
+      if (!(await t.clic('.tl-activity__modifier', { delai: 900, obligatoire: false })))
+        t.injouable('aucun chemin vers « Modifier » depuis la frise');
+      t.verifier("la feuille d'édition s'ouvre", await t.visible('.sheet'));
+      // Le premier champ de la feuille est la RECHERCHE de lieu ; le titre
+      // vit sous le pli « Détails », déjà ouvert en modification.
+      const titre = t.p.locator('.sheet input[placeholder*="Déjeuner au marché"]').first();
+      if (!(await titre.count())) t.injouable('pas de champ titre dans la feuille');
+      await titre.fill('Corrigé depuis le Planning');
+      await t.clic('.sheet button', { texte: /Enregistrer|✅/, delai: 1200 });
+      const apres = (await t.voyage()).days.flatMap(d => d.activities);
+      t.verifier('la correction est enregistrée',
+        apres.some(a => a.title === 'Corrigé depuis le Planning'),
+        `« ${avant?.title} » → « ${apres.find(a => a.id === avant?.id)?.title} »`);
+      t.verifier('aucune activité perdue au passage',
+        apres.length === (await t.voyage()).days.flatMap(d => d.activities).length);
+    } },
+
   { groupe: 'Dépenses', nom: "Le dernier soir, l'estimé rejoint le dépensé", depart: DERNIER_SOIR,
     intention: "Savoir ce que le voyage a coûté, quand il est fini.",
     async faire(t) {

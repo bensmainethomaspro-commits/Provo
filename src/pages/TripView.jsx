@@ -1075,6 +1075,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 onDrop={handleDropOnDay}
                 onMoveToDay={undoableMoveDayToDay}
                 onMoveToReserve={undoableMoveToReserve}
+                onEdit={(dayId, activity) =>
+                  setEditingActivity({ activity, location: { type: 'day', dayId } })}
                 enVoiture={enVoiture}
                 compareMode={compareMode}
                 compareSelectedIds={compareSelectedIds}
