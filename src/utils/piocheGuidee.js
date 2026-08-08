@@ -82,8 +82,14 @@ export function piocheGuidee(trip, jour, { position = null, meteoCode = null, ma
       if (ouvertMaintenant(a.openingHours, maintenant) === false) return null;
       if (dejaLa.has((a.title || '').trim().toLowerCase())) return null;
 
+      // `tempsRestant` rend 0 quand il ne reste PLUS RIEN — pas « je ne sais
+      // pas ». Le garde `minutes > 0` faisait donc sauter le filtre de durée
+      // précisément au moment où il compte le plus : à 19 h, la veille d'un
+      // opéra à 20 h, la pioche proposait une randonnée de neuf heures.
+      // Zéro minute disponible, c'est zéro idée — et le dire est la bonne
+      // réponse, pas une panne.
       const duree = dureeMin(a) || 60;
-      if (minutes > 0 && duree > minutes) return null;
+      if (duree > minutes) return null;
 
       let km = null, marche = 0;
       if (position && Number.isFinite(a.lat) && Number.isFinite(a.lon)) {
@@ -92,7 +98,7 @@ export function piocheGuidee(trip, jour, { position = null, meteoCode = null, ma
           if (km > PORTEE_KM) return null;
           marche = Math.round((km / VITESSE_MARCHE) * 60);
           // Le trajet compte dans le temps disponible : aller-retour compris.
-          if (minutes > 0 && duree + marche * 2 > minutes) return null;
+          if (duree + marche * 2 > minutes) return null;
         }
       }
 

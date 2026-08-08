@@ -11,7 +11,7 @@ import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryM
 // Chaque geste avait été ajouté à côté du précédent au lieu de le remplacer.
 
 function TlActivity({
-  activity, slot, dayId, days, onMoveToDay, onMoveToReserve,
+  activity, slot, dayId, days, onMoveToDay, onMoveToReserve, onEdit,
   compareMode, compareSelected, onToggleCompare, enVoiture,
 }) {
   const [open, setOpen] = useState(false);
@@ -21,7 +21,7 @@ function TlActivity({
   // adresse) se déroule au tap — moins d'informations affichées d'un coup.
   const hasDetails = dur > 0 || activity.price > 0 || !!activity.address;
   const canMove = !!onMoveToDay && days?.length > 1;
-  const canOpen = hasDetails || canMove;
+  const canOpen = hasDetails || canMove || !!onEdit;
   const itineraire = lienItineraire(activity, { enVoiture });
 
   return (
@@ -76,10 +76,26 @@ function TlActivity({
       )}
       {/* Repli sans glisser : un jour se choisit en un tap, ce qui reste le plus
           sûr sur un téléphone où la timeline défile horizontalement. */}
-      {open && canMove && (
+      {/* Corriger une activité depuis le Planning demandait quatre gestes :
+          ouvrir le jour par son chevron, taper la fiche, ouvrir le menu ⋯,
+          puis « Modifier ». La frise, elle, n'offrait que le déplacement —
+          l'action rare était là, l'action courante ailleurs.
+
+          Aucun élément nouveau : la ligne « DÉPLACER VERS » existait déjà et
+          n'occupait que son libellé. Elle reçoit l'action à droite. */}
+      {open && (canMove || onEdit) && (
         <div className="tl-activity__move" onClick={e => e.stopPropagation()}>
-          <span className="tl-activity__move-label">Déplacer vers</span>
-          <div className="tl-activity__move-pills">
+          <div className="tl-activity__move-tete">
+            {canMove && <span className="tl-activity__move-label">Déplacer vers</span>}
+            {onEdit && (
+              <button
+                type="button"
+                className="tl-activity__modifier"
+                onClick={() => { setOpen(false); onEdit(dayId, activity); }}
+              >✏️ Modifier</button>
+            )}
+          </div>
+          {canMove && <div className="tl-activity__move-pills">
             {days.map((d, i) => d.id === dayId ? null : (
               <button
                 key={d.id}
@@ -93,14 +109,14 @@ function TlActivity({
                 onClick={() => { setOpen(false); onMoveToReserve(dayId, activity.id); }}
               >📦 Réserve</button>
             )}
-          </div>
+          </div>}
         </div>
       )}
     </div>
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weather, passe, aujourdhui, refJour, onReordonner, reorder }) {
+function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onEdit, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weather, passe, aujourdhui, refJour, onReordonner, reorder }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
@@ -187,6 +203,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
               days={days}
               onMoveToDay={onMoveToDay}
               onMoveToReserve={onMoveToReserve}
+              onEdit={onEdit}
               compareMode={compareMode}
               compareSelected={compareSelectedIds?.has(a.id)}
               onToggleCompare={() => onToggleCompare?.(a.id)}
@@ -200,7 +217,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weatherByDate, onReordonner, onDeplacerEntreJours }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, onEdit, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weatherByDate, onReordonner, onDeplacerEntreJours }) {
   const wrapRef = useRef(null);
   // Un seul glissement pour toute la frise : borné à une journée, il ne pouvait
   // pas traverser, et déplacer une activité au lendemain passait par un menu.
@@ -242,6 +259,7 @@ export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, 
           days={days}
           onMoveToDay={onMoveToDay}
           onMoveToReserve={onMoveToReserve}
+          onEdit={onEdit}
           onOpenDetail={onOpenDetail}
           onDrop={onDrop}
           compareMode={compareMode}

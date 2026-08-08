@@ -85,6 +85,26 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **On ne pouvait pas corriger une activité depuis le Planning** (août 2026).
+  Signalé à l'usage. La frise n'a **jamais** porté de chemin vers
+  « Modifier » (`git log -S onEdit` sur `TimelineView.jsx` : vide) : une
+  activité dépliée n'offrait que durée, prix, itinéraire et pastilles de
+  déplacement. Corriger une heure fausse demandait d'ouvrir le jour par son
+  chevron, taper la fiche, ouvrir le menu ⋯, puis l'entrée — quatre gestes,
+  depuis l'écran où l'on passe son temps. L'action rare (déplacer) était là,
+  l'action courante ailleurs.
+  Règle A7 tenue : aucun élément créé. La ligne « DÉPLACER VERS » existait
+  déjà et n'occupait que son libellé ; elle reçoit `✏️ Modifier` à droite.
+
+- **Le soir, la pioche proposait une randonnée de neuf heures** (août 2026).
+  `tempsRestant()` rend `0` quand il ne reste plus rien — mais `piocheGuidee`
+  lisait ce zéro comme « je ne sais pas » (`if (minutes > 0 && duree >
+  minutes)`) et **sautait le filtre de durée précisément au moment où il
+  compte**. Zéro minute disponible vaut zéro idée, et le dire est la bonne
+  réponse. C'était aussi la dernière « dépendance à l'heure » de `/parcours` :
+  ce n'était pas un parcours fragile, c'était un vrai bug qui ne se voyait
+  qu'en fin de journée.
+
 - **« Estimé » comptait trois choses qui n'ont rien à y faire** (août 2026).
   Constaté sur un vrai voyage, le dernier soir : **1 111 € dépensés et
   « 1 461 € estimé »** alors qu'il ne restait rien à faire. Le calcul

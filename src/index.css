@@ -5996,10 +5996,28 @@ button.budget-inline:active { transform: scale(0.98); }
   margin-top: 7px; padding-top: 7px;
   border-top: 1px dashed var(--border);
 }
+/* La ligne de titre du bloc « déplacer » n'occupait que son libellé. Elle
+   porte maintenant « Modifier » à droite : corriger une activité depuis le
+   Planning demandait sinon d'ouvrir le jour, la fiche, le menu ⋯, puis
+   l'entrée — quatre gestes pour la correction la plus courante. */
+.tl-activity__move-tete {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 44px;
+}
 .tl-activity__move-label {
   font-size: var(--t-xs); font-weight: 800; text-transform: uppercase;
   letter-spacing: 0.5px; color: var(--text-muted);
 }
+.tl-activity__modifier {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  min-height: 44px; padding: 0 4px;
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; font-size: var(--t-sm); font-weight: 600;
+  color: var(--accent-texte);
+  -webkit-tap-highlight-color: transparent;
+}
+.tl-activity__modifier:active { opacity: 0.6; }
 .tl-activity__move-pills { display: flex; flex-wrap: wrap; gap: 4px; }
 .tl-activity__move-pills .day-pill { font-size: var(--t-xs); padding: 4px 9px; }
 .day-pill--reserve {
