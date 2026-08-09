@@ -23,6 +23,14 @@ const CORS = {
 };
 
 const UA = "Provo-Travel-App/1.0 (place extractor)";
+
+// TikTok sert un captcha aux agents ordinaires, mais une page propre de 16 ko
+// aux robots qui déplient les liens dans les messageries — mesuré depuis un
+// exécuteur le 9 août 2026 : 200, aucun captcha, avec og:title et og:image.
+// C'est la dernière porte ouverte depuis un serveur. Facebook, Twitter,
+// WhatsApp, Telegram et Discord passent ; Googlebot et Slackbot non.
+const UA_ROBOT_SOCIAL =
+  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
 const VALID_CATEGORIES = [
   "resto", "visite", "balade", "plage", "sport", "repos", "trajet", "fun",
 ];
@@ -592,6 +600,23 @@ function looksLikeCaptcha(html: string): boolean {
   return !metaTag(html, "og:description") && !metaTag(html, "og:title");
 }
 
+// La page telle que TikTok la sert aux robots des messageries. Elle ne porte
+// PAS la légende — mesuré : ni og:description, ni JSON-LD, ni bloc de données
+// inline. Mais elle donne l'auteur et l'image de couverture, là où la page
+// ordinaire ne donne qu'un captcha.
+async function pageRobotSocial(url: string): Promise<string> {
+  const { signal, clear } = withTimeout(8000);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal, redirect: "follow" });
+    clear();
+    if (!r.ok) return "";
+    return await r.text();
+  } catch {
+    clear();
+    return "";
+  }
+}
+
 async function handleTikTok(rawUrl: string, permisIA = false) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
@@ -604,6 +629,29 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
   for (const candidate of [...new Set([canonical, bare, rawUrl])]) {
     const d = await tiktokOembed(candidate);
     if (d) { caption = d.caption; author = d.author; thumb = d.thumb; break; }
+  }
+
+  // L'oEmbed de TikTok rend 400 depuis le 9 août 2026 — mesuré aussi sur deux
+  // vidéos publiques célèbres, donc ce n'est pas une histoire de carrousel :
+  // l'endpoint ne répond plus. Sans ce repli, toute fiche TikTok sortait en
+  // « Activité TikTok » avec le seul lien.
+  //
+  // La page des robots sociaux ne rend pas la légende, mais elle rend le
+  // compte et la couverture — de quoi reconnaître l'idée dans la Réserve au
+  // lieu de fixer une ligne vide.
+  if (!caption && !author) {
+    const social = await pageRobotSocial(canonical);
+    if (social) {
+      const t = metaTag(social, "og:title");
+      // « TikTok · Avery | Biarritz & Travel » → « Avery | Biarritz & Travel »
+      const compte = t.replace(/^\s*TikTok\s*[·|\-–—]\s*/i, "").trim();
+      if (compte && !/^tiktok$/i.test(compte)) author = compte;
+      if (!thumb) thumb = metaTag(social, "og:image") || "";
+      // Certaines pages portent quand même une description : on la prend si
+      // elle est là, sans compter dessus.
+      const d = metaTag(social, "og:description");
+      if (d && d.length > 8) caption = d;
+    }
   }
 
   // Repli sur les balises og: — utile quand l'app tourne côté navigateur, mais
