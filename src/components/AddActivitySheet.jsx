@@ -309,18 +309,18 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           }
 
           if (result.source === 'tiktok' && result.lat == null) {
-            // TikTok ne rend plus la légende à personne (mesuré : oEmbed mort,
-            // page des robots sans description). Quand la couverture n'a pas
-            // suffi, la seule chose qui reste est sous les yeux de la personne
-            // — et le dire vaut mieux que « vérifie le titre ».
+            // Depuis le 9 août 2026 la légende est de nouveau lisible, par un
+            // lecteur tiers. Ce message ne sert donc plus qu'aux posts dont ce
+            // lecteur ne tire rien — et il ne doit plus annoncer une
+            // impossibilité générale, qui serait fausse.
             // Ne jamais renvoyer vers un geste impossible : TikTok n'offre pas
-            // de copier la légende d'un post. Le conseil précédent le
+            // de copier la légende d'un post. Un conseil précédent le
             // demandait — il envoyait dans le mur.
             setImportMsg(result.luSurImage
-              ? `« ${result.title} » lu sur l'image ✓ — vérifie, TikTok ne donne plus le texte du post.`
-              : "Vidéo enregistrée ✓ — TikTok ne laisse aucun serveur lire le texte "
-                + "de ses posts. Écris le nom du lieu ici : je trouve l'adresse, "
-                + "les horaires et le reste.");
+              ? `« ${result.title} » lu sur l'image ✓ — vérifie, la légende n'était pas lisible.`
+              : "Vidéo enregistrée ✓ — ce post ne dit pas où il a été pris. "
+                + "Écris le nom du lieu ici : je trouve l'adresse, les horaires "
+                + "et le reste.");
           }
           return;
         }

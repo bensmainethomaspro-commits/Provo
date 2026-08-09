@@ -1266,7 +1266,7 @@ async function chercherLieuParAgent(
   if (!key) return { ok: false, pourquoi: "cle_absente" };
   if (!url) return { ok: false, pourquoi: "pas_de_lien" };
 
-  const { signal, clear } = withTimeout(55000);
+  const { signal, clear } = withTimeout(25000);
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -1277,9 +1277,13 @@ async function chercherLieuParAgent(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-opus-5",
-        max_tokens: 3000,
-        tools: [{ type: "web_search_20260209", name: "web_search" }],
+        // Le modèle bon marché, et trois recherches au plus. Cet échelon était
+        // le dernier espoir tant que rien ne rendait la légende ; depuis que le
+        // lecteur tiers la rend, il ne sert plus qu'aux posts qui n'en ont pas.
+        // Un dernier recours rare ne justifie pas le modèle le plus cher.
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
         system:
           "Tu identifies le LIEU dont parle un post de réseau social, à partir " +
           "de son lien. Tu ne peux pas ouvrir le post : sers-toi de la recherche " +
