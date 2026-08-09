@@ -359,8 +359,16 @@ jobs:
                   corps = open('/tmp/px', encoding='utf-8', errors='replace').read()
               except Exception:
                   corps = ''
+              # Deux formes possibles : le HTML brut (bloc de données) ou du
+              # texte déjà rendu — jina rend du texte, donc chercher `"desc":`
+              # chez lui ne prouve rien. On montre l'extrait et on juge.
               desc = (re.search(r'"desc"\s*:\s*"((?:[^"\\]|\\.){4,200})"', corps) or [None, ''])[1]
               captcha = bool(re.search(r'captcha|verify_?page|security check', corps, re.I))
-              verdict = f'LÉGENDE → {desc[:70]}' if desc else ('captcha' if captcha else 'rien')
+              verdict = f'LÉGENDE → {desc[:70]}' if desc else ('captcha' if captcha else 'rien de balisé')
               print(f'{nom:11} {code:>4}  {len(corps)//1024:>5} ko  {verdict}')
+              if code == '200' and corps and not captcha:
+                  extrait = ' '.join(corps.split())[:700]
+                  print(f'    ┌─ ce que « {nom} » a réellement rendu :')
+                  print(f'    │  {extrait}')
+                  print('    └─')
           PY
