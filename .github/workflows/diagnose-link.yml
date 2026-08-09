@@ -345,30 +345,40 @@ jobs:
           u = sys.argv[1].split('?')[0]
           e = urllib.parse.quote(u, safe='')
           services = [
-              ('jina',       f'https://r.jina.ai/{u}'),
-              ('allorigins', f'https://api.allorigins.win/raw?url={e}'),
-              ('codetabs',   f'https://api.codetabs.com/v1/proxy?quest={e}'),
-              ('corsproxy',  f'https://corsproxy.io/?{e}'),
+              ('jina',       f'https://r.jina.ai/{u}', []),
+              ('jina-html',  f'https://r.jina.ai/{u}', ['x-return-format: html']),
+              ('allorigins', f'https://api.allorigins.win/raw?url={e}', []),
+              ('codetabs',   f'https://api.codetabs.com/v1/proxy?quest={e}', []),
+              ('corsproxy',  f'https://corsproxy.io/?{e}', []),
           ]
-          for nom, cible in services:
-              r = subprocess.run(
-                  ['curl','-sS','-o','/tmp/px','-w','%{http_code}','--max-time','40','-L',cible],
-                  capture_output=True, text=True)
+          # jina rend du markdown : la légende TikTok n'y est pas en clair, elle
+          # est dans le TEXTE ALTERNATIF de l'image (`![835 Likes, … : "…"](…)`).
+          # On la cherche donc là, et on redemande la page en HTML brut — où le
+          # bloc de données `"desc":` survit s'il a survécu au rendu.
+          for nom, cible, entetes in services:
+              cmd = ['curl','-sS','-o','/tmp/px','-w','%{http_code}','--max-time','40','-L']
+              for h in entetes:
+                  cmd += ['-H', h]
+              r = subprocess.run(cmd + [cible], capture_output=True, text=True)
               code = (r.stdout or 'ERR').strip()
               try:
                   corps = open('/tmp/px', encoding='utf-8', errors='replace').read()
               except Exception:
                   corps = ''
-              # Deux formes possibles : le HTML brut (bloc de données) ou du
-              # texte déjà rendu — jina rend du texte, donc chercher `"desc":`
-              # chez lui ne prouve rien. On montre l'extrait et on juge.
-              desc = (re.search(r'"desc"\s*:\s*"((?:[^"\\]|\\.){4,200})"', corps) or [None, ''])[1]
+              desc = (re.search(r'"desc"\s*:\s*"((?:[^"\\]|\\.){4,300})"', corps) or [None, ''])[1]
               captcha = bool(re.search(r'captcha|verify_?page|security check', corps, re.I))
               verdict = f'LÉGENDE → {desc[:70]}' if desc else ('captcha' if captcha else 'rien de balisé')
-              print(f'{nom:11} {code:>4}  {len(corps)//1024:>5} ko  {verdict}')
-              if code == '200' and corps and not captcha:
-                  extrait = ' '.join(corps.split())[:700]
-                  print(f'    ┌─ ce que « {nom} » a réellement rendu :')
-                  print(f'    │  {extrait}')
-                  print('    └─')
+              print(f'{nom:16} {code:>4}  {len(corps)//1024:>5} ko  {verdict}')
+              if code != '200' or not corps or captcha:
+                  continue
+              # Tous les textes alternatifs d'image, en entier : c'est là que
+              # TikTok écrit « N Likes, M Comments. … : "<légende>" ».
+              alts = re.findall(r'!\[([^\]]{0,600})\]', corps)
+              for a in alts[:4]:
+                  print(f'    ALT · {a}')
+              if not alts:
+                  print('    (aucun texte alternatif)')
+              print(f'    ┌─ « {nom} », 2500 premiers caractères :')
+              print(f'    │  {" ".join(corps.split())[:2500]}')
+              print('    └─')
           PY

@@ -824,12 +824,22 @@ async function handleTikTok(rawUrl: string, permisIA = false, destination = "") 
   // le seul chemin qui aboutisse depuis un serveur, donc le seul qui serve
   // aussi les téléphones sans application installée.
   let cherche: { title: string; category: string; location: string } | null = null;
+  let motifRecherche = "";
   if (permisIA && !title) {
-    cherche = await chercherLieuParAgent(canonical, author, destination).catch(() => null);
-    if (cherche) {
-      title = cherche.title;
-      if (cherche.category) category = cherche.category;
+    const q = await chercherLieuParAgent(canonical, author, destination)
+      .catch((e) => ({ ok: false as const, pourquoi: `jete_${String(e).slice(0, 30)}` }));
+    if (q.ok) {
+      cherche = q;
+      title = q.title;
+      if (q.category) category = q.category;
+      motifRecherche = "ok";
+    } else {
+      motifRecherche = q.pourquoi;
     }
+  } else if (!permisIA) {
+    motifRecherche = "origine_non_autorisee";
+  } else {
+    motifRecherche = "titre_deja_trouve";
   }
 
   // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
@@ -877,6 +887,8 @@ async function handleTikTok(rawUrl: string, permisIA = false, destination = "") 
     // Pourquoi la lecture d'image a donné — ou n'a pas donné — un nom.
     // Sans ce témoin, un échec ne se répare qu'à l'aveugle.
     ...(motifCouverture ? { couverture: motifCouverture } : {}),
+    // Et pourquoi l'agent chercheur a — ou n'a pas — nommé le lieu.
+    ...(motifRecherche ? { recherche: motifRecherche } : {}),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
@@ -1123,11 +1135,16 @@ async function lireCouverture(imageUrl: string): Promise<LectureCouverture> {
  * ça ». C'est un appel plus coûteux que les autres — il ne se déclenche donc
  * que sur un lien de réseau social dont aucun échelon n'a tiré de nom.
  */
+type Recherche =
+  | { ok: true; title: string; category: string; location: string }
+  | { ok: false; pourquoi: string };
+
 async function chercherLieuParAgent(
   url: string, compte: string, destination = "",
-): Promise<{ title: string; category: string; location: string } | null> {
+): Promise<Recherche> {
   const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
-  if (!key || !url) return null;
+  if (!key) return { ok: false, pourquoi: "cle_absente" };
+  if (!url) return { ok: false, pourquoi: "pas_de_lien" };
 
   const { signal, clear } = withTimeout(55000);
   try {
@@ -1167,28 +1184,44 @@ async function chercherLieuParAgent(
       }),
     });
     clear();
-    if (!r.ok) return null;
+    // Un refus de l'API — outil indisponible, crédit épuisé, modèle inconnu —
+    // ressemblait à « l'agent n'a rien trouvé ». Ce sont deux pannes opposées :
+    // l'une se répare côté compte, l'autre côté invite. On les distingue.
+    if (!r.ok) {
+      const corps = await r.text().catch(() => "");
+      const type = (corps.match(/"type"\s*:\s*"([a-z_]+_error)"/) || [, ""])[1];
+      return { ok: false, pourquoi: `api_${r.status}${type ? `_${type}` : ""}` };
+    }
     const d = await r.json();
-    if (d?.stop_reason === "refusal") return null;
+    if (d?.stop_reason === "refusal") return { ok: false, pourquoi: "refus_modele" };
     // La réponse mêle des blocs de recherche et du texte : on ne garde que le
     // texte, et le dernier objet JSON qu'il contient.
     const texte = (d?.content || [])
       .filter((b: any) => b?.type === "text")
       .map((b: any) => b.text)
       .join("\n");
+    // Combien de recherches l'agent a réellement lancées : zéro signifie que
+    // l'outil n'a pas tourné, et le diagnostic n'est alors pas le même.
+    const requetes = (d?.content || []).filter((b: any) =>
+      b?.type === "server_tool_use" || b?.type === "web_search_tool_result"
+    ).length;
     const trouves = texte.match(/\{[^{}]*"title"[^{}]*\}/g);
-    if (!trouves?.length) return null;
+    if (!trouves?.length) {
+      return { ok: false, pourquoi: texte.trim() ? `sans_json_${requetes}rq` : `sans_texte_${requetes}rq` };
+    }
     const o = JSON.parse(trouves[trouves.length - 1]);
     const titre = typeof o?.title === "string" ? o.title.trim() : "";
-    if (!titre || o?.confiance === "basse") return null;
+    if (!titre) return { ok: false, pourquoi: `sans_titre_${requetes}rq` };
+    if (o?.confiance === "basse") return { ok: false, pourquoi: `doute_sur_${titre.slice(0, 24)}` };
     return {
+      ok: true,
       title: titre,
       category: VALID_CATEGORIES.includes(o?.category) ? o.category : "",
       location: typeof o?.location === "string" ? o.location.trim() : "",
     };
-  } catch {
+  } catch (e) {
     clear();
-    return null;
+    return { ok: false, pourquoi: `jete_${String(e).slice(0, 40)}` };
   }
 }
 
