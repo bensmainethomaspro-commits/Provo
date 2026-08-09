@@ -244,3 +244,31 @@ jobs:
           set +e
           node scripts/canari-extraction.mjs
           echo "--- code de sortie : $? (0 vert · 1 orange · 2 rouge) ---"
+
+      - name: "L · Verdict — ce que l'app affichera vraiment"
+        # La seule question qui compte : la fiche portera-t-elle un NOM ?
+        # Placée en dernier pour être lisible d'un coup d'œil sans dérouler
+        # tout le journal.
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -o /tmp/v --max-time 90 -d "{\"url\":\"$URL\"}"
+          python3 - <<'PY'
+          import json
+          d = json.load(open('/tmp/v'))
+          r = d.get('result') or {}
+          titre = r.get('title', '')
+          etape = r.get('etape', '?')
+          echoue = titre.lower().startswith(('activité tiktok', 'idée de'))
+          print('titre     :', titre or '(vide)')
+          print('échelon   :', etape, '(couverture = lu sur l\'image)')
+          print('adresse   :', r.get('address') or '—')
+          print('lu image  :', r.get('luSurImage', False))
+          print()
+          print('🔴 ÉCHEC — la fiche ne porte pas de nom de lieu' if echoue or not titre
+                else f'🟢 SUCCÈS — la fiche s\'appellera « {titre} »')
+          PY
