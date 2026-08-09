@@ -261,13 +261,18 @@ jobs:
           import json
           d = json.load(open('/tmp/v'))
           r = d.get('result') or {}
+          # La réponse ENTIÈRE, pas une sélection de champs : deux fois de suite,
+          # la cause de l'échec était dans un champ que l'afficheur ne montrait
+          # pas. Un diagnostic qui trie ce qu'il montre cache ce qu'on cherche.
+          print('--- réponse complète ---')
+          print(json.dumps(d, ensure_ascii=False, indent=2)[:2000])
+          print('--- verdict ---')
           titre = r.get('title', '')
-          etape = r.get('etape', '?')
           echoue = titre.lower().startswith(('activité tiktok', 'idée de'))
-          print('titre     :', titre or '(vide)')
-          print('échelon   :', etape, '(couverture = lu sur l\'image)')
-          print('adresse   :', r.get('address') or '—')
-          print('lu image  :', r.get('luSurImage', False))
+          print('titre      :', titre or '(vide)')
+          print('échelon    :', r.get('etape', '?'))
+          print('couverture :', r.get('couverture', '(non renseigné)'))
+          print('adresse    :', r.get('address') or '—')
           print()
           print('🔴 ÉCHEC — la fiche ne porte pas de nom de lieu' if echoue or not titre
                 else f'🟢 SUCCÈS — la fiche s\'appellera « {titre} »')
