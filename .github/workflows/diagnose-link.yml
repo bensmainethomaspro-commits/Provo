@@ -181,3 +181,35 @@ jobs:
             echo "     og:title = ${TITRE:-—}"
             echo "     og:desc  = ${DESC:-—}"
           done
+
+      - name: "I · TikTok — tout ce que la page des robots sociaux contient"
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          curl -sSL -A "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" \
+            -o /tmp/fb.html --max-time 25 "$FINAL"
+          echo "=== toutes les balises meta ==="
+          python3 - <<'PY2'
+          import re, html
+          h = open('/tmp/fb.html', encoding='utf-8', errors='replace').read()
+          for m in re.findall(r'<meta[^>]*>', h):
+              nom = re.search(r'(?:property|name|itemprop)\s*=\s*["\']([^"\']+)', m)
+              val = re.search(r'content\s*=\s*["\']([^"\']*)', m)
+              if nom and val and val.group(1).strip():
+                  print(f"  {nom.group(1):28} {html.unescape(val.group(1))[:180]}")
+          print("=== <title> ===")
+          t = re.search(r'<title[^>]*>(.*?)</title>', h, re.S)
+          print(' ', html.unescape(t.group(1)).strip()[:250] if t else '(aucun)')
+          print("=== JSON-LD ===")
+          for b in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', h, re.S)[:3]:
+              print(' ', b.strip()[:400])
+          print("=== blocs de données inline (__UNIVERSAL_DATA / SIGI) ===")
+          for k in ('__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE', 'webapp.video-detail'):
+              print(f'  {k}:', 'présent' if k in h else 'absent')
+          print("=== la légende y est-elle en clair ? ===")
+          for mot in ('Deoun', 'deoun', 'barbecue', 'coréen', 'coreen', 'Biarritz'):
+              i = h.find(mot)
+              print(f'  {mot:10}', ('trouvé @' + str(i) + ' → …' + h[max(0,i-90):i+110].replace(chr(10),' ')) if i >= 0 else '—')
+          PY2
