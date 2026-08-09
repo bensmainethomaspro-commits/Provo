@@ -65,7 +65,11 @@ const delai = (ms) => {
 async function texte(url, ua, { redirect = 'follow' } = {}) {
   const { signal, clear } = delai(15000);
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': ua }, signal, redirect });
+    // `ua` nul = ne rien annoncer de particulier. Tous les interlocuteurs ne
+    // veulent pas d'un navigateur : le lecteur tiers refuse justement ceux-là.
+    const r = await fetch(url, {
+      headers: ua ? { 'User-Agent': ua } : {}, signal, redirect,
+    });
     const corps = await r.text();
     clear();
     return { statut: r.status, url: r.url, corps };
@@ -209,7 +213,12 @@ const ECHELONS = [
     quoi: 'un lecteur tiers qui rend la page à notre place',
     secours: true,
     async lire({ canonique }) {
-      const r = await texte(`https://r.jina.ai/${canonique}`, UA_NAVIGATEUR);
+      // Sans agent annoncé, comme la fonction Edge. Mesuré le 9 août 2026 : ce
+      // lecteur refuse les navigateurs (403 en 14 ms sur un agent Safari, 200
+      // sans agent et 200 sur un agent Deno). Le canari s'était déguisé en
+      // iPhone et avait déclaré morte une chaîne qui marchait — une alarme
+      // doit mesurer avec l'identité du code qu'elle surveille, pas la sienne.
+      const r = await texte(`https://r.jina.ai/${canonique}`, null);
       if (r.statut !== 200) return { echec: `HTTP ${r.statut || r.erreur}` };
       if (/captcha|verify_?page|security check/i.test(r.corps)) {
         return { echec: 'le lecteur reçoit lui aussi un captcha' };

@@ -379,14 +379,12 @@ jobs:
               print(f'{nom:16} {code:>4}  {len(corps)//1024:>5} ko  {verdict}')
               if code != '200' or not corps or captcha:
                   continue
-              # Tous les textes alternatifs d'image, en entier : c'est là que
-              # TikTok écrit « N Likes, M Comments. … : "<légende>" ».
+              # Le texte alternatif de la première image : c'est là que TikTok
+              # écrit « N Likes, M Comments. … : "<légende>" ». Un seul, tronqué
+              # — les quatre en entier noyaient le verdict des étapes d'avant.
               alts = re.findall(r'!\[([^\]]{0,600})\]', corps)
-              for a in alts[:4]:
-                  print(f'    ALT · {a}')
-              if not alts:
-                  print('    (aucun texte alternatif)')
-              print(f'    ┌─ « {nom} », 2500 premiers caractères :')
-              print(f'    │  {" ".join(corps.split())[:2500]}')
-              print('    └─')
+              if alts:
+                  print(f'    ALT · {alts[0][:320]}')
+              else:
+                  print(f'    (aucun texte alternatif) · {" ".join(corps.split())[:200]}')
           PY
