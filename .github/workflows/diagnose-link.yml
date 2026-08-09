@@ -153,7 +153,7 @@ jobs:
             echo "oEmbed $C — $T   ← $V"
           done
 
-      - name: H · TikTok — quel agent obtient les balises og: ?
+      - name: "H · TikTok — quel agent obtient les balises og: ?"
         if: contains(github.event.inputs.url, 'tiktok')
         env:
           URL: ${{ github.event.inputs.url }}
