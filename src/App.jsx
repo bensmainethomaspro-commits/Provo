@@ -3,7 +3,7 @@ import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import AuthScreen from './components/AuthScreen';
-import { decodeTrip, premierLien, ressembleAUneLegende } from './utils/helpers';
+import { decodeTrip, premierLien, ressembleAUneLegende, texteDecode } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -40,7 +40,9 @@ function AppInner() {
     // iOS, lui, tourne en natif : il va chercher la page depuis le téléphone et
     // nous passe la LÉGENDE entière dans `texte`. Ne pêcher qu'un lien dedans
     // reviendrait à jeter la seule chose utile qu'il nous transmet.
-    const t = (p.get('texte') || '').trim();
+    // Décodé ici, à la frontière : le raccourci rend le texte tel qu'il est
+    // écrit dans le bloc de données de la page, échappements compris.
+    const t = texteDecode(p.get('texte') || '').trim();
     const valeur = l || (ressembleAUneLegende(t) ? t : null);
     if (valeur) { window.history.replaceState(null, '', window.location.pathname); return valeur; }
     return null;

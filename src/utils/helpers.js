@@ -50,6 +50,26 @@ export async function lireLegende(texte) {
  * recherche de lieu ? On cherche « Deoun » en trois mots ; on colle une
  * légende en plusieurs lignes, avec des hashtags et des émojis.
  */
+/**
+ * Décoder les échappements d'une chaîne extraite d'un bloc JSON.
+ *
+ * Un raccourci iOS capture la légende directement dans le bloc de données de
+ * la page : il en rend le texte BRUT, avec `\u00e9` pour « é » et une paire
+ * de substituts pour chaque émoji. Laissé tel quel, ça finirait dans les notes
+ * de la fiche. Le décoder ici évite d'ajouter une action au raccourci — ce que
+ * l'utilisateur devrait refaire à la main.
+ */
+export function texteDecode(t) {
+  const brut = String(t || '');
+  if (!brut.includes('\\')) return brut;
+  return brut
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, ' ')
+    .replace(/\\"/g, '"')
+    .replace(/\\\//g, '/');
+}
+
 export function ressembleAUneLegende(texte) {
   const t = (texte || '').trim();
   if (t.length < 45) return false;
