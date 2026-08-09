@@ -12,11 +12,17 @@
  * l'échelon 1 meurt, l'app tient encore sur les suivants, mais on veut le
  * savoir CE JOUR-LÀ, pas quand le dernier lâche.
  *
+ * Il compare ce qu'il mesure à ce qu'on ATTEND (voir `ATTENDU` plus bas), et
+ * n'alerte que sur l'écart. Depuis le 9 août 2026, un serveur n'obtient plus
+ * rien de TikTok : juger « la chaîne serveur est morte » ferait sonner une
+ * alarme chaque matin pour une situation connue, sur laquelle personne
+ * n'agirait — et une alarme qui sonne toujours ne se lit plus.
+ *
  * Trois états :
- *   vert   — les échelons de tête répondent, la chaîne a de la marge.
- *   orange — on ne tient plus que sur les échelons de secours. Rien n'est
- *            cassé pour l'utilisateur, mais la prochaine panne sera visible.
- *   rouge  — plus aucun échelon ne nomme le lieu : l'app est cassée.
+ *   vert   — conforme à l'attendu, rien à dire.
+ *   orange — mieux que prévu : un échelon a ressuscité. Bonne nouvelle, elle
+ *            rouvrirait un chemin automatique sans application installée.
+ *   rouge  — moins bien que prévu : quelque chose qui marchait s'est éteint.
  *
  * Orange et rouge sortent en code d'erreur : le workflow ouvre alors une
  * alerte. Voir `.github/workflows/canari-extraction.yml`.
@@ -255,48 +261,72 @@ async function mesurer(temoin) {
 }
 
 /**
- * Le verdict. Ce qui compte n'est pas « combien d'échelons marchent » mais
- * « reste-t-il de quoi NOMMER un lieu ». Une légende nomme ; une couverture se
- * fait lire ; un compte, jamais — « Idée de @avery » n'est pas un lieu.
+ * Le verdict — et ce qu'il compare.
+ *
+ * Depuis le 9 août 2026, la réponse à « un serveur peut-il nommer le lieu d'un
+ * post TikTok ? » est NON, définitivement : oEmbed éteint, page complète en
+ * captcha depuis toute adresse de centre de données, vignette de couverture
+ * illisible et son URL signée interdisant mieux. Le chemin automatique passe
+ * désormais par l'application installée, qui sort par la connexion de la
+ * personne — et qu'aucun exécuteur ne peut imiter.
+ *
+ * Un canari qui jugerait « la chaîne serveur est morte » crierait donc ROUGE
+ * chaque matin, pour une situation connue et sur laquelle personne n'agira.
+ * Une alarme qui sonne toujours ne se lit plus : c'est l'inverse du but.
+ *
+ * Il compare donc la réalité à ce qu'on ATTEND, et n'alerte que sur l'écart —
+ * dans les deux sens. Un échelon qui ressuscite est une bonne nouvelle qui
+ * vaut d'être sue : elle rouvrirait un chemin sans application installée.
  */
+const ATTENDU = {
+  // Ce qu'un serveur obtient aujourd'hui. Mis à jour quand on l'a mesuré.
+  echelonsVivants: [],      // aucun échelon ne rend de légende
+  couvertureLisible: false, // la vignette porte un bouton play incrusté
+};
+
 function juger(mesures, modele) {
   const vivantes = mesures.filter(m => !m.absent);
+  const soucis = [];
+  const bonnesNouvelles = [];
+
   if (!vivantes.length) {
     return { etat: 'orange', resume: 'tous les liens témoins ont disparu — à remplacer' };
   }
-  const soucis = [];
-  let pire = 'vert';
+
   for (const m of vivantes) {
-    const avecLegende = m.echelons.filter(e => e.legende && !e.echec);
-    const teteVivante = avecLegende.some(e => !e.secours);
-    if (avecLegende.length) {
-      if (!teteVivante) {
-        pire = pire === 'rouge' ? 'rouge' : 'orange';
-        soucis.push(`« ${m.temoin} » : plus que des échelons de secours pour la légende`);
-      }
-      continue;
+    const nomme = m.echelons.filter(e => e.legende && !e.echec).map(e => e.echelon);
+    const inattendus = nomme.filter(n => !ATTENDU.echelonsVivants.includes(n));
+    const disparus = ATTENDU.echelonsVivants.filter(n => !nomme.includes(n));
+
+    if (inattendus.length) {
+      bonnesNouvelles.push(
+        `« ${m.temoin} » : ${inattendus.join(', ')} rend de nouveau une légende `
+        + `— un chemin automatique sans application installée redevient possible`);
     }
-    // Aucune légende nulle part : il ne reste que la couverture à faire lire.
-    if (m.couverture.ok) {
-      // …encore faut-il que le modèle soit configuré pour la lire. Sinon ce
-      // dernier échelon n'existe que sur le papier, et l'app est cassée.
-      if (modele?.connu && !modele.ok) {
-        pire = 'rouge';
-        soucis.push(`« ${m.temoin} » : aucune légende, et la clé du modèle n'est pas `
-          + `posée — la lecture de couverture ne peut pas prendre le relais`);
-      } else {
-        pire = pire === 'rouge' ? 'rouge' : 'orange';
-        soucis.push(`« ${m.temoin} » : aucune légende, l'app ne tient que sur la lecture d'image`);
-      }
-    } else {
-      pire = 'rouge';
-      soucis.push(`« ${m.temoin} » : aucune légende ET pas de couverture lisible `
-        + `(${m.couverture.pourquoi}) — plus rien ne nomme le lieu`);
+    if (disparus.length) {
+      soucis.push(`« ${m.temoin} » : ${disparus.join(', ')} ne rend plus de légende`);
+    }
+    if (m.couverture.ok && !ATTENDU.couvertureLisible) {
+      bonnesNouvelles.push(`« ${m.temoin} » : la couverture est redevenue exploitable`);
+    }
+    if (!m.couverture.ok && ATTENDU.couvertureLisible) {
+      soucis.push(`« ${m.temoin} » : la couverture n'est plus exploitable (${m.couverture.pourquoi})`);
     }
   }
+
+  // La clé du modèle, elle, doit rester posée : les lectures de réservation,
+  // de ticket et de légende collée en dépendent toutes.
+  if (modele?.connu && !modele.ok) {
+    soucis.push("la clé du modèle n'est plus posée — lecture de légende, de "
+      + 'réservation et de ticket à l\'arrêt');
+  }
+
   const morts = mesures.filter(m => m.absent).map(m => m.temoin);
   if (morts.length) soucis.push(`liens témoins disparus, à remplacer : ${morts.join(', ')}`);
-  return { etat: pire, resume: soucis.join(' · ') || 'la chaîne a de la marge' };
+
+  if (soucis.length) return { etat: 'rouge', resume: soucis.join(' · ') };
+  if (bonnesNouvelles.length) return { etat: 'orange', resume: bonnesNouvelles.join(' · ') };
+  return { etat: 'vert', resume: 'conforme à ce qu\'on attend d\'un serveur depuis le 9 août 2026' };
 }
 
 /**

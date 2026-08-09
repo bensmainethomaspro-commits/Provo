@@ -260,6 +260,23 @@ lui-même mort-né — la page de secours renvoyait « TikTok | Make Your Day »
 le code prenait pour une vraie légende, ce qui empêchait la lecture de la
 couverture de se déclencher. Le repli existait, il n'était jamais atteint.*
 
+**E10. Mesurer depuis là où le code tournera — l'identité du demandeur change
+la réponse.** Un service tiers ne répond pas la même chose à un serveur, à un
+robot déclaré, à un onglet, et à une application installée sur le téléphone de
+quelqu'un. Un exécuteur d'intégration continue est commode, mais c'est une
+adresse de centre de données : ce qu'il mesure vaut pour un serveur, et pour
+rien d'autre. **Avant de conclure « c'est impossible », dire depuis quel poste
+on a mesuré, et si le vrai poste d'exécution en est un.** C'est le complément
+indispensable de E2 : fabriquer un environnement qui *atteint* la cible ne sert
+à rien s'il ne *ressemble* pas à celui où le code tournera.
+*Origine : des heures à établir que TikTok ne rendait plus la légende à
+personne — oEmbed éteint, page en captcha, vignette illisible, URL signée. Tout
+était juste, et faux : c'était vrai depuis un exécuteur, donc pour un serveur
+seulement. L'utilisateur a signalé une application concurrente qui y arrive.
+Elle est installée : elle sort par la connexion de la personne, avec un agent
+mobile ordinaire, et TikTok lui sert la page complète. Il ne fallait pas un
+meilleur extracteur côté serveur — il fallait faire la même requête d'ailleurs.*
+
 ---
 
 ## F · Livraison
@@ -303,6 +320,12 @@ elle se referme toute seule au retour à la normale, sinon on cesse de la lire.
 **Corollaire : une alarme qui rassure à tort est pire que pas d'alarme.** Si le
 service répond du remplissage générique, la sonde doit le refuser comme réponse
 — sinon elle affiche vert sur une chaîne morte.
+**Second corollaire : une alarme compare à ce qu'on ATTEND, pas à l'idéal.**
+Quand une dégradation est constatée, comprise et assumée, une sonde qui continue
+de la signaler sonne tous les matins pour une situation sur laquelle personne
+n'agira — et une alarme qui sonne toujours ne se lit plus. Inscrire l'état
+attendu dans la sonde et n'alerter que sur l'écart, dans les deux sens : ce qui
+ressuscite mérite d'être su autant que ce qui meurt.
 *Origine : « trouve plutôt des solutions à long terme […] des plans B ou plan C.
 Aussi je veux être prévenu dans ce genre de situation. » L'oEmbed de TikTok
 s'est éteint sans prévenir ; toute l'extraction reposait dessus et personne ne

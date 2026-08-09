@@ -85,6 +85,37 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **TikTok : c'est le téléphone qui lit la page, pas le serveur** (août 2026).
+  La conclusion de la journée, et elle invalide la précédente. Tout ce qui a été
+  mesuré depuis un exécuteur — oEmbed 400, captcha sur la page complète,
+  vignette de couverture illisible, URL signée refusant toute variante (403 sur
+  `sans-bouton`, `haute-def`, `gabarit-image`, `brut`) — était **exact et
+  trompeur** : vrai pour un serveur, pour rien d'autre.
+  L'utilisateur a signalé une application concurrente qui y arrive. Elle est
+  **installée** : elle sort par sa connexion, avec un agent mobile ordinaire, et
+  TikTok lui sert la page complète, légende comprise. L'écart n'est pas dans
+  l'extracteur, il est dans **qui pose la question** (règle E10 du playbook).
+  `src/utils/tiktokNatif.js` : `legendeTikTokNative()` passe par
+  `CapacitorHttp`, non soumis aux restrictions d'origine du navigateur — un
+  `fetch` échouerait. `legendeDansPage()` est séparée de la requête pour rester
+  vérifiable sans téléphone. Dans un onglet, la voie n'existe pas : `null` sans
+  bruit, et le collage de la légende reste le recours (iOS reste dans ce cas —
+  Provo y est un site installé, pas une application native).
+  Un seul `traiterLegende()` sert les deux origines.
+  **Non vérifié, et ça ne peut pas l'être depuis ici** : ni le bac à sable ni un
+  exécuteur ne peuvent exercer cette voie, ce sont justement les adresses à qui
+  TikTok sert un captcha. Seul un téléphone tranche. Le workflow *Build Android
+  APK* est **désactivé** sur le dépôt : il faut le réactiver pour produire
+  l'application à tester.
+  La lecture de couverture est court-circuitée sur la vignette au bouton play
+  (motif `vignette_bouton_play`) : elle consommait un appel payant par import
+  pour un échec certain.
+  Chaque échec de lecture d'image porte désormais son motif, remonté dans la
+  réponse sous `couverture`. Deux diagnostics de suite ont été perdus parce que
+  la fonction rendait `null` sur sept chemins, puis parce que l'afficheur du
+  diagnostic ne montrait pas le champ ajouté pour trouver la cause — d'où la
+  règle : **un diagnostic montre la réponse entière, jamais une sélection**.
+
 - **Une échelle d'échelons, et un canari qui prévient** (août 2026). Demandé
   après le premier correctif TikTok : « trouve plutôt des solutions à long
   terme […] des plans B ou plan C. Aussi je veux être prévenu dans ce genre de
@@ -118,10 +149,14 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   passe au **rouge** si la chaîne dépend de la couverture alors que la clé
   manque : une clé révoquée ou expirée casserait l'ajout par lien en silence,
   exactement comme l'oEmbed.
-  À faire quand ce sera fusionné : remplacer les liens témoins s'ils
-  disparaissent (le canari le signale au lieu de crier à la panne), et étendre
-  la même surveillance aux autres fournisseurs uniques — Nominatim, Overpass,
-  Open-Meteo, proxys CORS.
+  **Corrigé le soir même** : le canari ne juge plus « la chaîne serveur est
+  morte » — ce serait rouge chaque matin pour une situation connue et assumée.
+  Il compare à `ATTENDU` (aucun échelon serveur vivant, couverture illisible) et
+  n'alerte que sur l'écart, dans les deux sens : un échelon qui ressuscite
+  rouvrirait un chemin sans application installée, et mérite d'être su.
+  À faire : remplacer les liens témoins s'ils disparaissent (le canari le
+  signale au lieu de crier à la panne), et étendre la même surveillance aux
+  autres fournisseurs uniques — Nominatim, Overpass, Open-Meteo, proxys CORS.
 
 - **TikTok ne rend plus la légende à personne — la couverture, puis le
   presse-papier** (août 2026). Signalé par l'utilisateur : « les ajouts TikTok
