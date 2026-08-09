@@ -244,3 +244,87 @@ jobs:
           set +e
           node scripts/canari-extraction.mjs
           echo "--- code de sortie : $? (0 vert · 1 orange · 2 rouge) ---"
+
+      - name: "L · Verdict — ce que l'app affichera vraiment"
+        # La seule question qui compte : la fiche portera-t-elle un NOM ?
+        # Placée en dernier pour être lisible d'un coup d'œil sans dérouler
+        # tout le journal.
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -o /tmp/v --max-time 90 -d "{\"url\":\"$URL\"}"
+          python3 - <<'PY'
+          import json
+          d = json.load(open('/tmp/v'))
+          r = d.get('result') or {}
+          # La réponse ENTIÈRE, pas une sélection de champs : deux fois de suite,
+          # la cause de l'échec était dans un champ que l'afficheur ne montrait
+          # pas. Un diagnostic qui trie ce qu'il montre cache ce qu'on cherche.
+          print('--- réponse complète ---')
+          print(json.dumps(d, ensure_ascii=False, indent=2)[:2000])
+          print('--- verdict ---')
+          titre = r.get('title', '')
+          echoue = titre.lower().startswith(('activité tiktok', 'idée de'))
+          print('titre      :', titre or '(vide)')
+          print('échelon    :', r.get('etape', '?'))
+          print('couverture :', r.get('couverture', '(non renseigné)'))
+          print('adresse    :', r.get('address') or '—')
+          print()
+          print('🔴 ÉCHEC — la fiche ne porte pas de nom de lieu' if echoue or not titre
+                else f'🟢 SUCCÈS — la fiche s\'appellera « {titre} »')
+          PY
+
+      - name: "M · TikTok — quelle URL donne une couverture LISIBLE ?"
+        # Mesuré : l'og:image servie aux robots est une vignette 600×828 de
+        # qualité 20 avec un bouton « play » incrusté — le modèle n'y lit rien.
+        # Les URL de la CDN ByteDance portent un gabarit de transformation
+        # (~tplv-…:largeur:hauteur:qualité). Cette étape essaie d'en obtenir une
+        # version exploitable, et dit laquelle passe.
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, struct, html
+          h = open('/tmp/fb.html', encoding='utf-8', errors='replace').read()
+          m = re.search(r'<meta[^>]+og:image["\']?[^>]*content=["\']([^"\']+)', h)
+          if not m:
+              print('aucune og:image — rien à tenter'); raise SystemExit
+          src = html.unescape(m.group(1))
+
+          def variantes(u):
+              yield 'origine', u
+              # Retirer l'incrustation du bouton, garder le gabarit
+              yield 'sans-bouton', re.sub(r':[^:/]*/smartui/button/[^:]*\.png:*', '', u)
+              # Monter la définition et la qualité dans le gabarit
+              yield 'haute-def', re.sub(r'(~tplv-[^:]+):\d+:\d+:\d+', r'\1:1080:1440:95', u)
+              # Gabarit d'image simple au lieu du composite « partage vidéo »
+              yield 'gabarit-image', re.sub(r'~tplv-[^/?]+', '~tplv-photomode-image.jpeg', u)
+              # Aucune transformation du tout
+              yield 'brut', re.sub(r'~tplv-[^/?]+', '', u)
+
+          def taille_jpeg(d):
+              i = 2
+              while i < len(d) - 9:
+                  if d[i] != 0xFF: i += 1; continue
+                  mk = d[i+1]
+                  if mk in (0xC0,0xC1,0xC2,0xC3,0xC5,0xC6,0xC7,0xC9,0xCA,0xCB,0xCD,0xCE,0xCF):
+                      hh, ww = struct.unpack('>HH', d[i+5:i+9]); return f'{ww}x{hh}'
+                  if mk in (0xD8,0xD9) or 0xD0 <= mk <= 0xD7: i += 2; continue
+                  i += 2 + struct.unpack('>H', d[i+2:i+4])[0]
+              return '?'
+
+          for nom, u in variantes(src):
+              out = subprocess.run(
+                  ['curl','-sS','-o','/tmp/img.bin','-w','%{http_code} %{content_type} %{size_download}',
+                   '--max-time','25','-A','facebookexternalhit/1.1','-L',u],
+                  capture_output=True, text=True).stdout.split()
+              code, ctype, taille = (out + ['?','?','0'])[:3]
+              dim = ''
+              if code == '200' and int(taille) > 1000:
+                  d = open('/tmp/img.bin','rb').read()
+                  if d[:3] == b'\xff\xd8\xff': dim = ' · ' + taille_jpeg(d)
+              print(f'{nom:14} {code}  {int(taille)//1024:>4} ko  {ctype}{dim}')
+          PY

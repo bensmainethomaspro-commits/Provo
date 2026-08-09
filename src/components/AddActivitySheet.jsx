@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende } from '../utils/helpers';
+import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 
@@ -148,6 +149,36 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg('');
   };
 
+  // Le traitement d'une légende, d'où qu'elle vienne : lue sur le téléphone
+  // pour un lien TikTok, ou collée à la main. Un seul chemin, donc un seul
+  // comportement à vérifier.
+  const traiterLegende = async (texteLegende, raw, { lien = '' } = {}) => {
+    const lu = await lireLegende(texteLegende);
+    if (!lu?.title) return false;
+    if (lu.autresLieux?.length) {
+      setAutresLieux(lu.autresLieux);
+      setLieuxRetenus(new Set(lu.autresLieux.map((_, i) => i)));
+    }
+    applyResult({ ...lu, ...(lien ? { link: lien } : {}) }, raw);
+    // Une légende donne un nom, presque jamais des coordonnées : on situe le
+    // lieu sur la destination, comme pour un lien partagé.
+    if (lu.lat == null) {
+      const q = tripDestination ? `${lu.title}, ${tripDestination}` : lu.title;
+      const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
+      if (found.length === 1) {
+        applyResult({ ...found[0], title: lu.title, ...(lien ? { link: lien } : {}) }, raw);
+      } else if (found.length > 1) {
+        setCandidates(found);
+        setImportMsg(`« ${lu.title} » lu dans la légende — précise lequel c'est.`);
+        return true;
+      }
+    }
+    // Dire d'où vient le nom : que la légende ait été lue sur le téléphone ou
+    // collée à la main, la personne doit savoir ce qui a rempli sa fiche.
+    setImportMsg(`« ${lu.title} » lu dans la légende ✓`);
+    return true;
+  };
+
   // Une adresse n'est pas un commerce : OSM n'a ni horaires ni site dessus.
   // On regarde donc ce qui se trouve à ce point précis, et on le propose.
   const offerPoiAt = async (place) => {
@@ -220,6 +251,15 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
 
       if (isUrl) {
         const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+
+        // TikTok d'abord, et depuis le téléphone. Aucun serveur n'obtient plus
+        // la légende — mesuré — mais une application installée reçoit la page
+        // complète, parce qu'elle sort par la connexion de la personne avec un
+        // agent mobile ordinaire. C'est le seul chemin automatique qui marche.
+        if (/tiktok\.com/i.test(normalized) && lectureNativePossible()) {
+          const nat = await legendeTikTokNative(normalized).catch(() => null);
+          if (nat?.legende && await traiterLegende(nat.legende, raw, { lien: normalized })) return;
+        }
         // 1) server-side agent (best — resolves short links + classifies + geocodes)
         // 2) robust client extractor (TikTok oEmbed, Maps proxy chain, geocoding)
         let result = await extractViaEdge(normalized);
@@ -335,29 +375,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       // bien plus précis (dossier, dates, heures). La forme la plus précise
       // tranche d'abord ; la légende ramasse ce qui reste.
       if (ressembleAUneLegende(raw)) {
-        const lu = await lireLegende(raw);
-        if (lu?.title) {
-          if (lu.autresLieux?.length) {
-            setAutresLieux(lu.autresLieux);
-            setLieuxRetenus(new Set(lu.autresLieux.map((_, i) => i)));
-          }
-          applyResult(lu, raw);
-          // Une légende donne un nom, presque jamais des coordonnées : on
-          // situe le lieu sur la destination, comme pour un lien partagé.
-          if (lu.lat == null) {
-            const q = tripDestination ? `${lu.title}, ${tripDestination}` : lu.title;
-            const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
-            if (found.length === 1) {
-              applyResult({ ...found[0], title: lu.title }, raw);
-            } else if (found.length > 1) {
-              setCandidates(found);
-              setImportMsg(`« ${lu.title} » lu dans la légende — précise lequel c'est.`);
-              return;
-            }
-          }
-          setImportMsg(`« ${lu.title} » lu dans la légende ✓`);
-          return;
-        }
+        if (await traiterLegende(raw, raw)) return;
         // Le texte collé reste dans le champ — rien n'est perdu — et la fiche
         // s'ouvre, comme pour une confirmation illisible : on ne renvoie pas
         // vers « complète à la main » un formulaire qui n'est pas là.

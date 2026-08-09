@@ -802,12 +802,22 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
   // légende — c'est-à-dire, depuis que TikTok l'a fermée, presque toujours.
   // Sans ça, la fiche ne porterait que le nom du compte.
   let vu: { title: string; category: string; location: string } | null = null;
-  if (permisIA && !title && thumb) {
-    vu = await lireCouverture(thumb).catch(() => null);
-    if (vu) {
-      title = vu.title;
-      if (vu.category) category = vu.category;
+  let motifCouverture = "";
+  if (permisIA && !title) {
+    const lu = await lireCouverture(thumb)
+      .catch((e) => ({ ok: false as const, pourquoi: `jete_${String(e).slice(0, 30)}` }));
+    if (lu.ok) {
+      vu = lu;
+      title = lu.title;
+      if (lu.category) category = lu.category;
+      motifCouverture = "ok";
+    } else {
+      motifCouverture = lu.pourquoi;
     }
+  } else if (!permisIA) {
+    motifCouverture = "origine_non_autorisee";
+  } else {
+    motifCouverture = "titre_deja_trouve";
   }
 
   // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
@@ -852,6 +862,9 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     // aucune et que le nom a été lu sur l'image. Sans ce témoin, une chaîne
     // qui se dégrade en silence reste invisible jusqu'à la panne totale.
     etape: etape || (vu ? "couverture" : "aucune"),
+    // Pourquoi la lecture d'image a donné — ou n'a pas donné — un nom.
+    // Sans ce témoin, un échec ne se répare qu'à l'aveugle.
+    ...(motifCouverture ? { couverture: motifCouverture } : {}),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
@@ -970,9 +983,29 @@ function origineAutorisee(req: Request): boolean {
  */
 const COUVERTURE_MAX = 1_500_000; // ~1,5 Mo : au-delà, ce n'est plus une vignette
 
-async function lireCouverture(imageUrl: string) {
+// Un échec muet est un échec qu'on ne répare pas : chaque sortie dit POURQUOI.
+// Le motif remonte dans la réponse (`couverture`), donc un diagnostic suffit à
+// distinguer « pas de vignette » de « clé absente » de « rien de lisible ».
+type LectureCouverture =
+  | { ok: true; title: string; category: string; location: string }
+  | { ok: false; pourquoi: string };
+
+// La vignette que TikTok sert aux robots : 600 x 828, qualité 20, avec un
+// bouton « play » incrusté par-dessus. Mesuré le 9 août 2026 — et l'URL est
+// signée, donc toute tentative d'en obtenir une meilleure version rend 403
+// (essayé : retirer l'incrustation, monter la définition, changer de gabarit,
+// enlever toute transformation). On ne peut rien y lire, et le modèle le dit :
+// « rien_de_lisible ». Appeler quand même coûterait un appel payant par import
+// pour un échec certain.
+const VIGNETTE_INUTILISABLE = /smartui\/button\/play-icon/i;
+
+async function lireCouverture(imageUrl: string): Promise<LectureCouverture> {
   const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
-  if (!key || !imageUrl) return null;
+  if (!key) return { ok: false, pourquoi: "cle_absente" };
+  if (!imageUrl) return { ok: false, pourquoi: "pas_de_vignette" };
+  if (VIGNETTE_INUTILISABLE.test(imageUrl)) {
+    return { ok: false, pourquoi: "vignette_bouton_play" };
+  }
 
   // 1 · Récupérer l'image. Mesuré sur une couverture TikTok : JPEG, 84 ko.
   let base64 = "", media = "image/jpeg";
@@ -981,20 +1014,25 @@ async function lireCouverture(imageUrl: string) {
     try {
       const r = await fetch(imageUrl, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal });
       clear();
-      if (!r.ok) return null;
+      if (!r.ok) return { ok: false, pourquoi: `image_http_${r.status}` };
       const type = (r.headers.get("content-type") || "").split(";")[0].trim();
-      if (!["image/jpeg", "image/png", "image/webp"].includes(type)) return null;
+      if (!["image/jpeg", "image/png", "image/webp"].includes(type)) {
+        return { ok: false, pourquoi: `image_type_${type || "inconnu"}` };
+      }
       media = type;
       const buf = new Uint8Array(await r.arrayBuffer());
-      if (!buf.length || buf.length > COUVERTURE_MAX) return null;
+      if (!buf.length) return { ok: false, pourquoi: "image_vide" };
+      if (buf.length > COUVERTURE_MAX) {
+        return { ok: false, pourquoi: `image_${Math.round(buf.length / 1024)}ko` };
+      }
       let bin = "";
       for (let i = 0; i < buf.length; i += 0x8000) {
         bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       }
       base64 = btoa(bin);
-    } catch {
+    } catch (e) {
       clear();
-      return null;
+      return { ok: false, pourquoi: `image_erreur_${String((e as Error).message).slice(0, 40)}` };
     }
   }
 
@@ -1037,22 +1075,25 @@ async function lireCouverture(imageUrl: string) {
       }),
     });
     clear();
-    if (!r.ok) return null;
+    if (!r.ok) return { ok: false, pourquoi: `modele_http_${r.status}` };
     const d = await r.json();
     const brut = (d?.content?.[0]?.text || "").match(/\{[\s\S]*\}/);
-    if (!brut) return null;
+    if (!brut) return { ok: false, pourquoi: "modele_hors_format" };
     const o = JSON.parse(brut[0]);
     const titre = typeof o?.title === "string" ? o.title.trim() : "";
-    // Le doute ne nomme rien.
-    if (!titre || o?.confiance === "basse") return null;
+    // Le doute ne nomme rien : mieux vaut une fiche à compléter qu'un faux nom
+    // qu'on ne vérifiera plus. Mais on dit lequel des deux cas s'est produit.
+    if (!titre) return { ok: false, pourquoi: "rien_de_lisible" };
+    if (o?.confiance === "basse") return { ok: false, pourquoi: `doute_sur_${titre.slice(0, 30)}` };
     return {
+      ok: true,
       title: titre,
       category: VALID_CATEGORIES.includes(o?.category) ? o.category : "",
       location: typeof o?.location === "string" ? o.location.trim() : "",
     };
-  } catch {
+  } catch (e) {
     clear();
-    return null;
+    return { ok: false, pourquoi: `modele_erreur_${String((e as Error).message).slice(0, 40)}` };
   }
 }
 
