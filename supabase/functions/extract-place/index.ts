@@ -498,17 +498,22 @@ function trimNoise(s: string): string {
   return cut.replace(/\s+/g, " ").trim().replace(/[\s,\-–—]+$/, "");
 }
 
-function extractLocationHint(caption: string): string | null {
-  // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
-  // stays clean instead of swallowing the rest of the caption.
-  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
-  if (pin) return trimNoise(pin[1]) || null;
-
-  // Une adresse écrite en clair. Deux ordres selon la langue, et il faut les
-  // deux : « 12 rue de Rivoli » (numéro, voie, nom) en français, espagnol et
-  // italien ; « 3823 22nd Ave » (numéro, nom, voie) en anglais et allemand.
-  // Mesuré sur de vraies légendes TikTok — c'est le cas le plus fréquent, et
-  // l'ancienne règle le manquait en exigeant une majuscule après « at ».
+/**
+ * L'adresse écrite en clair dans la légende — pour GÉOCODER, jamais pour
+ * nommer. Les deux questions sont différentes et le même texte n'y répond pas :
+ * une fiche s'appelle « DEOUN », elle ne s'appelle pas « 9 Rue Harispe ».
+ *
+ * Mesuré le 9 août 2026 sur une légende qui portait les deux : « 📍DEOUN |
+ * Biarritz, France … Address: 9 Rue Harispe 64200 Biarritz ». Géocoder le nom
+ * seul a ramené un homonyme à Soorts-Hossegor, 30 km plus loin. Un numéro et
+ * un code postal ne se confondent avec rien ; un nom d'établissement, si — et
+ * le principe de ce fichier est qu'une adresse fausse est pire qu'absente.
+ *
+ * Deux ordres selon la langue, et il faut les deux : « 12 rue de Rivoli »
+ * (numéro, voie, nom) en français, espagnol et italien ; « 3823 22nd Ave »
+ * (numéro, nom, voie) en anglais et allemand.
+ */
+function extractAddressHint(caption: string): string | null {
   const addrFr = caption.match(
     new RegExp(
       `\\b(\\d{1,5}\\s*(?:bis|ter)?\\s+(?:${STREET_WORDS})\\s+[\\p{L}][\\p{L}\\p{N}\\s,'’.\\-]{2,45})`,
@@ -524,6 +529,39 @@ function extractLocationHint(caption: string): string | null {
     ),
   );
   if (addrEn) return trimNoise(addrEn[1]) || null;
+  return null;
+}
+
+/**
+ * L'épingle en entier, ville comprise : « 📍DEOUN | Biarritz, France » rend
+ * « DEOUN, Biarritz, France ». Pour SITUER, pas pour nommer — le séparateur
+ * « | » est fréquent dans ces épingles, et s'arrêter à lui ne laissait que le
+ * nom sans sa ville, que le géocodeur cherchait alors dans le monde entier.
+ */
+function epingleComplete(caption: string): string | null {
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-|·]{1,60})/u);
+  return pin ? trimNoise(pin[1].replace(/\s*[|·]\s*/g, ", ")) || null : null;
+}
+
+/**
+ * La meilleure requête pour le géocodeur, du plus précis au moins précis.
+ * Distincte de `extractLocationHint`, qui répond à « comment s'appelle ce
+ * lieu ? » : ici la question est « où est-il ? », et la meilleure réponse
+ * n'est pas la même chaîne.
+ */
+function extractGeoHint(caption: string): string | null {
+  return extractAddressHint(caption) || epingleComplete(caption)
+    || extractLocationHint(caption);
+}
+
+function extractLocationHint(caption: string): string | null {
+  // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
+  // stays clean instead of swallowing the rest of the caption.
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
+  if (pin) return trimNoise(pin[1]) || null;
+
+  const adresse = extractAddressHint(caption);
+  if (adresse) return adresse;
 
   // « rue de Rivoli, Paris » — la voie d'abord, le numéro absent.
   const street = caption.match(
@@ -973,7 +1011,10 @@ async function handleTikTok(rawUrl: string, permisIA = false, destination = "") 
   // ville depuis le serveur, qui ignore la destination du voyage, ramène
   // n'importe quel homonyme du monde. Le client, lui, connaît la destination
   // et refait la recherche située — une adresse fausse est pire qu'absente.
-  const geoQuery = (ai?.location) || locationHint || vu?.location || cherche?.location || "";
+  // L'adresse écrite par l'auteur du post passe AVANT celle que le modèle
+  // déduit : c'est la source, pas une interprétation.
+  const geoQuery = extractGeoHint(caption) || (ai?.location) || vu?.location
+    || cherche?.location || "";
   let place = geoQuery ? await geocode(geoQuery) : null;
   // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
   // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
@@ -1080,7 +1121,11 @@ function origineAutorisee(req: Request): boolean {
  *      qui porte un faux nom est pire qu'une fiche à compléter, parce qu'on ne
  *      la vérifie plus.
  */
-const COUVERTURE_MAX = 1_500_000; // ~1,5 Mo : au-delà, ce n'est plus une vignette
+// 5 Mo : la limite d'image de l'API du modèle. Le plafond valait 1,5 Mo quand
+// la seule couverture disponible était une vignette de partage ; depuis que le
+// lecteur tiers rend les vraies photos du post, une image de 1,5 Mo est normale
+// et la refuser écartait précisément la bonne.
+const COUVERTURE_MAX = 5_000_000;
 
 // Un échec muet est un échec qu'on ne répare pas : chaque sortie dit POURQUOI.
 // Le motif remonte dans la réponse (`couverture`), donc un diagnostic suffit à

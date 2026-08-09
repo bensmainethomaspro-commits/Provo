@@ -259,7 +259,10 @@ async function couvertureUtilisable(url) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(type)) {
       return { ok: false, pourquoi: `type inattendu (${type || 'inconnu'})` };
     }
-    if (!buf.length || buf.length > 1_500_000) {
+    // 5 Mo, comme `COUVERTURE_MAX` dans la fonction Edge. Le plafond valait
+    // 1,5 Mo du temps des vignettes de partage : depuis que le lecteur tiers
+    // rend les vraies photos, il écartait justement la bonne image.
+    if (!buf.length || buf.length > 5_000_000) {
       return { ok: false, pourquoi: `${Math.round(buf.length / 1024)} ko hors bornes` };
     }
     return { ok: true, pourquoi: `${type}, ${Math.round(buf.length / 1024)} ko` };

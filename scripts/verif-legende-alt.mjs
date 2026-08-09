@@ -25,20 +25,43 @@ function decouper(src, nom) {
   throw new Error(`accolades non refermées : ${nom}`);
 }
 
-function charger(chemin) {
+// Les annotations de type, sans toucher aux objets littéraux (`{ caption: t }`
+// doit survivre) ni aux types de retour, qu'on retire à part.
+// Le premier `) : … {` d'une fonction découpée est forcément son type de
+// retour — remplacement non global, il ne peut donc pas mordre plus loin.
+const sansTypes = (code) => code
+  .replace(/\)\s*:\s*[^{;=]+\{/, ') {')
+  .replace(/(\w+)\s*:\s*(string|number|boolean)\b/g, '$1');
+
+function charger(chemin, noms, principale) {
   const src = readFileSync(new URL(chemin, import.meta.url), 'utf8');
-  // Retirer les seules annotations de type présentes, sans toucher aux objets
-  // littéraux (`{ caption: t }` doit survivre).
-  const code = decouper(src, 'legendeDansTexteAlternatif')
-    .replace(/(\w+)\s*:\s*(string|number|boolean)\b/g, '$1');
-  return new Function(
-    'legendeGenerique', `${code}; return legendeDansTexteAlternatif;`)(legendeGenerique);
+  const code = noms.map(n => sansTypes(decouper(src, n))).join('\n');
+  return new Function('legendeGenerique', `${code}; return ${principale};`)(legendeGenerique);
 }
 
+const EDGE = '../supabase/functions/extract-place/index.ts';
+
 const IMPLEMENTATIONS = [
-  ['fonction Edge', charger('../supabase/functions/extract-place/index.ts')],
-  ['canari', charger('../scripts/canari-extraction.mjs')],
+  ['fonction Edge', charger(EDGE, ['legendeDansTexteAlternatif'], 'legendeDansTexteAlternatif')],
+  ['canari', charger('../scripts/canari-extraction.mjs',
+    ['legendeDansTexteAlternatif'], 'legendeDansTexteAlternatif')],
 ];
+
+// Nommer et situer sont deux questions : la même légende n'y répond pas par la
+// même chaîne. Les confondre a produit une fiche « DEOUN » située à 30 km.
+const LECTURE_DU_LIEU = [
+  ['extractLocationHint', 'trimNoise', 'extractAddressHint'],
+  ['extractGeoHint', 'trimNoise', 'extractAddressHint', 'epingleComplete', 'extractLocationHint'],
+];
+const [nomme, situe] = LECTURE_DU_LIEU.map(([principale, ...reste]) => {
+  const src = readFileSync(new URL(EDGE, import.meta.url), 'utf8');
+  const prelude = 'const STREET_WORDS = ' + JSON.stringify(
+    (src.match(/const STREET_WORDS\s*=\s*([\s\S]*?);/) || [, '""'])[1]
+      .replace(/\s*\+\s*/g, '').replace(/"/g, '')) + ';\n'
+    + (src.match(/const NOISE_AFTER\s*=\s*[\s\S]*?;/) || [''])[0] + '\n';
+  const code = [principale, ...reste].map(n => sansTypes(decouper(src, n))).join('\n');
+  return new Function(`${prelude}${code}; return ${principale};`)();
+});
 
 const cas = [
   {
@@ -85,7 +108,45 @@ for (const [ou, lire] of IMPLEMENTATIONS) {
     else if (r) console.log(`     → « ${r.caption.slice(0, 58)}… »`);
   }
 }
-const total = cas.length * IMPLEMENTATIONS.length;
+const LEGENDE_DEOUN =
+  '📍DEOUN | Biarritz, France Your new go-to spot in Biarritz. Grill your own '
+  + 'Korean BBQ with fresh ingredients Perfect activity with a group of friends '
+  + 'or a fun date!  Address: 9 Rue Harispe 64200 Biarritz, France '
+  + '#biarritzrestaurant #paysbasque #datenight #sudouest #biarritzfood';
+
+const lieux = [
+  {
+    nom: 'la légende mesurée : nommée par l’épingle, située par l’adresse',
+    legende: LEGENDE_DEOUN,
+    nomme: 'DEOUN',
+    situe: /^9 Rue Harispe 64200 Biarritz/,
+  },
+  {
+    nom: 'épingle seule : la ville reste dans la requête de géocodage',
+    legende: '📍Bouillon Chartier | Paris, France — le meilleur rapport qualité prix',
+    nomme: 'Bouillon Chartier',
+    situe: /^Bouillon Chartier, Paris, France/,
+  },
+  {
+    nom: 'adresse seule : elle nomme faute de mieux, et elle situe',
+    legende: 'Le meilleur café du quartier, 12 rue de Rivoli, Paris',
+    nomme: /^12 rue de Rivoli/,
+    situe: /^12 rue de Rivoli/,
+  },
+];
+
+console.log('\n■ nommer et situer');
+for (const c of lieux) {
+  const n = nomme(c.legende) || '';
+  const s = situe(c.legende) || '';
+  const attendu = (v, a) => (a instanceof RegExp ? a.test(v) : v === a);
+  const ok = attendu(n, c.nomme) && attendu(s, c.situe);
+  if (!ok) casses++;
+  console.log(`  ${ok ? '✓' : '✗'} ${c.nom}`);
+  console.log(`     nomme « ${n} »  ·  situe « ${s} »`);
+}
+
+const total = cas.length * IMPLEMENTATIONS.length + lieux.length;
 console.log(casses
   ? `\n${casses} cas cassé(s) sur ${total}`
   : `\nles ${total} cas passent — les deux exemplaires sont d'accord\n`);
