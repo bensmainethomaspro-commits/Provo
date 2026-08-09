@@ -85,6 +85,41 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **TikTok ne rend plus la légende à personne — la couverture, puis le
+  presse-papier** (août 2026). Signalé par l'utilisateur : « les ajouts TikTok
+  (qui sont majoritaires) ne fonctionnent quasiment pas […] cela met "activité
+  TikTok" et juste le lien ». Mesuré sur un exécuteur GitHub, pas deviné :
+  l'**oEmbed renvoie 400 sur toutes les vidéos**, y compris des comptes publics
+  célèbres — ce n'est donc pas une régression de Provo, c'est TikTok qui a
+  fermé la porte. La page servie aux robots des messageries
+  (`facebookexternalhit`) rend encore `og:title` et `og:image`, mais **plus
+  aucune description**. Toute la chaîne reposait sur la légende.
+  Reste ce qu'on voit : **la vignette de couverture**. Un carrousel de
+  restaurant affiche presque toujours le nom en surimpression.
+  `lireCouverture()` la télécharge (≤ 1,5 Mo, JPEG/PNG/WebP seulement) et la
+  fait lire par le modèle. Trois garde-fous repris de la légende : origines de
+  l'app uniquement, appel en dernier recours seulement, et
+  **`confiance: "basse"` ne nomme rien** — une fiche qui porte un faux nom est
+  pire qu'une fiche à compléter, parce qu'on ne la vérifie plus.
+  Le serveur ne géocode que `vu.location`, **jamais `vu.title` seul** : il
+  ignore la destination du voyage, et « Deoun » sans ville ramène n'importe
+  quel homonyme du monde. Le client, lui, la connaît et refait la recherche
+  située — c'est déjà ce qu'il fait pour un lien partagé.
+  Quand la couverture ne suffit pas, la porte de secours est **le texte que la
+  personne a sous les yeux** : elle le colle dans le **même champ** que les
+  liens et les confirmations (aucun écran, aucun bouton de plus — règle A7), et
+  `extract-place` accepte désormais un corps `{ texte }`. Le message le dit au
+  lieu du vieux « vérifie le titre ».
+  Ordre des branches : **réservation d'abord, légende ensuite**. Les deux sont
+  du texte long collé ; la forme la plus précise (dossier, dates, heures)
+  tranche, la légende ramasse le reste. Parcours dédié pour l'interdire de
+  régresser — il vérifie que le lecteur de légendes n'est *pas* appelé.
+  Au passage : `classifyWithLLM` ne part plus sur une **légende vide**, ce qui
+  était devenu le cas courant — un appel payant pour classer une chaîne vide.
+  Non fait à dessein : lire la vidéo elle-même (coût sans rapport), et
+  transformer le champ en `<textarea>` (il reste le champ de recherche
+  principal ; les retours à la ligne collés y sont de toute façon aplatis).
+
 - **Le menu ⋯ d'une activité était prisonnier de sa carte** (août 2026).
   Signalé par un enregistrement d'écran : au tap sur ⋯, la fiche disparaissait
   et il ne restait que « Supprimer » et « Annuler ». Diagnostic de

@@ -671,6 +671,60 @@ const PARCOURS = [
         await t.visible('input[placeholder*="Déjeuner au marché"]'));
     } },
 
+  { groupe: 'Réseau', nom: "Coller la légende d'un post remplit la fiche", depart: 'voyage',
+    reseau: { legende: 'ok' },
+    intention: "TikTok ne rend plus le texte de ses posts : on le colle soi-même.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]',
+        'Le meilleur barbecue coréen de Vienne 🔥 viande grillée devant toi et banchan '
+        + 'à volonté, pense à réserver le week-end #vienne #coreen #bbq #foodtok');
+      await t.clic('.import-row button', { delai: 2400, obligatoire: false });
+      t.verifier('le texte part au lecteur de légendes', (t.appels().legende || 0) > 0,
+        `${t.appels().legende || 0} appels`);
+      await t.ouvrirDetails();
+      const rempli = await t.p.evaluate(() => {
+        const q = (s) => document.querySelector(s)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'),
+                 adresse: q('input[placeholder="Lieu"]') };
+      });
+      t.verifier('le nom du lieu est extrait du texte', /Deoun/i.test(rempli.titre),
+        rempli.titre || '(vide)');
+      t.verifier("l'adresse aussi", rempli.adresse.length > 5, rempli.adresse || '(vide)');
+      t.verifier('on dit où le nom a été lu', /lu dans la légende/i.test(await t.texte()));
+    } },
+
+  { groupe: 'Réseau', nom: 'Une légende sans lieu le dit et ne bloque rien', depart: 'voyage',
+    reseau: { legende: 'aucun' },
+    intention: "Coller un texte qui ne nomme aucun lieu.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]',
+        'Trois jours de folie avec la meilleure équipe du monde 🥹 je ne me remets '
+        + 'toujours pas de ce voyage #souvenirs #entrenous #teamvacances');
+      await t.clic('.import-row button', { delai: 2400, obligatoire: false });
+      t.verifier('on dit qu\'aucun lieu n\'a été trouvé',
+        /aucun lieu nommé/i.test(await t.texte()));
+      t.verifier('le formulaire reste utilisable',
+        await t.visible('input[placeholder*="Déjeuner au marché"]'));
+    } },
+
+  { groupe: 'Réseau', nom: "Une confirmation n'est jamais lue comme une légende", depart: 'voyage',
+    reseau: { reservation: 'ok', legende: 'ok' },
+    intention: "Les deux formes sont du texte long collé : la plus précise doit gagner.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'Confirmation de reservation Hotel Sacher Wien. Votre reservation est confirmee du 12/09/2026 au 15/09/2026, arrivee a partir de 15:00. Numero de dossier ABC12345. Philharmoniker Strasse 4, 1010 Wien, Autriche. Merci de presenter cette confirmation a l\'arrivee.');
+      await t.clic('.import-row button', { delai: 2400, obligatoire: false });
+      t.verifier('le lecteur de réservations est appelé', (t.appels().reservation || 0) > 0,
+        `${t.appels().reservation || 0} appels`);
+      t.verifier('le lecteur de légendes ne l\'est pas', !(t.appels().legende > 0),
+        `${t.appels().legende || 0} appels`);
+    } },
+
   // ── Ce qui est arrivé en août 2026 et n'était couvert par rien ─────────────
 
   { groupe: 'Documents', nom: 'Attacher un billet au voyage', depart: 'voyage',

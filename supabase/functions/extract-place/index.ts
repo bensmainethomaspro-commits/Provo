@@ -674,10 +674,24 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
   let title = cleanTitle(locationHint) || cleanTitle(caption);
   let category = categoryFromHashtags(caption) || "fun";
 
+  // Dernier recours : lire le nom sur la couverture. On n'y vient que sans
+  // légende — c'est-à-dire, depuis que TikTok l'a fermée, presque toujours.
+  // Sans ça, la fiche ne porterait que le nom du compte.
+  let vu: { title: string; category: string; location: string } | null = null;
+  if (permisIA && !title && thumb) {
+    vu = await lireCouverture(thumb).catch(() => null);
+    if (vu) {
+      title = vu.title;
+      if (vu.category) category = vu.category;
+    }
+  }
+
   // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
   // déjà « 📍 Bouillon Chartier, Paris » se lit sans lui, et chaque appel coûte.
+  // …et jamais sur une légende vide : depuis que TikTok les a fermées, c'est
+  // le cas courant, et c'était un appel payant pour classer une chaîne vide.
   const reglesSuffisent = Boolean(locationHint) && !captionLooksLikeSentence(title);
-  const ai = (permisIA && !reglesSuffisent)
+  const ai = (permisIA && !reglesSuffisent && caption)
     ? await classifyWithLLM(caption, "tiktok").catch(() => null)
     : null;
   if (ai) {
@@ -706,12 +720,20 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     notes: caption ? caption.slice(0, 400) : "",
     source: "tiktok",
     ...(modeleActif ? { modele: true } : {}),
+    // D'où vient le titre affiché : « lu sur l'image, donc à vérifier ». Le
+    // client s'en sert pour le dire au lieu de le taire. On ne le revendique
+    // pas si la légende a finalement fourni un meilleur titre juste au-dessus.
+    ...(vu && !ai?.title ? { luSurImage: true } : {}),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
   // Localisation : 1) lieu suggéré par l'IA ou repéré (📍 / "à …") dans la
   // légende, 2) sinon, hashtags qui géocodent vers un vrai lieu (#lisbonne…).
-  const geoQuery = (ai?.location) || locationHint;
+  // `vu.location` seulement, jamais `vu.title` seul : géocoder « Deoun » sans
+  // ville depuis le serveur, qui ignore la destination du voyage, ramène
+  // n'importe quel homonyme du monde. Le client, lui, connaît la destination
+  // et refait la recherche située — une adresse fausse est pire qu'absente.
+  const geoQuery = (ai?.location) || locationHint || vu?.location || "";
   let place = geoQuery ? await geocode(geoQuery) : null;
   // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
   // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
@@ -800,6 +822,112 @@ function origineAutorisee(req: Request): boolean {
   return ORIGINES_AUTORISEES.some((re) => re.test(o));
 }
 
+/**
+ * Lire le NOM du lieu sur l'image de couverture d'un post.
+ *
+ * Dernier recours, et il a une raison d'être précise : depuis le 9 août 2026,
+ * TikTok ne sert la légende à personne — ni par oEmbed (400 partout, y compris
+ * sur des vidéos publiques célèbres), ni dans la page servie aux robots des
+ * messageries. Il ne reste que la couverture. Or un carrousel de restaurant
+ * affiche presque toujours le nom en surimpression : c'est écrit à l'écran,
+ * il suffit de le lire.
+ *
+ * Trois garde-fous, les mêmes que pour la légende :
+ *   1. Seules les origines de l'app déclenchent l'appel (clé payante).
+ *   2. On n'appelle qu'en dernier — si une légende avait suffi, on ne vient
+ *      jamais ici.
+ *   3. Un doute vaut un refus : `confiance: "basse"` ne nomme rien. Une fiche
+ *      qui porte un faux nom est pire qu'une fiche à compléter, parce qu'on ne
+ *      la vérifie plus.
+ */
+const COUVERTURE_MAX = 1_500_000; // ~1,5 Mo : au-delà, ce n'est plus une vignette
+
+async function lireCouverture(imageUrl: string) {
+  const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
+  if (!key || !imageUrl) return null;
+
+  // 1 · Récupérer l'image. Mesuré sur une couverture TikTok : JPEG, 84 ko.
+  let base64 = "", media = "image/jpeg";
+  {
+    const { signal, clear } = withTimeout(10000);
+    try {
+      const r = await fetch(imageUrl, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal });
+      clear();
+      if (!r.ok) return null;
+      const type = (r.headers.get("content-type") || "").split(";")[0].trim();
+      if (!["image/jpeg", "image/png", "image/webp"].includes(type)) return null;
+      media = type;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (!buf.length || buf.length > COUVERTURE_MAX) return null;
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 0x8000) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      }
+      base64 = btoa(bin);
+    } catch {
+      clear();
+      return null;
+    }
+  }
+
+  // 2 · Lire ce qui est écrit dessus.
+  const { signal, clear } = withTimeout(15000);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal,
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        system:
+          "Tu regardes l'image de couverture d'un post de réseau social sur un " +
+          "voyage. Tu cherches UNIQUEMENT le nom d'un lieu réel — restaurant, " +
+          "café, musée, plage, boutique — écrit sur l'image ou clairement " +
+          "identifiable par une enseigne visible.\n" +
+          "Réponds UNIQUEMENT par un objet JSON compact :\n" +
+          '{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
+          '|"repos"|"trajet"|"fun","location":string,"confiance":"haute"|"basse"}\n' +
+          "title = le nom tel qu'on le chercherait sur une carte. Jamais une " +
+          "phrase, jamais un slogan, jamais un plat, jamais un nom de compte.\n" +
+          "location = « Nom, Ville, Pays » si la ville est lisible, sinon \"\".\n" +
+          "confiance = \"basse\" dès que tu devines, dès que le texte est " +
+          "partiel, ou si tu ne vois qu'un plat, un paysage ou une personne.\n" +
+          "Si aucun nom de lieu n'est lisible, renvoie {}. Ne déduis JAMAIS un " +
+          "nom d'un décor : un lieu faux est pire que pas de lieu.",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: media, data: base64 } },
+            { type: "text", text: "Quel lieu est nommé sur cette image ?" },
+          ],
+        }],
+      }),
+    });
+    clear();
+    if (!r.ok) return null;
+    const d = await r.json();
+    const brut = (d?.content?.[0]?.text || "").match(/\{[\s\S]*\}/);
+    if (!brut) return null;
+    const o = JSON.parse(brut[0]);
+    const titre = typeof o?.title === "string" ? o.title.trim() : "";
+    // Le doute ne nomme rien.
+    if (!titre || o?.confiance === "basse") return null;
+    return {
+      title: titre,
+      category: VALID_CATEGORIES.includes(o?.category) ? o.category : "",
+      location: typeof o?.location === "string" ? o.location.trim() : "",
+    };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
 async function classifyWithLLM(text: string, _kind: string) {
   // Deux noms acceptés : le secret Supabase est parfois nommé d'après le
   // libellé de la clé côté Anthropic. Une clé posée sous le mauvais nom donne
@@ -884,12 +1012,45 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   let url = "";
+  let texte = "";
   try {
     const body = await req.json();
     url = String(body?.url || "").trim();
+    texte = String(body?.texte || "").trim();
   } catch {
     return json({ error: "invalid_body" }, 400);
   }
+
+  // Une légende collée à la main. C'est la porte de secours depuis que TikTok
+  // ne rend plus les siennes : l'utilisateur la copie dans l'app d'origine et
+  // la colle dans le MÊME champ que les liens — aucun écran, aucun bouton de
+  // plus. Le modèle la lit exactement comme il lisait celles qu'on récupérait
+  // tout seuls.
+  if (!url && texte) {
+    if (!origineAutorisee(req)) return json({ error: "origine_refusee" }, 403);
+    const ai = await classifyWithLLM(texte.slice(0, 1500), "legende").catch(() => null);
+    if (!ai?.title) return json({ error: "aucun_lieu" }, 200);
+    const place = ai.location ? await geocode(ai.location) : await geocode(ai.title);
+    const result: any = {
+      title: ai.title,
+      category: VALID_CATEGORIES.includes(ai.category) ? ai.category : "visite",
+      notes: texte.slice(0, 400),
+      source: "legende",
+      modele: true,
+    };
+    if (place) {
+      result.address = place.address;
+      result.lat = place.lat;
+      result.lon = place.lon;
+    }
+    const autres = (ai.lieux || []).slice(1).filter((l: any) => l?.title).map((l: any) => ({
+      title: l.title,
+      category: VALID_CATEGORIES.includes(l.category) ? l.category : "visite",
+      location: l.location || "",
+    }));
+    return json({ ok: true, result, autres }, 200);
+  }
+
   if (!url || !/^https?:\/\//i.test(url)) {
     return json({ error: "invalid_url" }, 400);
   }

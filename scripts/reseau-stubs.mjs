@@ -56,6 +56,14 @@ export const REPONSES = {
     link: 'https://cafecentral.wien', category: 'resto',
   } },
 
+  // Edge Function `extract-place`, corps `{ texte }` : une légende collée à la
+  // main. TikTok ne rend plus les siennes — ni par oEmbed, ni dans la page
+  // servie aux robots — donc le texte du post arrive par le presse-papier.
+  legende: { ok: true, result: {
+    title: 'Deoun', address: 'Neubaugasse 12, 1070 Wien, Autriche',
+    lat: 48.1985, lon: 16.3495, category: 'resto', source: 'legende',
+  } },
+
   // Edge Function `enrich-place` : ce que le site du lieu dit.
   enrichPlace: {
     horaires: 'Mo-Sa 08:00-21:00; Su 10:00-18:00',
@@ -130,6 +138,8 @@ export const VARIANTES = {
     },
     aucun: { ok: false },
   },
+  // Le modèle a lu le texte, mais n'y a trouvé aucun lieu nommé.
+  legende: { aucun: { ok: false } },
   nominatim: { aucun: [] },
   recu: { douteux: REPONSES.recuDouteux, illisible: REPONSES.recuIllisible,
     sansCle: { error: 'cle_absente' } },
@@ -247,7 +257,15 @@ export async function brancherReseau(page, base, plan = {}) {
   // chemin, sinon un plan de panne sur l'une couperait l'autre.
   await page.route('**/*.supabase.co/functions/v1/**', (route) => {
     const url = route.request().url();
-    if (url.includes('extract-place')) return servir(route, 'extractPlace', REPONSES.extractPlace);
+    if (url.includes('extract-place')) {
+      // Le même service lit un lien ET une légende collée. On les distingue au
+      // corps de la requête, sinon un parcours « la légende a bien été lue » se
+      // contenterait de l'appel que le lien déclenche déjà.
+      let corps = {};
+      try { corps = route.request().postDataJSON() || {}; } catch { /* pas du JSON */ }
+      if (corps.texte) return servir(route, 'legende', REPONSES.legende);
+      return servir(route, 'extractPlace', REPONSES.extractPlace);
+    }
     if (url.includes('enrich-place')) return servir(route, 'enrichPlace', REPONSES.enrichPlace);
     if (url.includes('read-receipt')) return servir(route, 'recu', REPONSES.recu);
     if (url.includes('read-booking')) return servir(route, 'reservation', REPONSES.reservation);
