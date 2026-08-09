@@ -267,7 +267,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         }
         // 1) server-side agent (best — resolves short links + classifies + geocodes)
         // 2) robust client extractor (TikTok oEmbed, Maps proxy chain, geocoding)
-        let result = await extractViaEdge(normalized);
+        let result = await extractViaEdge(normalized, tripDestination || '');
         if (!result) result = await extractPlaceClient(normalized);
 
         if (result && (result.title || result.lat != null)) {
