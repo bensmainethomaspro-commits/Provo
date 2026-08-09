@@ -31,6 +31,12 @@ const UA = "Provo-Travel-App/1.0 (place extractor)";
 // WhatsApp, Telegram et Discord passent ; Googlebot et Slackbot non.
 const UA_ROBOT_SOCIAL =
   "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
+// Un vrai navigateur mobile : c'est le seul agent auquel TikTok sert la page
+// d'intégration et le bloc de données inline. Il récolte le captcha sur la
+// page ordinaire — d'où deux agents, et non un.
+const UA_NAVIGATEUR =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 " +
+  "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const VALID_CATEGORIES = [
   "resto", "visite", "balade", "plage", "sport", "repos", "trajet", "fun",
 ];
@@ -617,47 +623,165 @@ async function pageRobotSocial(url: string): Promise<string> {
   }
 }
 
+/**
+ * Les phrases que TikTok sert à la place d'une légende. Mesuré le 9 août 2026 :
+ * `og:description` rend « TikTok | Make Your Day » sur un carrousel, et
+ * « Watch, follow, and discover more trending content. » sur une vidéo — du
+ * remplissage identique pour tout le catalogue.
+ *
+ * Les laisser passer coûtait deux fois : la fiche s'appelait « TikTok | Make
+ * Your Day », et surtout un titre, même faux, faisait sauter la lecture de la
+ * couverture — le seul échelon qui nomme encore le lieu.
+ */
+const LEGENDES_GENERIQUES = [
+  /^\s*tiktok\s*(?:[|·\-–—]\s*make your day\s*)?$/i,
+  /make your day/i,
+  /watch,? follow,? and discover more trending content/i,
+  /regardez,? suivez et découvrez/i,
+  /^\s*(?:log ?in|sign ?up|connexion|s'inscrire)\b/i,
+];
+const legendeGenerique = (t: string) => {
+  const s = (t || "").trim();
+  return !s || LEGENDES_GENERIQUES.some((re) => re.test(s));
+};
+
+const idVideoTikTok = (url: string) =>
+  (url.match(/\/(?:video|photo)\/(\d{6,})/) || [])[1] || "";
+
+/**
+ * Échelon — la page d'intégration `/embed/v2/{id}`. Elle existe pour être
+ * affichée dans un site tiers : c'est le seul endroit où TikTok a encore
+ * intérêt à servir la légende sans authentification.
+ */
+async function tiktokPageEmbed(id: string) {
+  if (!id) return null;
+  const { signal, clear } = withTimeout(9000);
+  try {
+    const r = await fetch(`https://www.tiktok.com/embed/v2/${id}`, {
+      headers: { "User-Agent": UA_NAVIGATEUR }, signal,
+    });
+    clear();
+    if (!r.ok) return null;
+    const h = await r.text();
+    const brut = (h.match(/"desc"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1] || "";
+    let caption = "";
+    try { caption = brut ? JSON.parse(`"${brut}"`) : ""; } catch { caption = ""; }
+    const author = (h.match(/"uniqueId"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1] || "";
+    if (!caption && !author) return null;
+    return { caption, author, thumb: "" };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+/**
+ * Échelon — le bloc de données que la page complète embarque pour s'hydrater.
+ * C'est la légende exacte, telle que l'application la connaît. Il faut se
+ * présenter en navigateur : l'agent du serveur reçoit un captcha.
+ */
+async function tiktokDonneesPage(url: string) {
+  const { signal, clear } = withTimeout(12000);
+  try {
+    const r = await fetch(url, {
+      headers: { "User-Agent": UA_NAVIGATEUR }, signal, redirect: "follow",
+    });
+    clear();
+    if (!r.ok) return null;
+    const h = await r.text();
+    if (looksLikeCaptcha(h) && !h.includes("__UNIVERSAL_DATA_FOR_REHYDRATION__")) return null;
+    const bloc =
+      (h.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/) || [])[1]
+      || (h.match(/<script id="SIGI_STATE"[^>]*>([\s\S]*?)<\/script>/) || [])[1];
+    if (!bloc) return null;
+    const d = JSON.parse(bloc);
+    const item = d?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct
+      || Object.values(d?.ItemModule || {})[0] as any;
+    if (!item) return null;
+    const caption = item.desc || "";
+    const author = item.author?.uniqueId || (typeof item.author === "string" ? item.author : "");
+    const thumb = item.video?.cover || item.video?.originCover || "";
+    if (!caption && !author) return null;
+    return { caption, author, thumb };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+/** Échelon de secours — la page servie aux robots des messageries. */
+async function tiktokRobotSocial(url: string) {
+  const social = await pageRobotSocial(url);
+  if (!social) return null;
+  const t = metaTag(social, "og:title");
+  // « TikTok · Avery | Biarritz & Travel » → « Avery | Biarritz & Travel »
+  const compte = t.replace(/^\s*TikTok\s*[·|\-–—]\s*/i, "").trim();
+  // La description est rendue telle quelle : c'est la boucle des échelons qui
+  // tranche ce qui est une vraie légende, en un seul endroit.
+  return {
+    caption: metaTag(social, "og:description") || "",
+    author: compte && !/^tiktok$/i.test(compte) ? compte : "",
+    thumb: metaTag(social, "og:image") || "",
+  };
+}
+
 async function handleTikTok(rawUrl: string, permisIA = false) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
   // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
   const bare = canonical.split("?")[0];
 
-  let caption = "", author = "", thumb = "";
-  // L'oEmbed est la seule voie fiable depuis un serveur : on l'essaie sur
-  // l'URL canonique, puis dépouillée, puis sur le lien brut.
-  for (const candidate of [...new Set([canonical, bare, rawUrl])]) {
-    const d = await tiktokOembed(candidate);
-    if (d) { caption = d.caption; author = d.author; thumb = d.thumb; break; }
-  }
+  let caption = "", author = "", thumb = "", etape = "";
 
-  // L'oEmbed de TikTok rend 400 depuis le 9 août 2026 — mesuré aussi sur deux
-  // vidéos publiques célèbres, donc ce n'est pas une histoire de carrousel :
-  // l'endpoint ne répond plus. Sans ce repli, toute fiche TikTok sortait en
-  // « Activité TikTok » avec le seul lien.
+  // La chaîne, du plus souhaitable au dernier recours. Chaque échelon est
+  // INDÉPENDANT : celui qui tombe ne fait pas tomber les suivants. C'est
+  // exactement ce qui manquait le 9 août 2026 — l'oEmbed s'est éteint (400 sur
+  // toutes les vidéos, y compris des comptes publics célèbres) et toute
+  // l'extraction est tombée avec lui, jusqu'à ce qu'un utilisateur le signale.
   //
-  // La page des robots sociaux ne rend pas la légende, mais elle rend le
-  // compte et la couverture — de quoi reconnaître l'idée dans la Réserve au
-  // lieu de fixer une ligne vide.
-  if (!caption && !author) {
-    const social = await pageRobotSocial(canonical);
-    if (social) {
-      const t = metaTag(social, "og:title");
-      // « TikTok · Avery | Biarritz & Travel » → « Avery | Biarritz & Travel »
-      const compte = t.replace(/^\s*TikTok\s*[·|\-–—]\s*/i, "").trim();
-      if (compte && !/^tiktok$/i.test(compte)) author = compte;
-      if (!thumb) thumb = metaTag(social, "og:image") || "";
-      // Certaines pages portent quand même une description : on la prend si
-      // elle est là, sans compter dessus.
-      const d = metaTag(social, "og:description");
-      if (d && d.length > 8) caption = d;
+  // `scripts/canari-extraction.mjs` mesure ces mêmes échelons tous les jours et
+  // ouvre une alerte quand il n'en reste plus que les derniers. Garder les deux
+  // listes dans le même ordre : le canari est l'alarme de cette échelle-ci.
+  const echelons: [string, () => Promise<
+    { caption: string; author: string; thumb: string } | null>][] = [
+    ["oembed", async () => {
+      // L'oEmbed n'aime pas les paramètres de suivi : on essaie l'URL
+      // canonique, puis dépouillée, puis le lien brut.
+      for (const c of [...new Set([canonical, bare, rawUrl])]) {
+        const d = await tiktokOembed(c);
+        if (d) return d;
+      }
+      return null;
+    }],
+    ["page-embed", () => tiktokPageEmbed(idVideoTikTok(canonical))],
+    ["donnees-page", () => tiktokDonneesPage(canonical)],
+    ["robot-social", () => tiktokRobotSocial(canonical)],
+  ];
+
+  for (const [nom, lire] of echelons) {
+    const d = await lire().catch(() => null);
+    if (!d) continue;
+    // Un échelon muet sur la légende peut quand même donner le compte ou la
+    // couverture : on prend ce qu'il a, et on continue à chercher le reste.
+    // Le filtre du remplissage est ici, au seul endroit qu'aucun échelon ne
+    // contourne : une phrase générique n'est pas une légende, et l'accepter
+    // ferait sauter la lecture de la couverture juste en dessous.
+    if (!caption && d.caption && !legendeGenerique(d.caption)) {
+      caption = d.caption;
+      etape = nom;
     }
+    if (!author && d.author) author = d.author;
+    if (!thumb && d.thumb) thumb = d.thumb;
+    // Une légende suffit : descendre plus bas ne coûterait que du temps.
+    if (caption) break;
   }
 
-  // Repli sur les balises og: — utile quand l'app tourne côté navigateur, mais
-  // inutilisable si TikTok a répondu par une page de vérification.
+  // Repli propre au navigateur : la page que `resolve` a déjà chargée. Depuis
+  // un serveur elle ne rend qu'un captcha, mais côté client elle est valable.
   if (!caption && !looksLikeCaptcha(pageHtml)) {
-    caption = metaTag(pageHtml, "og:description") || "";
+    const d = metaTag(pageHtml, "og:description") || "";
+    caption = legendeGenerique(d) ? "" : d;
+    if (caption) etape = "og-page";
     if (!author) {
       const t = metaTag(pageHtml, "og:title");
       const m = t.match(/^(.+?)\s+(?:on|sur)\s+TikTok/i);
@@ -724,6 +848,10 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     // client s'en sert pour le dire au lieu de le taire. On ne le revendique
     // pas si la légende a finalement fourni un meilleur titre juste au-dessus.
     ...(vu && !ai?.title ? { luSurImage: true } : {}),
+    // Quel échelon a fourni la légende — « couverture » quand il n'y en avait
+    // aucune et que le nom a été lu sur l'image. Sans ce témoin, une chaîne
+    // qui se dégrade en silence reste invisible jusqu'à la panne totale.
+    etape: etape || (vu ? "couverture" : "aucune"),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 

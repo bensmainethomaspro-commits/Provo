@@ -75,6 +75,29 @@ const baliseMeta = (html, prop) => {
 const idVideo = (url) => (url.match(/\/(?:video|photo)\/(\d{6,})/) || [])[1] || '';
 
 /**
+ * Le remplissage que TikTok sert à la place d'une légende — « TikTok | Make
+ * Your Day », « Watch, follow, and discover more trending content. » Identique
+ * pour tout le catalogue, donc sans valeur.
+ *
+ * Le canari doit l'écarter pour la même raison que la fonction Edge : compter
+ * ces phrases comme des légendes ferait passer la chaîne pour vivante alors
+ * qu'aucun échelon ne nomme plus rien. Une alarme qui rassure à tort est pire
+ * que pas d'alarme. Garder cette liste alignée sur `LEGENDES_GENERIQUES` dans
+ * `supabase/functions/extract-place/index.ts`.
+ */
+const GENERIQUES = [
+  /^\s*tiktok\s*(?:[|·\-–—]\s*make your day\s*)?$/i,
+  /make your day/i,
+  /watch,? follow,? and discover more trending content/i,
+  /regardez,? suivez et découvrez/i,
+  /^\s*(?:log ?in|sign ?up|connexion|s'inscrire)\b/i,
+];
+const legendeGenerique = (t) => {
+  const s = (t || '').trim();
+  return !s || GENERIQUES.some(re => re.test(s));
+};
+
+/**
  * Les échelons, du plus souhaitable au dernier recours. L'ordre EST la
  * politique : chacun ne sert que si les précédents se taisent.
  *
@@ -192,16 +215,25 @@ async function mesurer(temoin) {
     let out;
     try { out = await e.lire({ canonique, id, brut: temoin.url }); }
     catch (err) { out = { echec: String(err.message || err) }; }
+    const generique = legendeGenerique(out.legende);
     resultats.push({
       echelon: e.nom, quoi: e.quoi, secours: !!e.secours, ms: Date.now() - t0,
-      legende: (out.legende || '').slice(0, 120),
+      // Une phrase générique n'est pas une légende : on la montre pour qu'on
+      // sache ce qui a été servi, sans la compter comme un échelon vivant.
+      legende: generique ? '' : (out.legende || '').slice(0, 120),
+      remplissage: generique && out.legende ? out.legende.slice(0, 60) : '',
       compte: out.compte || '', couverture: out.couverture || '', echec: out.echec || '',
     });
   }
 
   const image = resultats.map(x => x.couverture).find(Boolean) || '';
   return {
-    temoin: temoin.nom, url: temoin.url, resolu: canonique, id, absent,
+    temoin: temoin.nom, url: temoin.url, resolu: canonique, id,
+    // Un captcha n'est PAS une disparition : la page des robots répond 200 et
+    // porte les balises. Tant qu'elle donne une couverture ou un compte, la
+    // vidéo existe — confondre les deux ferait crier « témoins disparus »
+    // chaque fois que TikTok se méfie d'une adresse de centre de données.
+    absent: absent && !resultats.some(r => r.couverture || r.compte),
     echelons: resultats,
     couverture: await couvertureUtilisable(image),
   };
@@ -258,6 +290,7 @@ if (JSON_SEUL) {
       const etat = e.echec ? '✗' : (e.legende ? '✓' : '~');
       const dit = e.echec ? e.echec
         : e.legende ? `« ${e.legende} »`
+        : e.remplissage ? `remplissage générique : « ${e.remplissage} »`
         : e.compte ? `compte seul : ${e.compte}` : 'rien';
       console.log(`  ${etat} ${e.echelon.padEnd(14)}${String(e.ms).padStart(5)} ms  ${dit}`);
     }
