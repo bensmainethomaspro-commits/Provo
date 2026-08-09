@@ -130,3 +130,54 @@ jobs:
           except Exception:
               print('   corps brut :', open('/tmp/edge.json').read()[:300])
           "
+
+      # ── TikTok : quelles voies restent ouvertes ? ───────────────────────────
+      # Mesuré le 9 août 2026 : l'oEmbed rend 400 sur un lien /photo/ (carrousel
+      # d'images), et la page sert un captcha sans balise og:. Ces étapes
+      # cherchent ce qui répond ENCORE — un contrôle sur une vidéo classique,
+      # puis les agents que TikTok sert aux robots sociaux pour que les liens
+      # se déplient dans les messageries.
+      - name: G · TikTok — contrôle sur une vidéo classique
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          for V in \
+            "https://www.tiktok.com/@nasa/video/7260600939500342574" \
+            "https://www.tiktok.com/@khaby.lame/video/7137423965982510342" ; do
+            E=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$V")
+            C=$(curl -sS -o /tmp/v.json -w '%{http_code}' --max-time 20 "https://www.tiktok.com/oembed?url=$E" || echo ERR)
+            T=$(python3 -c "
+          import json
+          try: print((json.load(open('/tmp/v.json')).get('title') or '(vide)')[:90])
+          except Exception: print('(pas de JSON)')
+          ")
+            echo "oEmbed $C — $T   ← $V"
+          done
+
+      - name: H · TikTok — quel agent obtient les balises og: ?
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          echo "cible : $FINAL"
+          declare -a AGENTS=(
+            "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+            "Twitterbot/1.0"
+            "WhatsApp/2.23.20.0"
+            "TelegramBot (like TwitterBot)"
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+            "Discordbot/2.0; +https://discordapp.com"
+            "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          )
+          for A in "${AGENTS[@]}"; do
+            C=$(curl -sSL -A "$A" -o /tmp/ua.html -w '%{http_code}' --max-time 25 "$FINAL" 2>/dev/null || echo ERR)
+            S=$(wc -c < /tmp/ua.html)
+            TITRE=$(grep -oE '<meta[^>]+property="og:title"[^>]*content="[^"]*"' /tmp/ua.html | head -1 | sed -E 's/.*content="([^"]*)".*/\1/' | head -c 80)
+            DESC=$(grep -oE '<meta[^>]+property="og:description"[^>]*content="[^"]*"' /tmp/ua.html | head -1 | sed -E 's/.*content="([^"]*)".*/\1/' | head -c 120)
+            CAP=$(grep -oim1 'captcha' /tmp/ua.html || true)
+            echo "── $C  ${S}o  captcha:${CAP:-non}"
+            echo "     ${A:0:38}"
+            echo "     og:title = ${TITRE:-—}"
+            echo "     og:desc  = ${DESC:-—}"
+          done
