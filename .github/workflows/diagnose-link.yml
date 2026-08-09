@@ -213,3 +213,23 @@ jobs:
               i = h.find(mot)
               print(f'  {mot:10}', ('trouvé @' + str(i) + ' → …' + h[max(0,i-90):i+110].replace(chr(10),' ')) if i >= 0 else '—')
           PY2
+
+      - name: "J · TikTok — la vignette de couverture est-elle exploitable ?"
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          IMG=$(python3 -c "
+          import re, html
+          h = open('/tmp/fb.html', encoding='utf-8', errors='replace').read()
+          m = re.search(r'<meta[^>]+og:image[\"\']?[^>]*content=[\"\']([^\"\']+)', h)
+          print(html.unescape(m.group(1)) if m else '')
+          ")
+          echo "og:image = ${IMG:0:120}…"
+          if [ -z "$IMG" ]; then echo "  aucune vignette"; exit 0; fi
+          C=$(curl -sSL -o /tmp/cover.bin -w '%{http_code} %{content_type} %{size_download}' --max-time 25 "$IMG")
+          echo "  → $C octets"
+          python3 -c "
+          d = open('/tmp/cover.bin','rb').read(16)
+          sig = ('JPEG' if d[:3]==b'\xff\xd8\xff' else 'PNG' if d[:8]==b'\x89PNG\r\n\x1a\n'
+                 else 'WEBP' if d[:4]==b'RIFF' and d[8:12]==b'WEBP' else 'inconnu')
+          print('  format :', sig)
+          "
