@@ -725,6 +725,76 @@ async function tiktokRobotSocial(url: string) {
   };
 }
 
+/**
+ * Le lecteur tiers rend la page en markdown. La légende n'y est pas en clair —
+ * elle est dans le TEXTE ALTERNATIF des images, sous cette forme (mesurée) :
+ *
+ *   ![Image 1: 835 Likes, 6 Comments. image posted by  () on : “📍DEOUN | …”](…)
+ *
+ * Les posts vidéo en écrivent une variante (« TikTok video from X (@y). … »),
+ * d'où les deux lectures : d'abord ce qui est entre guillemets, sinon ce qui
+ * suit le décompte de commentaires, débarrassé de l'attribution.
+ */
+function legendeDansTexteAlternatif(markdown: string) {
+  for (const m of markdown.matchAll(/!\[([^\]]{10,900})\]\(([^)\s]*)\)/g)) {
+    const [, alt, image] = m;
+    // Forme photo : la légende est citée, guillemets courbes ou droits.
+    let t = (alt.match(/[“"]([\s\S]{3,600}?)[”"]\s*\.?\s*$/) || [])[1] || "";
+    if (!t) {
+      // Forme vidéo : tout ce qui suit le décompte, sans l'attribution.
+      const apres = alt.replace(/^[\s\S]*?(?:Comments?|commentaires?)\s*[.:]\s*/i, "");
+      if (apres !== alt) {
+        t = apres
+          .replace(/^(?:image|video|vidéo)?\s*posted by[^:]{0,90}:\s*/i, "")
+          .replace(/^TikTok (?:video|photo) (?:from|de)[^.]{0,90}\.\s*/i, "");
+      }
+    }
+    t = t.trim();
+    // Huit caractères : en dessous, ce n'est pas une légende mais un reliquat
+    // de nettoyage, et le prendre ferait sauter les échelons suivants.
+    if (t.length >= 8 && !legendeGenerique(t)) return { caption: t, image };
+  }
+  return null;
+}
+
+/**
+ * Échelon — un lecteur tiers va chercher la page à notre place.
+ *
+ * Il la récupère depuis SON infrastructure, que TikTok ne traite pas en centre
+ * de données : là où notre serveur reçoit un captcha, lui reçoit la page, et
+ * il nous la rend rendue. Mesuré le 9 août 2026, c'est le seul chemin gratuit
+ * qui traverse le mur depuis un serveur — donc le seul qui serve un iPhone
+ * sans raccourci ni application installée, sur un simple lien collé.
+ *
+ * Lui demander le HTML brut (`x-return-format: html`) ramène le captcha : ce
+ * n'est pas la récupération qui passe, c'est le rendu. Ne pas « optimiser »
+ * cet échelon en réclamant la source.
+ *
+ * Cadeau annexe : les images du markdown sont les vraies photos du post
+ * (`~tplv-photomode-image`), sans l'incrustation du bouton ▶ qui rend la
+ * vignette de partage illisible.
+ */
+async function tiktokLecteurTiers(url: string) {
+  const propre = (url || "").split("?")[0];
+  if (!/^https?:\/\//.test(propre)) return null;
+  const { signal, clear } = withTimeout(25000);
+  try {
+    const r = await fetch(`https://r.jina.ai/${propre}`, { signal });
+    clear();
+    if (!r.ok) return null;
+    const t = await r.text();
+    const lu = legendeDansTexteAlternatif(t);
+    // Le compte : jina annonce l'URL qu'il a réellement lue, laquelle porte
+    // le pseudo. Plus sûr que le titre, qui est le nom d'affichage.
+    const author = (t.match(/tiktok\.com\/@([\w.\-]+)/) || [])[1] || "";
+    if (!lu && !author) return null;
+    return { caption: lu?.caption || "", author, thumb: lu?.image || "" };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
 async function handleTikTok(rawUrl: string, permisIA = false, destination = "") {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
@@ -756,6 +826,7 @@ async function handleTikTok(rawUrl: string, permisIA = false, destination = "") 
     ["page-embed", () => tiktokPageEmbed(idVideoTikTok(canonical))],
     ["donnees-page", () => tiktokDonneesPage(canonical)],
     ["robot-social", () => tiktokRobotSocial(canonical)],
+    ["lecteur-tiers", () => tiktokLecteurTiers(canonical)],
   ];
 
   for (const [nom, lire] of echelons) {
@@ -771,7 +842,11 @@ async function handleTikTok(rawUrl: string, permisIA = false, destination = "") 
       etape = nom;
     }
     if (!author && d.author) author = d.author;
-    if (!thumb && d.thumb) thumb = d.thumb;
+    // Une vignette barrée du bouton ▶ n'est ni lisible ni belle : un échelon
+    // plus bas qui rend la vraie photo la remplace, même s'il arrive après.
+    if (d.thumb && (!thumb || (VIGNETTE_INUTILISABLE.test(thumb) && !VIGNETTE_INUTILISABLE.test(d.thumb)))) {
+      thumb = d.thumb;
+    }
     // Une légende suffit : descendre plus bas ne coûterait que du temps.
     if (caption) break;
   }
