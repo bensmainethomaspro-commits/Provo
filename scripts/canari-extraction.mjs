@@ -32,6 +32,11 @@ const UA_NAVIGATEUR =
 const UA_ROBOT_SOCIAL =
   'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
 
+// La fonction déployée, et la clé PUBLIABLE — celle que le navigateur porte
+// déjà. Aucun secret n'a sa place dans un script qui tourne en clair.
+const FONCTION = 'https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place';
+const CLE_PUBLIABLE = 'sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD';
+
 /**
  * Les liens de contrôle. Deux exigences contradictoires : ils doivent rester
  * en ligne longtemps (donc des comptes institutionnels), et ressembler à ce
@@ -244,7 +249,7 @@ async function mesurer(temoin) {
  * « reste-t-il de quoi NOMMER un lieu ». Une légende nomme ; une couverture se
  * fait lire ; un compte, jamais — « Idée de @avery » n'est pas un lieu.
  */
-function juger(mesures) {
+function juger(mesures, modele) {
   const vivantes = mesures.filter(m => !m.absent);
   if (!vivantes.length) {
     return { etat: 'orange', resume: 'tous les liens témoins ont disparu — à remplacer' };
@@ -263,8 +268,16 @@ function juger(mesures) {
     }
     // Aucune légende nulle part : il ne reste que la couverture à faire lire.
     if (m.couverture.ok) {
-      pire = pire === 'rouge' ? 'rouge' : 'orange';
-      soucis.push(`« ${m.temoin} » : aucune légende, l'app ne tient que sur la lecture d'image`);
+      // …encore faut-il que le modèle soit configuré pour la lire. Sinon ce
+      // dernier échelon n'existe que sur le papier, et l'app est cassée.
+      if (modele?.connu && !modele.ok) {
+        pire = 'rouge';
+        soucis.push(`« ${m.temoin} » : aucune légende, et la clé du modèle n'est pas `
+          + `posée — la lecture de couverture ne peut pas prendre le relais`);
+      } else {
+        pire = pire === 'rouge' ? 'rouge' : 'orange';
+        soucis.push(`« ${m.temoin} » : aucune légende, l'app ne tient que sur la lecture d'image`);
+      }
     } else {
       pire = 'rouge';
       soucis.push(`« ${m.temoin} » : aucune légende ET pas de couverture lisible `
@@ -276,12 +289,46 @@ function juger(mesures) {
   return { etat: pire, resume: soucis.join(' · ') || 'la chaîne a de la marge' };
 }
 
+/**
+ * La clé du modèle est-elle posée sur la fonction déployée ?
+ *
+ * Ce n'est pas un détail d'exploitation : depuis que TikTok ne rend plus de
+ * légende, lire le nom sur la couverture est le SEUL échelon qui nomme encore
+ * un lieu — et il ne fonctionne pas sans clé. Une clé absente, révoquée ou
+ * expirée casse donc l'ajout par lien en silence. La sonde ne consomme rien :
+ * elle regarde la variable, elle n'appelle pas le modèle.
+ */
+async function modeleConfigure() {
+  const { signal, clear } = delai(15000);
+  try {
+    const r = await fetch(FONCTION, {
+      method: 'POST', signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${CLE_PUBLIABLE}`, apikey: CLE_PUBLIABLE,
+      },
+      body: JSON.stringify({ sante: true }),
+    });
+    clear();
+    if (!r.ok) return { connu: false, pourquoi: `HTTP ${r.status}` };
+    const d = await r.json();
+    // Une fonction pas encore redéployée ne connaît pas la sonde : elle répond
+    // autre chose. On ne conclut alors rien, plutôt que de crier au loup.
+    if (typeof d?.modele !== 'boolean') return { connu: false, pourquoi: 'sonde non déployée' };
+    return { connu: true, ok: d.modele };
+  } catch (e) {
+    clear();
+    return { connu: false, pourquoi: String(e.message || e) };
+  }
+}
+
 const mesures = [];
 for (const t of TEMOINS) mesures.push(await mesurer(t));
-const verdict = juger(mesures);
+const modele = await modeleConfigure();
+const verdict = juger(mesures, modele);
 
 if (JSON_SEUL) {
-  console.log(JSON.stringify({ verdict, mesures }, null, 2));
+  console.log(JSON.stringify({ verdict, modele, mesures }, null, 2));
 } else {
   for (const m of mesures) {
     console.log(`\n■ ${m.temoin}${m.absent ? '  (LIEN DISPARU)' : ''}`);
@@ -296,6 +343,12 @@ if (JSON_SEUL) {
     }
     console.log(`  ${m.couverture.ok ? '✓' : '✗'} couverture      ${m.couverture.pourquoi}`);
   }
+  console.log(`\n■ lecture de couverture (dernier échelon)`);
+  console.log(`  ${modele.connu ? (modele.ok ? '✓' : '✗') : '~'} clé du modèle   `
+    + `${modele.connu ? (modele.ok ? 'posée sur la fonction déployée'
+      : 'ABSENTE — cet échelon ne peut pas fonctionner')
+      : `état inconnu (${modele.pourquoi})`}`);
+
   const sceau = { vert: '🟢', orange: '🟠', rouge: '🔴' }[verdict.etat];
   console.log(`\n${sceau} ${verdict.etat.toUpperCase()} — ${verdict.resume}\n`);
 }

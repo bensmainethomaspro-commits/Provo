@@ -1141,12 +1141,28 @@ Deno.serve(async (req) => {
 
   let url = "";
   let texte = "";
+  let sante = false;
   try {
     const body = await req.json();
     url = String(body?.url || "").trim();
     texte = String(body?.texte || "").trim();
+    sante = body?.sante === true;
   } catch {
     return json({ error: "invalid_body" }, 400);
+  }
+
+  // Sonde de santé, pour le canari. Elle ne dit qu'une chose : la clé du
+  // modèle est-elle posée ? Sans elle, l'échelon de dernier recours — lire le
+  // nom sur la couverture — ne peut pas fonctionner, et c'est aujourd'hui le
+  // seul qui nomme encore un lieu TikTok. Une clé absente ou expirée doit donc
+  // déclencher une alerte, pas se découvrir le jour où quelqu'un ajoute un
+  // lien. Elle ne consomme rien : on regarde la variable, on n'appelle pas.
+  if (sante) {
+    return json({
+      ok: true,
+      modele: Boolean(
+        Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB")),
+    });
   }
 
   // Une légende collée à la main. C'est la porte de secours depuis que TikTok
