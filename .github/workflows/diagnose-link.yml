@@ -344,8 +344,16 @@ jobs:
           import sys, subprocess, urllib.parse, re
           u = sys.argv[1].split('?')[0]
           e = urllib.parse.quote(u, safe='')
+          # Le canari a reçu 403 en 14 ms là où ce curl-ci reçoit 200. Un rejet
+          # aussi rapide vient de la bordure, pas du fond : on isole donc ce qui
+          # change entre les deux appels — l'agent annoncé, et rien d'autre.
+          NAVIGATEUR = ('User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+                        'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1')
           services = [
               ('jina',       f'https://r.jina.ai/{u}', []),
+              ('jina-safari', f'https://r.jina.ai/{u}', [NAVIGATEUR]),
+              ('jina-deno',  f'https://r.jina.ai/{u}', ['User-Agent: Deno/2.0']),
+              ('jina-bis',   f'https://r.jina.ai/{u}', []),
               ('jina-html',  f'https://r.jina.ai/{u}', ['x-return-format: html']),
               ('allorigins', f'https://api.allorigins.win/raw?url={e}', []),
               ('codetabs',   f'https://api.codetabs.com/v1/proxy?quest={e}', []),
