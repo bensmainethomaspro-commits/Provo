@@ -85,6 +85,79 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Une échelle d'échelons, et un canari qui prévient** (août 2026). Demandé
+  après le premier correctif TikTok : « trouve plutôt des solutions à long
+  terme […] des plans B ou plan C. Aussi je veux être prévenu dans ce genre de
+  situation. » Le reproche était juste : le correctif réparait le jour même,
+  sans rien changer à ce qui avait permis la panne.
+  L'extraction TikTok est devenue une **liste ordonnée d'échelons
+  indépendants** — `oembed`, `page-embed`, `donnees-page`, `robot-social`, puis
+  la lecture de couverture, puis la légende collée. Celui qui tombe ne fait
+  plus tomber les suivants, et la réponse porte `etape`, l'échelon qui a
+  répondu.
+  `scripts/canari-extraction.mjs` mesure ces mêmes échelons **séparément**,
+  tous les jours (`.github/workflows/canari-extraction.yml`), et ouvre une
+  **alerte GitHub** — une seule à la fois, refermée au retour au vert. Trois
+  états : vert (de la marge), **orange (on ne tient plus que sur les échelons
+  de secours)**, rouge (plus rien ne nomme le lieu). L'alarme sonne à l'orange :
+  c'est le seul moment où il est encore confortable d'agir.
+  Mesuré le 9 août 2026 sur un exécuteur, échelon par échelon :
+  `oembed` 400 · `page-embed` rend le compte, pas la légende · `donnees-page`
+  captcha depuis un centre de données · `robot-social` « TikTok | Make Your
+  Day » · couverture JPEG 82 ko. Verdict : **orange**, l'app ne tient que sur
+  la lecture d'image.
+  Ce que la mesure a rattrapé : le premier correctif était mort-né. La page de
+  secours renvoie « TikTok | Make Your Day », que le code prenait pour une
+  vraie légende — un titre, même faux, faisait sauter la lecture de couverture,
+  qui ne se déclenche que sur un manque. **Le repli existait, il n'était jamais
+  atteint.** Filtre du remplissage générique posé au seul endroit qu'aucun
+  échelon ne contourne, des deux côtés (fonction Edge et canari) : une alarme
+  qui rassure à tort est pire que pas d'alarme.
+  La fonction expose enfin une **sonde de santé** (`{ sante: true }`) qui dit
+  seulement si la clé du modèle est posée — sans rien consommer. Le canari
+  passe au **rouge** si la chaîne dépend de la couverture alors que la clé
+  manque : une clé révoquée ou expirée casserait l'ajout par lien en silence,
+  exactement comme l'oEmbed.
+  À faire quand ce sera fusionné : remplacer les liens témoins s'ils
+  disparaissent (le canari le signale au lieu de crier à la panne), et étendre
+  la même surveillance aux autres fournisseurs uniques — Nominatim, Overpass,
+  Open-Meteo, proxys CORS.
+
+- **TikTok ne rend plus la légende à personne — la couverture, puis le
+  presse-papier** (août 2026). Signalé par l'utilisateur : « les ajouts TikTok
+  (qui sont majoritaires) ne fonctionnent quasiment pas […] cela met "activité
+  TikTok" et juste le lien ». Mesuré sur un exécuteur GitHub, pas deviné :
+  l'**oEmbed renvoie 400 sur toutes les vidéos**, y compris des comptes publics
+  célèbres — ce n'est donc pas une régression de Provo, c'est TikTok qui a
+  fermé la porte. La page servie aux robots des messageries
+  (`facebookexternalhit`) rend encore `og:title` et `og:image`, mais **plus
+  aucune description**. Toute la chaîne reposait sur la légende.
+  Reste ce qu'on voit : **la vignette de couverture**. Un carrousel de
+  restaurant affiche presque toujours le nom en surimpression.
+  `lireCouverture()` la télécharge (≤ 1,5 Mo, JPEG/PNG/WebP seulement) et la
+  fait lire par le modèle. Trois garde-fous repris de la légende : origines de
+  l'app uniquement, appel en dernier recours seulement, et
+  **`confiance: "basse"` ne nomme rien** — une fiche qui porte un faux nom est
+  pire qu'une fiche à compléter, parce qu'on ne la vérifie plus.
+  Le serveur ne géocode que `vu.location`, **jamais `vu.title` seul** : il
+  ignore la destination du voyage, et « Deoun » sans ville ramène n'importe
+  quel homonyme du monde. Le client, lui, la connaît et refait la recherche
+  située — c'est déjà ce qu'il fait pour un lien partagé.
+  Quand la couverture ne suffit pas, la porte de secours est **le texte que la
+  personne a sous les yeux** : elle le colle dans le **même champ** que les
+  liens et les confirmations (aucun écran, aucun bouton de plus — règle A7), et
+  `extract-place` accepte désormais un corps `{ texte }`. Le message le dit au
+  lieu du vieux « vérifie le titre ».
+  Ordre des branches : **réservation d'abord, légende ensuite**. Les deux sont
+  du texte long collé ; la forme la plus précise (dossier, dates, heures)
+  tranche, la légende ramasse le reste. Parcours dédié pour l'interdire de
+  régresser — il vérifie que le lecteur de légendes n'est *pas* appelé.
+  Au passage : `classifyWithLLM` ne part plus sur une **légende vide**, ce qui
+  était devenu le cas courant — un appel payant pour classer une chaîne vide.
+  Non fait à dessein : lire la vidéo elle-même (coût sans rapport), et
+  transformer le champ en `<textarea>` (il reste le champ de recherche
+  principal ; les retours à la ligne collés y sont de toute façon aplatis).
+
 - **Le menu ⋯ d'une activité était prisonnier de sa carte** (août 2026).
   Signalé par un enregistrement d'écran : au tap sur ⋯, la fiche disparaissait
   et il ne restait que « Supprimer » et « Annuler ». Diagnostic de

@@ -23,6 +23,46 @@ export async function extractViaEdge(url) {
   }
 }
 
+/**
+ * Une légende collée à la main.
+ *
+ * TikTok ne rend plus les siennes — ni par oEmbed (400 partout depuis le
+ * 9 août 2026), ni dans la page servie aux robots des messageries. Quand la
+ * couverture ne suffit pas, il reste ce que l'utilisateur a sous les yeux :
+ * le texte du post. Il le colle dans le MÊME champ que les liens, et le
+ * modèle le lit comme il lisait les légendes qu'on récupérait tout seuls.
+ */
+export async function lireLegende(texte) {
+  try {
+    const { data, error } = await supabase.functions.invoke('extract-place', {
+      body: { texte },
+    });
+    if (error || !data?.ok || !data.result?.title) return null;
+    const autres = Array.isArray(data.autres) ? data.autres.filter(a => a?.title) : [];
+    return autres.length ? { ...data.result, autresLieux: autres } : data.result;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ce texte ressemble-t-il à une légende de réseau social plutôt qu'à une
+ * recherche de lieu ? On cherche « Deoun » en trois mots ; on colle une
+ * légende en plusieurs lignes, avec des hashtags et des émojis.
+ */
+export function ressembleAUneLegende(texte) {
+  const t = (texte || '').trim();
+  if (t.length < 45) return false;
+  if (/^https?:\/\//i.test(t)) return false;
+  const signes = [
+    /#[\p{L}\p{N}_]{3,}/u.test(t),                                   // hashtags
+    /[\p{Extended_Pictographic}]/u.test(t),                          // émojis
+    t.includes('\n'),                                                // plusieurs lignes
+    t.split(/\s+/).length >= 12,                                     // une phrase, pas un nom
+  ].filter(Boolean).length;
+  return signes >= 2;
+}
+
 // ── Client-side extractor (works without the Edge Function) ────────────────
 // Mirrors the server agent: cleans the caption, classifies it, and geocodes
 // the place. TikTok oEmbed and Nominatim are both CORS-accessible from the

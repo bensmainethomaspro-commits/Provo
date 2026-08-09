@@ -1,0 +1,93 @@
+name: Canari — chaîne d'extraction
+
+# En août 2026, l'oEmbed de TikTok s'est éteint sans prévenir. Toute la chaîne
+# reposait dessus, et personne ne l'a su avant qu'un utilisateur ne signale des
+# fiches vides. Ce canari existe pour que ça n'arrive plus : il mesure chaque
+# échelon tous les jours et ouvre une alerte AVANT que le dernier ne lâche.
+#
+#   vert   → rien à dire, et l'alerte ouverte est refermée.
+#   orange → l'app tient encore, mais sur ses échelons de secours. On prévient.
+#   rouge  → plus rien ne nomme le lieu. On prévient fort.
+
+on:
+  schedule:
+    # 6h17 UTC : une heure creuse, et décalée pour ne pas tomber avec la foule
+    # des tâches planifiées à l'heure pile (GitHub les retarde alors).
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: canari-extraction
+  cancel-in-progress: false
+
+jobs:
+  canari:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Mesurer chaque échelon de la chaîne
+        id: mesure
+        run: |
+          set +e
+          node scripts/canari-extraction.mjs 2>&1 | tee /tmp/canari.txt
+          CODE=${PIPESTATUS[0]}
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Canari — chaîne d'extraction"
+            echo '```'
+            cat /tmp/canari.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: Prévenir, ou refermer l'alerte
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.mesure.outputs.code }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITRE="Canari : la chaîne d'extraction de liens s'est dégradée"
+
+          # Le libellé sert à retrouver l'alerte en cours : une seule à la fois,
+          # sinon un incident de trois semaines fait vingt et un tickets.
+          gh label create canari --color B60205 \
+            --description "Alerte automatique du canari d'extraction" 2>/dev/null || true
+
+          NUM=$(gh issue list --state open --label canari --limit 1 --json number --jq '.[0].number // empty')
+          MESURES=$(cat /tmp/canari.txt)
+
+          if [ "$CODE" = "0" ]; then
+            if [ -n "$NUM" ]; then
+              printf '🟢 **Retour au vert.** La chaîne a de nouveau de la marge.\n\n<details><summary>Mesures</summary>\n\n```\n%s\n```\n\n</details>\n\n%s\n' \
+                "$MESURES" "$RUN" | gh issue comment "$NUM" --body-file -
+              gh issue close "$NUM"
+            fi
+            exit 0
+          fi
+
+          if [ "$CODE" = "2" ]; then
+            ETAT="🔴 **Rouge — l'ajout par lien est cassé.**"
+            QUOI="Plus aucun échelon ne nomme le lieu : les fiches sortent vides. À traiter tout de suite."
+          else
+            ETAT="🟠 **Orange — l'app ne tient plus que sur ses échelons de secours.**"
+            QUOI="Rien n'est cassé pour l'utilisateur aujourd'hui, mais la marge a disparu : la prochaine panne se verra. C'est le moment d'ajouter un échelon, pas quand tout sera rouge."
+          fi
+
+          CORPS=$(printf '%s\n\n%s\n\n<details open><summary>Ce que chaque échelon a répondu</summary>\n\n```\n%s\n```\n\n</details>\n\nMesuré par `scripts/canari-extraction.mjs` — %s\n' \
+            "$ETAT" "$QUOI" "$MESURES" "$RUN")
+
+          if [ -n "$NUM" ]; then
+            printf '%s' "$CORPS" | gh issue comment "$NUM" --body-file -
+          else
+            printf '%s' "$CORPS" | gh issue create --title "$TITRE" --label canari --body-file -
+          fi

@@ -62,3 +62,185 @@ jobs:
             HIT=$(grep -oE 'q=Agapii\+Mou|Agapii Mou|q%3DAgapii' /tmp/p 2>/dev/null | head -1)
             echo "$C  ${S}o  ${HIT:-—}  ${P%%\?*}"
           done
+
+      # ── TikTok : la chaîne complète, maillon par maillon ────────────────────
+      # Les liens TikTok sont le cas d'usage majoritaire. Tout repose sur
+      # l'oEmbed : sans légende, la fiche n'a ni nom, ni adresse, ni notes —
+      # elle sort en « Activité TikTok » avec le seul lien. Ces étapes disent
+      # lequel des maillons a lâché.
+      - name: D · TikTok — le lien court se résout-il ?
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+          UA: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+        run: |
+          echo "$URL"
+          FINAL=$(curl -sSL -A "$UA" -o /tmp/tk.html -w '%{url_effective}' --max-time 30 "$URL" || echo 'ÉCHEC')
+          echo "→ URL finale : $FINAL"
+          echo "$FINAL" > /tmp/final
+          echo "--- taille du HTML : $(wc -c < /tmp/tk.html) octets"
+          echo "--- captcha / vérification ?"
+          grep -oiE 'captcha|verify_?page|security check' /tmp/tk.html | sort -u | head -3 || echo "  (aucun marqueur)"
+          echo "--- balises og: présentes ?"
+          grep -oE '<meta[^>]+property="og:(title|description|image)"[^>]*>' /tmp/tk.html | head -3 || echo "  AUCUNE"
+
+      - name: E · TikTok — l'oEmbed répond-il, et avec quoi ?
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+          UA: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          BARE="${FINAL%%\?*}"
+          for CAND in "$FINAL" "$BARE" "$URL"; do
+            E=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$CAND")
+            C=$(curl -sS -A "$UA" -o /tmp/o.json -w '%{http_code}' --max-time 20 \
+                 "https://www.tiktok.com/oembed?url=$E" || echo ERR)
+            echo "── $C  sur  $CAND"
+            python3 - <<'PY' || echo "   (corps illisible)"
+          import json
+          try:
+              d = json.load(open('/tmp/o.json'))
+              print('   title  :', (d.get('title') or '(vide)')[:160])
+              print('   author :', d.get('author_name') or '(vide)')
+              print('   thumb  :', 'oui' if d.get('thumbnail_url') else 'non')
+          except Exception as e:
+              print('   pas de JSON :', open('/tmp/o.json').read()[:200].replace('\n',' '))
+          PY
+          done
+
+      - name: F · TikTok — ce que notre fonction Edge en fait
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -o /tmp/edge.json --max-time 60 -w '--- CODE: %{http_code} ---\n' \
+            -d "{\"url\":\"$URL\"}"
+          python3 -c "
+          import json
+          try:
+              d = json.load(open('/tmp/edge.json'))
+              for k in ('title','category','address','lat','lon','notes','source','modele','raison'):
+                  if k in d: print(f'   {k:9}:', str(d[k])[:140])
+              if not d: print('   réponse vide')
+          except Exception:
+              print('   corps brut :', open('/tmp/edge.json').read()[:300])
+          "
+
+      # ── TikTok : quelles voies restent ouvertes ? ───────────────────────────
+      # Mesuré le 9 août 2026 : l'oEmbed rend 400 sur un lien /photo/ (carrousel
+      # d'images), et la page sert un captcha sans balise og:. Ces étapes
+      # cherchent ce qui répond ENCORE — un contrôle sur une vidéo classique,
+      # puis les agents que TikTok sert aux robots sociaux pour que les liens
+      # se déplient dans les messageries.
+      - name: G · TikTok — contrôle sur une vidéo classique
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          for V in \
+            "https://www.tiktok.com/@nasa/video/7260600939500342574" \
+            "https://www.tiktok.com/@khaby.lame/video/7137423965982510342" ; do
+            E=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$V")
+            C=$(curl -sS -o /tmp/v.json -w '%{http_code}' --max-time 20 "https://www.tiktok.com/oembed?url=$E" || echo ERR)
+            T=$(python3 -c "
+          import json
+          try: print((json.load(open('/tmp/v.json')).get('title') or '(vide)')[:90])
+          except Exception: print('(pas de JSON)')
+          ")
+            echo "oEmbed $C — $T   ← $V"
+          done
+
+      - name: "H · TikTok — quel agent obtient les balises og: ?"
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          echo "cible : $FINAL"
+          declare -a AGENTS=(
+            "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+            "Twitterbot/1.0"
+            "WhatsApp/2.23.20.0"
+            "TelegramBot (like TwitterBot)"
+            "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+            "Discordbot/2.0; +https://discordapp.com"
+            "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          )
+          for A in "${AGENTS[@]}"; do
+            C=$(curl -sSL -A "$A" -o /tmp/ua.html -w '%{http_code}' --max-time 25 "$FINAL" 2>/dev/null || echo ERR)
+            S=$(wc -c < /tmp/ua.html)
+            TITRE=$(grep -oE '<meta[^>]+property="og:title"[^>]*content="[^"]*"' /tmp/ua.html | head -1 | sed -E 's/.*content="([^"]*)".*/\1/' | head -c 80)
+            DESC=$(grep -oE '<meta[^>]+property="og:description"[^>]*content="[^"]*"' /tmp/ua.html | head -1 | sed -E 's/.*content="([^"]*)".*/\1/' | head -c 120)
+            CAP=$(grep -oim1 'captcha' /tmp/ua.html || true)
+            echo "── $C  ${S}o  captcha:${CAP:-non}"
+            echo "     ${A:0:38}"
+            echo "     og:title = ${TITRE:-—}"
+            echo "     og:desc  = ${DESC:-—}"
+          done
+
+      - name: "I · TikTok — tout ce que la page des robots sociaux contient"
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          curl -sSL -A "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)" \
+            -o /tmp/fb.html --max-time 25 "$FINAL"
+          echo "=== toutes les balises meta ==="
+          python3 - <<'PY2'
+          import re, html
+          h = open('/tmp/fb.html', encoding='utf-8', errors='replace').read()
+          for m in re.findall(r'<meta[^>]*>', h):
+              nom = re.search(r'(?:property|name|itemprop)\s*=\s*["\']([^"\']+)', m)
+              val = re.search(r'content\s*=\s*["\']([^"\']*)', m)
+              if nom and val and val.group(1).strip():
+                  print(f"  {nom.group(1):28} {html.unescape(val.group(1))[:180]}")
+          print("=== <title> ===")
+          t = re.search(r'<title[^>]*>(.*?)</title>', h, re.S)
+          print(' ', html.unescape(t.group(1)).strip()[:250] if t else '(aucun)')
+          print("=== JSON-LD ===")
+          for b in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', h, re.S)[:3]:
+              print(' ', b.strip()[:400])
+          print("=== blocs de données inline (__UNIVERSAL_DATA / SIGI) ===")
+          for k in ('__UNIVERSAL_DATA_FOR_REHYDRATION__', 'SIGI_STATE', 'webapp.video-detail'):
+              print(f'  {k}:', 'présent' if k in h else 'absent')
+          print("=== la légende y est-elle en clair ? ===")
+          for mot in ('Deoun', 'deoun', 'barbecue', 'coréen', 'coreen', 'Biarritz'):
+              i = h.find(mot)
+              print(f'  {mot:10}', ('trouvé @' + str(i) + ' → …' + h[max(0,i-90):i+110].replace(chr(10),' ')) if i >= 0 else '—')
+          PY2
+
+      - name: "J · TikTok — la vignette de couverture est-elle exploitable ?"
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          IMG=$(python3 -c "
+          import re, html
+          h = open('/tmp/fb.html', encoding='utf-8', errors='replace').read()
+          m = re.search(r'<meta[^>]+og:image[\"\']?[^>]*content=[\"\']([^\"\']+)', h)
+          print(html.unescape(m.group(1)) if m else '')
+          ")
+          echo "og:image = ${IMG:0:120}…"
+          if [ -z "$IMG" ]; then echo "  aucune vignette"; exit 0; fi
+          C=$(curl -sSL -o /tmp/cover.bin -w '%{http_code} %{content_type} %{size_download}' --max-time 25 "$IMG")
+          echo "  → $C octets"
+          python3 -c "
+          d = open('/tmp/cover.bin','rb').read(16)
+          sig = ('JPEG' if d[:3]==b'\xff\xd8\xff' else 'PNG' if d[:8]==b'\x89PNG\r\n\x1a\n'
+                 else 'WEBP' if d[:4]==b'RIFF' and d[8:12]==b'WEBP' else 'inconnu')
+          print('  format :', sig)
+          "
+
+      - uses: actions/checkout@v4
+
+      - name: "K · Canari — l'état de chaque échelon de la chaîne"
+        # Le diagnostic répond « où ça casse pour CE lien » ; le canari répond
+        # « combien de marge reste-t-il ». Les deux servent, et le second est
+        # celui qui tourne tout seul tous les jours (canari-extraction.yml).
+        run: |
+          set +e
+          node scripts/canari-extraction.mjs
+          echo "--- code de sortie : $? (0 vert · 1 orange · 2 rouge) ---"

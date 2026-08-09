@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation} from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende } from '../utils/helpers';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 
@@ -264,7 +264,14 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           }
 
           if (result.source === 'tiktok' && result.lat == null) {
-            setImportMsg('Vidéo importée ✓ — vérifie le titre et ajoute un lieu si besoin.');
+            // TikTok ne rend plus la légende à personne (mesuré : oEmbed mort,
+            // page des robots sans description). Quand la couverture n'a pas
+            // suffi, la seule chose qui reste est sous les yeux de la personne
+            // — et le dire vaut mieux que « vérifie le titre ».
+            setImportMsg(result.luSurImage
+              ? `« ${result.title} » lu sur l'image ✓ — vérifie, TikTok ne donne plus le texte du post.`
+              : "Vidéo importée ✓ — TikTok ne donne plus le texte des posts. "
+                + "Copie la légende dans TikTok et colle-la ici : je remplis le reste.");
           }
           return;
         }
@@ -315,6 +322,47 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         setImportMsg(r?.error === 'cle_absente'
           ? "La lecture des réservations n'est pas configurée sur ce compte."
           : "Ce texte n'a pas pu être lu comme une réservation — remplis les détails à la main, rien n'est perdu.");
+        setDetailsOuverts(true);
+        return;
+      }
+
+      // Une légende de réseau social collée à la main. Même champ, même bouton
+      // que les liens et les confirmations — c'est la porte de secours depuis
+      // que TikTok a fermé la sienne, et elle ne coûte aucun élément d'écran.
+      //
+      // Elle passe APRÈS la réservation, jamais avant : les deux formes sont
+      // du texte long collé, et une confirmation se reconnaît à des indices
+      // bien plus précis (dossier, dates, heures). La forme la plus précise
+      // tranche d'abord ; la légende ramasse ce qui reste.
+      if (ressembleAUneLegende(raw)) {
+        const lu = await lireLegende(raw);
+        if (lu?.title) {
+          if (lu.autresLieux?.length) {
+            setAutresLieux(lu.autresLieux);
+            setLieuxRetenus(new Set(lu.autresLieux.map((_, i) => i)));
+          }
+          applyResult(lu, raw);
+          // Une légende donne un nom, presque jamais des coordonnées : on
+          // situe le lieu sur la destination, comme pour un lien partagé.
+          if (lu.lat == null) {
+            const q = tripDestination ? `${lu.title}, ${tripDestination}` : lu.title;
+            const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
+            if (found.length === 1) {
+              applyResult({ ...found[0], title: lu.title }, raw);
+            } else if (found.length > 1) {
+              setCandidates(found);
+              setImportMsg(`« ${lu.title} » lu dans la légende — précise lequel c'est.`);
+              return;
+            }
+          }
+          setImportMsg(`« ${lu.title} » lu dans la légende ✓`);
+          return;
+        }
+        // Le texte collé reste dans le champ — rien n'est perdu — et la fiche
+        // s'ouvre, comme pour une confirmation illisible : on ne renvoie pas
+        // vers « complète à la main » un formulaire qui n'est pas là.
+        setImportMsg("Aucun lieu nommé dans ce texte — écris le nom du lieu tout seul, "
+          + 'ou complète la fiche à la main.');
         setDetailsOuverts(true);
         return;
       }

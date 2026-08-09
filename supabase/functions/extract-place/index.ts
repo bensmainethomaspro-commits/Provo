@@ -23,6 +23,20 @@ const CORS = {
 };
 
 const UA = "Provo-Travel-App/1.0 (place extractor)";
+
+// TikTok sert un captcha aux agents ordinaires, mais une page propre de 16 ko
+// aux robots qui déplient les liens dans les messageries — mesuré depuis un
+// exécuteur le 9 août 2026 : 200, aucun captcha, avec og:title et og:image.
+// C'est la dernière porte ouverte depuis un serveur. Facebook, Twitter,
+// WhatsApp, Telegram et Discord passent ; Googlebot et Slackbot non.
+const UA_ROBOT_SOCIAL =
+  "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
+// Un vrai navigateur mobile : c'est le seul agent auquel TikTok sert la page
+// d'intégration et le bloc de données inline. Il récolte le captcha sur la
+// page ordinaire — d'où deux agents, et non un.
+const UA_NAVIGATEUR =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 " +
+  "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const VALID_CATEGORIES = [
   "resto", "visite", "balade", "plage", "sport", "repos", "trajet", "fun",
 ];
@@ -592,24 +606,182 @@ function looksLikeCaptcha(html: string): boolean {
   return !metaTag(html, "og:description") && !metaTag(html, "og:title");
 }
 
+// La page telle que TikTok la sert aux robots des messageries. Elle ne porte
+// PAS la légende — mesuré : ni og:description, ni JSON-LD, ni bloc de données
+// inline. Mais elle donne l'auteur et l'image de couverture, là où la page
+// ordinaire ne donne qu'un captcha.
+async function pageRobotSocial(url: string): Promise<string> {
+  const { signal, clear } = withTimeout(8000);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal, redirect: "follow" });
+    clear();
+    if (!r.ok) return "";
+    return await r.text();
+  } catch {
+    clear();
+    return "";
+  }
+}
+
+/**
+ * Les phrases que TikTok sert à la place d'une légende. Mesuré le 9 août 2026 :
+ * `og:description` rend « TikTok | Make Your Day » sur un carrousel, et
+ * « Watch, follow, and discover more trending content. » sur une vidéo — du
+ * remplissage identique pour tout le catalogue.
+ *
+ * Les laisser passer coûtait deux fois : la fiche s'appelait « TikTok | Make
+ * Your Day », et surtout un titre, même faux, faisait sauter la lecture de la
+ * couverture — le seul échelon qui nomme encore le lieu.
+ */
+const LEGENDES_GENERIQUES = [
+  /^\s*tiktok\s*(?:[|·\-–—]\s*make your day\s*)?$/i,
+  /make your day/i,
+  /watch,? follow,? and discover more trending content/i,
+  /regardez,? suivez et découvrez/i,
+  /^\s*(?:log ?in|sign ?up|connexion|s'inscrire)\b/i,
+];
+const legendeGenerique = (t: string) => {
+  const s = (t || "").trim();
+  return !s || LEGENDES_GENERIQUES.some((re) => re.test(s));
+};
+
+const idVideoTikTok = (url: string) =>
+  (url.match(/\/(?:video|photo)\/(\d{6,})/) || [])[1] || "";
+
+/**
+ * Échelon — la page d'intégration `/embed/v2/{id}`. Elle existe pour être
+ * affichée dans un site tiers : c'est le seul endroit où TikTok a encore
+ * intérêt à servir la légende sans authentification.
+ */
+async function tiktokPageEmbed(id: string) {
+  if (!id) return null;
+  const { signal, clear } = withTimeout(9000);
+  try {
+    const r = await fetch(`https://www.tiktok.com/embed/v2/${id}`, {
+      headers: { "User-Agent": UA_NAVIGATEUR }, signal,
+    });
+    clear();
+    if (!r.ok) return null;
+    const h = await r.text();
+    const brut = (h.match(/"desc"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1] || "";
+    let caption = "";
+    try { caption = brut ? JSON.parse(`"${brut}"`) : ""; } catch { caption = ""; }
+    const author = (h.match(/"uniqueId"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1] || "";
+    if (!caption && !author) return null;
+    return { caption, author, thumb: "" };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+/**
+ * Échelon — le bloc de données que la page complète embarque pour s'hydrater.
+ * C'est la légende exacte, telle que l'application la connaît. Il faut se
+ * présenter en navigateur : l'agent du serveur reçoit un captcha.
+ */
+async function tiktokDonneesPage(url: string) {
+  const { signal, clear } = withTimeout(12000);
+  try {
+    const r = await fetch(url, {
+      headers: { "User-Agent": UA_NAVIGATEUR }, signal, redirect: "follow",
+    });
+    clear();
+    if (!r.ok) return null;
+    const h = await r.text();
+    if (looksLikeCaptcha(h) && !h.includes("__UNIVERSAL_DATA_FOR_REHYDRATION__")) return null;
+    const bloc =
+      (h.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/) || [])[1]
+      || (h.match(/<script id="SIGI_STATE"[^>]*>([\s\S]*?)<\/script>/) || [])[1];
+    if (!bloc) return null;
+    const d = JSON.parse(bloc);
+    const item = d?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct
+      || Object.values(d?.ItemModule || {})[0] as any;
+    if (!item) return null;
+    const caption = item.desc || "";
+    const author = item.author?.uniqueId || (typeof item.author === "string" ? item.author : "");
+    const thumb = item.video?.cover || item.video?.originCover || "";
+    if (!caption && !author) return null;
+    return { caption, author, thumb };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+/** Échelon de secours — la page servie aux robots des messageries. */
+async function tiktokRobotSocial(url: string) {
+  const social = await pageRobotSocial(url);
+  if (!social) return null;
+  const t = metaTag(social, "og:title");
+  // « TikTok · Avery | Biarritz & Travel » → « Avery | Biarritz & Travel »
+  const compte = t.replace(/^\s*TikTok\s*[·|\-–—]\s*/i, "").trim();
+  // La description est rendue telle quelle : c'est la boucle des échelons qui
+  // tranche ce qui est une vraie légende, en un seul endroit.
+  return {
+    caption: metaTag(social, "og:description") || "",
+    author: compte && !/^tiktok$/i.test(compte) ? compte : "",
+    thumb: metaTag(social, "og:image") || "",
+  };
+}
+
 async function handleTikTok(rawUrl: string, permisIA = false) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
   // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
   const bare = canonical.split("?")[0];
 
-  let caption = "", author = "", thumb = "";
-  // L'oEmbed est la seule voie fiable depuis un serveur : on l'essaie sur
-  // l'URL canonique, puis dépouillée, puis sur le lien brut.
-  for (const candidate of [...new Set([canonical, bare, rawUrl])]) {
-    const d = await tiktokOembed(candidate);
-    if (d) { caption = d.caption; author = d.author; thumb = d.thumb; break; }
+  let caption = "", author = "", thumb = "", etape = "";
+
+  // La chaîne, du plus souhaitable au dernier recours. Chaque échelon est
+  // INDÉPENDANT : celui qui tombe ne fait pas tomber les suivants. C'est
+  // exactement ce qui manquait le 9 août 2026 — l'oEmbed s'est éteint (400 sur
+  // toutes les vidéos, y compris des comptes publics célèbres) et toute
+  // l'extraction est tombée avec lui, jusqu'à ce qu'un utilisateur le signale.
+  //
+  // `scripts/canari-extraction.mjs` mesure ces mêmes échelons tous les jours et
+  // ouvre une alerte quand il n'en reste plus que les derniers. Garder les deux
+  // listes dans le même ordre : le canari est l'alarme de cette échelle-ci.
+  const echelons: [string, () => Promise<
+    { caption: string; author: string; thumb: string } | null>][] = [
+    ["oembed", async () => {
+      // L'oEmbed n'aime pas les paramètres de suivi : on essaie l'URL
+      // canonique, puis dépouillée, puis le lien brut.
+      for (const c of [...new Set([canonical, bare, rawUrl])]) {
+        const d = await tiktokOembed(c);
+        if (d) return d;
+      }
+      return null;
+    }],
+    ["page-embed", () => tiktokPageEmbed(idVideoTikTok(canonical))],
+    ["donnees-page", () => tiktokDonneesPage(canonical)],
+    ["robot-social", () => tiktokRobotSocial(canonical)],
+  ];
+
+  for (const [nom, lire] of echelons) {
+    const d = await lire().catch(() => null);
+    if (!d) continue;
+    // Un échelon muet sur la légende peut quand même donner le compte ou la
+    // couverture : on prend ce qu'il a, et on continue à chercher le reste.
+    // Le filtre du remplissage est ici, au seul endroit qu'aucun échelon ne
+    // contourne : une phrase générique n'est pas une légende, et l'accepter
+    // ferait sauter la lecture de la couverture juste en dessous.
+    if (!caption && d.caption && !legendeGenerique(d.caption)) {
+      caption = d.caption;
+      etape = nom;
+    }
+    if (!author && d.author) author = d.author;
+    if (!thumb && d.thumb) thumb = d.thumb;
+    // Une légende suffit : descendre plus bas ne coûterait que du temps.
+    if (caption) break;
   }
 
-  // Repli sur les balises og: — utile quand l'app tourne côté navigateur, mais
-  // inutilisable si TikTok a répondu par une page de vérification.
+  // Repli propre au navigateur : la page que `resolve` a déjà chargée. Depuis
+  // un serveur elle ne rend qu'un captcha, mais côté client elle est valable.
   if (!caption && !looksLikeCaptcha(pageHtml)) {
-    caption = metaTag(pageHtml, "og:description") || "";
+    const d = metaTag(pageHtml, "og:description") || "";
+    caption = legendeGenerique(d) ? "" : d;
+    if (caption) etape = "og-page";
     if (!author) {
       const t = metaTag(pageHtml, "og:title");
       const m = t.match(/^(.+?)\s+(?:on|sur)\s+TikTok/i);
@@ -626,10 +798,24 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
   let title = cleanTitle(locationHint) || cleanTitle(caption);
   let category = categoryFromHashtags(caption) || "fun";
 
+  // Dernier recours : lire le nom sur la couverture. On n'y vient que sans
+  // légende — c'est-à-dire, depuis que TikTok l'a fermée, presque toujours.
+  // Sans ça, la fiche ne porterait que le nom du compte.
+  let vu: { title: string; category: string; location: string } | null = null;
+  if (permisIA && !title && thumb) {
+    vu = await lireCouverture(thumb).catch(() => null);
+    if (vu) {
+      title = vu.title;
+      if (vu.category) category = vu.category;
+    }
+  }
+
   // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
   // déjà « 📍 Bouillon Chartier, Paris » se lit sans lui, et chaque appel coûte.
+  // …et jamais sur une légende vide : depuis que TikTok les a fermées, c'est
+  // le cas courant, et c'était un appel payant pour classer une chaîne vide.
   const reglesSuffisent = Boolean(locationHint) && !captionLooksLikeSentence(title);
-  const ai = (permisIA && !reglesSuffisent)
+  const ai = (permisIA && !reglesSuffisent && caption)
     ? await classifyWithLLM(caption, "tiktok").catch(() => null)
     : null;
   if (ai) {
@@ -658,12 +844,24 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     notes: caption ? caption.slice(0, 400) : "",
     source: "tiktok",
     ...(modeleActif ? { modele: true } : {}),
+    // D'où vient le titre affiché : « lu sur l'image, donc à vérifier ». Le
+    // client s'en sert pour le dire au lieu de le taire. On ne le revendique
+    // pas si la légende a finalement fourni un meilleur titre juste au-dessus.
+    ...(vu && !ai?.title ? { luSurImage: true } : {}),
+    // Quel échelon a fourni la légende — « couverture » quand il n'y en avait
+    // aucune et que le nom a été lu sur l'image. Sans ce témoin, une chaîne
+    // qui se dégrade en silence reste invisible jusqu'à la panne totale.
+    etape: etape || (vu ? "couverture" : "aucune"),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
   // Localisation : 1) lieu suggéré par l'IA ou repéré (📍 / "à …") dans la
   // légende, 2) sinon, hashtags qui géocodent vers un vrai lieu (#lisbonne…).
-  const geoQuery = (ai?.location) || locationHint;
+  // `vu.location` seulement, jamais `vu.title` seul : géocoder « Deoun » sans
+  // ville depuis le serveur, qui ignore la destination du voyage, ramène
+  // n'importe quel homonyme du monde. Le client, lui, connaît la destination
+  // et refait la recherche située — une adresse fausse est pire qu'absente.
+  const geoQuery = (ai?.location) || locationHint || vu?.location || "";
   let place = geoQuery ? await geocode(geoQuery) : null;
   // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
   // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
@@ -752,6 +950,112 @@ function origineAutorisee(req: Request): boolean {
   return ORIGINES_AUTORISEES.some((re) => re.test(o));
 }
 
+/**
+ * Lire le NOM du lieu sur l'image de couverture d'un post.
+ *
+ * Dernier recours, et il a une raison d'être précise : depuis le 9 août 2026,
+ * TikTok ne sert la légende à personne — ni par oEmbed (400 partout, y compris
+ * sur des vidéos publiques célèbres), ni dans la page servie aux robots des
+ * messageries. Il ne reste que la couverture. Or un carrousel de restaurant
+ * affiche presque toujours le nom en surimpression : c'est écrit à l'écran,
+ * il suffit de le lire.
+ *
+ * Trois garde-fous, les mêmes que pour la légende :
+ *   1. Seules les origines de l'app déclenchent l'appel (clé payante).
+ *   2. On n'appelle qu'en dernier — si une légende avait suffi, on ne vient
+ *      jamais ici.
+ *   3. Un doute vaut un refus : `confiance: "basse"` ne nomme rien. Une fiche
+ *      qui porte un faux nom est pire qu'une fiche à compléter, parce qu'on ne
+ *      la vérifie plus.
+ */
+const COUVERTURE_MAX = 1_500_000; // ~1,5 Mo : au-delà, ce n'est plus une vignette
+
+async function lireCouverture(imageUrl: string) {
+  const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
+  if (!key || !imageUrl) return null;
+
+  // 1 · Récupérer l'image. Mesuré sur une couverture TikTok : JPEG, 84 ko.
+  let base64 = "", media = "image/jpeg";
+  {
+    const { signal, clear } = withTimeout(10000);
+    try {
+      const r = await fetch(imageUrl, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal });
+      clear();
+      if (!r.ok) return null;
+      const type = (r.headers.get("content-type") || "").split(";")[0].trim();
+      if (!["image/jpeg", "image/png", "image/webp"].includes(type)) return null;
+      media = type;
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (!buf.length || buf.length > COUVERTURE_MAX) return null;
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 0x8000) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      }
+      base64 = btoa(bin);
+    } catch {
+      clear();
+      return null;
+    }
+  }
+
+  // 2 · Lire ce qui est écrit dessus.
+  const { signal, clear } = withTimeout(15000);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal,
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        system:
+          "Tu regardes l'image de couverture d'un post de réseau social sur un " +
+          "voyage. Tu cherches UNIQUEMENT le nom d'un lieu réel — restaurant, " +
+          "café, musée, plage, boutique — écrit sur l'image ou clairement " +
+          "identifiable par une enseigne visible.\n" +
+          "Réponds UNIQUEMENT par un objet JSON compact :\n" +
+          '{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
+          '|"repos"|"trajet"|"fun","location":string,"confiance":"haute"|"basse"}\n' +
+          "title = le nom tel qu'on le chercherait sur une carte. Jamais une " +
+          "phrase, jamais un slogan, jamais un plat, jamais un nom de compte.\n" +
+          "location = « Nom, Ville, Pays » si la ville est lisible, sinon \"\".\n" +
+          "confiance = \"basse\" dès que tu devines, dès que le texte est " +
+          "partiel, ou si tu ne vois qu'un plat, un paysage ou une personne.\n" +
+          "Si aucun nom de lieu n'est lisible, renvoie {}. Ne déduis JAMAIS un " +
+          "nom d'un décor : un lieu faux est pire que pas de lieu.",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: media, data: base64 } },
+            { type: "text", text: "Quel lieu est nommé sur cette image ?" },
+          ],
+        }],
+      }),
+    });
+    clear();
+    if (!r.ok) return null;
+    const d = await r.json();
+    const brut = (d?.content?.[0]?.text || "").match(/\{[\s\S]*\}/);
+    if (!brut) return null;
+    const o = JSON.parse(brut[0]);
+    const titre = typeof o?.title === "string" ? o.title.trim() : "";
+    // Le doute ne nomme rien.
+    if (!titre || o?.confiance === "basse") return null;
+    return {
+      title: titre,
+      category: VALID_CATEGORIES.includes(o?.category) ? o.category : "",
+      location: typeof o?.location === "string" ? o.location.trim() : "",
+    };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
 async function classifyWithLLM(text: string, _kind: string) {
   // Deux noms acceptés : le secret Supabase est parfois nommé d'après le
   // libellé de la clé côté Anthropic. Une clé posée sous le mauvais nom donne
@@ -836,12 +1140,61 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   let url = "";
+  let texte = "";
+  let sante = false;
   try {
     const body = await req.json();
     url = String(body?.url || "").trim();
+    texte = String(body?.texte || "").trim();
+    sante = body?.sante === true;
   } catch {
     return json({ error: "invalid_body" }, 400);
   }
+
+  // Sonde de santé, pour le canari. Elle ne dit qu'une chose : la clé du
+  // modèle est-elle posée ? Sans elle, l'échelon de dernier recours — lire le
+  // nom sur la couverture — ne peut pas fonctionner, et c'est aujourd'hui le
+  // seul qui nomme encore un lieu TikTok. Une clé absente ou expirée doit donc
+  // déclencher une alerte, pas se découvrir le jour où quelqu'un ajoute un
+  // lien. Elle ne consomme rien : on regarde la variable, on n'appelle pas.
+  if (sante) {
+    return json({
+      ok: true,
+      modele: Boolean(
+        Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB")),
+    });
+  }
+
+  // Une légende collée à la main. C'est la porte de secours depuis que TikTok
+  // ne rend plus les siennes : l'utilisateur la copie dans l'app d'origine et
+  // la colle dans le MÊME champ que les liens — aucun écran, aucun bouton de
+  // plus. Le modèle la lit exactement comme il lisait celles qu'on récupérait
+  // tout seuls.
+  if (!url && texte) {
+    if (!origineAutorisee(req)) return json({ error: "origine_refusee" }, 403);
+    const ai = await classifyWithLLM(texte.slice(0, 1500), "legende").catch(() => null);
+    if (!ai?.title) return json({ error: "aucun_lieu" }, 200);
+    const place = ai.location ? await geocode(ai.location) : await geocode(ai.title);
+    const result: any = {
+      title: ai.title,
+      category: VALID_CATEGORIES.includes(ai.category) ? ai.category : "visite",
+      notes: texte.slice(0, 400),
+      source: "legende",
+      modele: true,
+    };
+    if (place) {
+      result.address = place.address;
+      result.lat = place.lat;
+      result.lon = place.lon;
+    }
+    const autres = (ai.lieux || []).slice(1).filter((l: any) => l?.title).map((l: any) => ({
+      title: l.title,
+      category: VALID_CATEGORIES.includes(l.category) ? l.category : "visite",
+      location: l.location || "",
+    }));
+    return json({ ok: true, result, autres }, 200);
+  }
+
   if (!url || !/^https?:\/\//i.test(url)) {
     return json({ error: "invalid_url" }, 400);
   }
