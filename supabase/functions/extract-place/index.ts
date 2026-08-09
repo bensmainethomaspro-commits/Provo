@@ -498,17 +498,22 @@ function trimNoise(s: string): string {
   return cut.replace(/\s+/g, " ").trim().replace(/[\s,\-–—]+$/, "");
 }
 
-function extractLocationHint(caption: string): string | null {
-  // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
-  // stays clean instead of swallowing the rest of the caption.
-  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
-  if (pin) return trimNoise(pin[1]) || null;
-
-  // Une adresse écrite en clair. Deux ordres selon la langue, et il faut les
-  // deux : « 12 rue de Rivoli » (numéro, voie, nom) en français, espagnol et
-  // italien ; « 3823 22nd Ave » (numéro, nom, voie) en anglais et allemand.
-  // Mesuré sur de vraies légendes TikTok — c'est le cas le plus fréquent, et
-  // l'ancienne règle le manquait en exigeant une majuscule après « at ».
+/**
+ * L'adresse écrite en clair dans la légende — pour GÉOCODER, jamais pour
+ * nommer. Les deux questions sont différentes et le même texte n'y répond pas :
+ * une fiche s'appelle « DEOUN », elle ne s'appelle pas « 9 Rue Harispe ».
+ *
+ * Mesuré le 9 août 2026 sur une légende qui portait les deux : « 📍DEOUN |
+ * Biarritz, France … Address: 9 Rue Harispe 64200 Biarritz ». Géocoder le nom
+ * seul a ramené un homonyme à Soorts-Hossegor, 30 km plus loin. Un numéro et
+ * un code postal ne se confondent avec rien ; un nom d'établissement, si — et
+ * le principe de ce fichier est qu'une adresse fausse est pire qu'absente.
+ *
+ * Deux ordres selon la langue, et il faut les deux : « 12 rue de Rivoli »
+ * (numéro, voie, nom) en français, espagnol et italien ; « 3823 22nd Ave »
+ * (numéro, nom, voie) en anglais et allemand.
+ */
+function extractAddressHint(caption: string): string | null {
   const addrFr = caption.match(
     new RegExp(
       `\\b(\\d{1,5}\\s*(?:bis|ter)?\\s+(?:${STREET_WORDS})\\s+[\\p{L}][\\p{L}\\p{N}\\s,'’.\\-]{2,45})`,
@@ -524,6 +529,39 @@ function extractLocationHint(caption: string): string | null {
     ),
   );
   if (addrEn) return trimNoise(addrEn[1]) || null;
+  return null;
+}
+
+/**
+ * L'épingle en entier, ville comprise : « 📍DEOUN | Biarritz, France » rend
+ * « DEOUN, Biarritz, France ». Pour SITUER, pas pour nommer — le séparateur
+ * « | » est fréquent dans ces épingles, et s'arrêter à lui ne laissait que le
+ * nom sans sa ville, que le géocodeur cherchait alors dans le monde entier.
+ */
+function epingleComplete(caption: string): string | null {
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-|·]{1,60})/u);
+  return pin ? trimNoise(pin[1].replace(/\s*[|·]\s*/g, ", ")) || null : null;
+}
+
+/**
+ * La meilleure requête pour le géocodeur, du plus précis au moins précis.
+ * Distincte de `extractLocationHint`, qui répond à « comment s'appelle ce
+ * lieu ? » : ici la question est « où est-il ? », et la meilleure réponse
+ * n'est pas la même chaîne.
+ */
+function extractGeoHint(caption: string): string | null {
+  return extractAddressHint(caption) || epingleComplete(caption)
+    || extractLocationHint(caption);
+}
+
+function extractLocationHint(caption: string): string | null {
+  // "📍 Place, City" — stop at the first emoji/symbol so the geocoder query
+  // stays clean instead of swallowing the rest of the caption.
+  const pin = caption.match(/📍\s*([\p{L}\p{N}][\p{L}\p{N}\s,&'’.\-]{1,60})/u);
+  if (pin) return trimNoise(pin[1]) || null;
+
+  const adresse = extractAddressHint(caption);
+  if (adresse) return adresse;
 
   // « rue de Rivoli, Paris » — la voie d'abord, le numéro absent.
   const street = caption.match(
@@ -725,7 +763,77 @@ async function tiktokRobotSocial(url: string) {
   };
 }
 
-async function handleTikTok(rawUrl: string, permisIA = false) {
+/**
+ * Le lecteur tiers rend la page en markdown. La légende n'y est pas en clair —
+ * elle est dans le TEXTE ALTERNATIF des images, sous cette forme (mesurée) :
+ *
+ *   ![Image 1: 835 Likes, 6 Comments. image posted by  () on : “📍DEOUN | …”](…)
+ *
+ * Les posts vidéo en écrivent une variante (« TikTok video from X (@y). … »),
+ * d'où les deux lectures : d'abord ce qui est entre guillemets, sinon ce qui
+ * suit le décompte de commentaires, débarrassé de l'attribution.
+ */
+function legendeDansTexteAlternatif(markdown: string) {
+  for (const m of markdown.matchAll(/!\[([^\]]{10,900})\]\(([^)\s]*)\)/g)) {
+    const [, alt, image] = m;
+    // Forme photo : la légende est citée, guillemets courbes ou droits.
+    let t = (alt.match(/[“"]([\s\S]{3,600}?)[”"]\s*\.?\s*$/) || [])[1] || "";
+    if (!t) {
+      // Forme vidéo : tout ce qui suit le décompte, sans l'attribution.
+      const apres = alt.replace(/^[\s\S]*?(?:Comments?|commentaires?)\s*[.:]\s*/i, "");
+      if (apres !== alt) {
+        t = apres
+          .replace(/^(?:image|video|vidéo)?\s*posted by[^:]{0,90}:\s*/i, "")
+          .replace(/^TikTok (?:video|photo) (?:from|de)[^.]{0,90}\.\s*/i, "");
+      }
+    }
+    t = t.trim();
+    // Huit caractères : en dessous, ce n'est pas une légende mais un reliquat
+    // de nettoyage, et le prendre ferait sauter les échelons suivants.
+    if (t.length >= 8 && !legendeGenerique(t)) return { caption: t, image };
+  }
+  return null;
+}
+
+/**
+ * Échelon — un lecteur tiers va chercher la page à notre place.
+ *
+ * Il la récupère depuis SON infrastructure, que TikTok ne traite pas en centre
+ * de données : là où notre serveur reçoit un captcha, lui reçoit la page, et
+ * il nous la rend rendue. Mesuré le 9 août 2026, c'est le seul chemin gratuit
+ * qui traverse le mur depuis un serveur — donc le seul qui serve un iPhone
+ * sans raccourci ni application installée, sur un simple lien collé.
+ *
+ * Lui demander le HTML brut (`x-return-format: html`) ramène le captcha : ce
+ * n'est pas la récupération qui passe, c'est le rendu. Ne pas « optimiser »
+ * cet échelon en réclamant la source.
+ *
+ * Cadeau annexe : les images du markdown sont les vraies photos du post
+ * (`~tplv-photomode-image`), sans l'incrustation du bouton ▶ qui rend la
+ * vignette de partage illisible.
+ */
+async function tiktokLecteurTiers(url: string) {
+  const propre = (url || "").split("?")[0];
+  if (!/^https?:\/\//.test(propre)) return null;
+  const { signal, clear } = withTimeout(25000);
+  try {
+    const r = await fetch(`https://r.jina.ai/${propre}`, { signal });
+    clear();
+    if (!r.ok) return null;
+    const t = await r.text();
+    const lu = legendeDansTexteAlternatif(t);
+    // Le compte : jina annonce l'URL qu'il a réellement lue, laquelle porte
+    // le pseudo. Plus sûr que le titre, qui est le nom d'affichage.
+    const author = (t.match(/tiktok\.com\/@([\w.\-]+)/) || [])[1] || "";
+    if (!lu && !author) return null;
+    return { caption: lu?.caption || "", author, thumb: lu?.image || "" };
+  } catch {
+    clear();
+    return null;
+  }
+}
+
+async function handleTikTok(rawUrl: string, permisIA = false, destination = "") {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
   // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
@@ -756,6 +864,7 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     ["page-embed", () => tiktokPageEmbed(idVideoTikTok(canonical))],
     ["donnees-page", () => tiktokDonneesPage(canonical)],
     ["robot-social", () => tiktokRobotSocial(canonical)],
+    ["lecteur-tiers", () => tiktokLecteurTiers(canonical)],
   ];
 
   for (const [nom, lire] of echelons) {
@@ -771,7 +880,11 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
       etape = nom;
     }
     if (!author && d.author) author = d.author;
-    if (!thumb && d.thumb) thumb = d.thumb;
+    // Une vignette barrée du bouton ▶ n'est ni lisible ni belle : un échelon
+    // plus bas qui rend la vraie photo la remplace, même s'il arrive après.
+    if (d.thumb && (!thumb || (VIGNETTE_INUTILISABLE.test(thumb) && !VIGNETTE_INUTILISABLE.test(d.thumb)))) {
+      thumb = d.thumb;
+    }
     // Une légende suffit : descendre plus bas ne coûterait que du temps.
     if (caption) break;
   }
@@ -820,6 +933,28 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     motifCouverture = "titre_deja_trouve";
   }
 
+  // Rien n'a nommé le lieu : on confie le lien à un agent qui cherche. C'est
+  // le seul chemin qui aboutisse depuis un serveur, donc le seul qui serve
+  // aussi les téléphones sans application installée.
+  let cherche: { title: string; category: string; location: string } | null = null;
+  let motifRecherche = "";
+  if (permisIA && !title) {
+    const q = await chercherLieuParAgent(canonical, author, destination)
+      .catch((e) => ({ ok: false as const, pourquoi: `jete_${String(e).slice(0, 30)}` }));
+    if (q.ok) {
+      cherche = q;
+      title = q.title;
+      if (q.category) category = q.category;
+      motifRecherche = "ok";
+    } else {
+      motifRecherche = q.pourquoi;
+    }
+  } else if (!permisIA) {
+    motifRecherche = "origine_non_autorisee";
+  } else {
+    motifRecherche = "titre_deja_trouve";
+  }
+
   // Le modèle ne sert que là où les règles ont échoué : une légende qui porte
   // déjà « 📍 Bouillon Chartier, Paris » se lit sans lui, et chaque appel coûte.
   // …et jamais sur une légende vide : depuis que TikTok les a fermées, c'est
@@ -861,10 +996,12 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
     // Quel échelon a fourni la légende — « couverture » quand il n'y en avait
     // aucune et que le nom a été lu sur l'image. Sans ce témoin, une chaîne
     // qui se dégrade en silence reste invisible jusqu'à la panne totale.
-    etape: etape || (vu ? "couverture" : "aucune"),
+    etape: etape || (vu ? "couverture" : cherche ? "recherche-web" : "aucune"),
     // Pourquoi la lecture d'image a donné — ou n'a pas donné — un nom.
     // Sans ce témoin, un échec ne se répare qu'à l'aveugle.
     ...(motifCouverture ? { couverture: motifCouverture } : {}),
+    // Et pourquoi l'agent chercheur a — ou n'a pas — nommé le lieu.
+    ...(motifRecherche ? { recherche: motifRecherche } : {}),
     ...(autresLieux.length ? { autres: autresLieux } : {}),
   };
 
@@ -874,7 +1011,10 @@ async function handleTikTok(rawUrl: string, permisIA = false) {
   // ville depuis le serveur, qui ignore la destination du voyage, ramène
   // n'importe quel homonyme du monde. Le client, lui, connaît la destination
   // et refait la recherche située — une adresse fausse est pire qu'absente.
-  const geoQuery = (ai?.location) || locationHint || vu?.location || "";
+  // L'adresse écrite par l'auteur du post passe AVANT celle que le modèle
+  // déduit : c'est la source, pas une interprétation.
+  const geoQuery = extractGeoHint(caption) || (ai?.location) || vu?.location
+    || cherche?.location || "";
   let place = geoQuery ? await geocode(geoQuery) : null;
   // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
   // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
@@ -981,7 +1121,11 @@ function origineAutorisee(req: Request): boolean {
  *      qui porte un faux nom est pire qu'une fiche à compléter, parce qu'on ne
  *      la vérifie plus.
  */
-const COUVERTURE_MAX = 1_500_000; // ~1,5 Mo : au-delà, ce n'est plus une vignette
+// 5 Mo : la limite d'image de l'API du modèle. Le plafond valait 1,5 Mo quand
+// la seule couverture disponible était une vignette de partage ; depuis que le
+// lecteur tiers rend les vraies photos du post, une image de 1,5 Mo est normale
+// et la refuser écartait précisément la bonne.
+const COUVERTURE_MAX = 5_000_000;
 
 // Un échec muet est un échec qu'on ne répare pas : chaque sortie dit POURQUOI.
 // Le motif remonte dans la réponse (`couverture`), donc un diagnostic suffit à
@@ -1097,6 +1241,114 @@ async function lireCouverture(imageUrl: string): Promise<LectureCouverture> {
   }
 }
 
+/**
+ * Dernier recours, et le seul qui marche depuis un serveur : confier le lien à
+ * un agent qui CHERCHE.
+ *
+ * Tout le reste a été mesuré fermé — oEmbed 400, page en captcha, vignette
+ * illisible, URL signée. Mais le lien résolu porte deux choses exploitables :
+ * le compte et l'identifiant du post. Or les moteurs de recherche indexent les
+ * posts des réseaux sociaux avec leur légende. L'agent part de là.
+ *
+ * Autorisé explicitement par l'utilisateur, qui fournit la clé : « si un agent
+ * doit s'en charger d'extraire les informations via ma clé API alors faisons
+ * ça ». C'est un appel plus coûteux que les autres — il ne se déclenche donc
+ * que sur un lien de réseau social dont aucun échelon n'a tiré de nom.
+ */
+type Recherche =
+  | { ok: true; title: string; category: string; location: string }
+  | { ok: false; pourquoi: string };
+
+async function chercherLieuParAgent(
+  url: string, compte: string, destination = "",
+): Promise<Recherche> {
+  const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
+  if (!key) return { ok: false, pourquoi: "cle_absente" };
+  if (!url) return { ok: false, pourquoi: "pas_de_lien" };
+
+  const { signal, clear } = withTimeout(25000);
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal,
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        // Le modèle bon marché, et trois recherches au plus. Cet échelon était
+        // le dernier espoir tant que rien ne rendait la légende ; depuis que le
+        // lecteur tiers la rend, il ne sert plus qu'aux posts qui n'en ont pas.
+        // Un dernier recours rare ne justifie pas le modèle le plus cher.
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
+        system:
+          "Tu identifies le LIEU dont parle un post de réseau social, à partir " +
+          "de son lien. Tu ne peux pas ouvrir le post : sers-toi de la recherche " +
+          "web (le lien lui-même, l'identifiant du post, le nom du compte) pour " +
+          "retrouver de quel établissement il s'agit.\n" +
+          "Réponds en DERNIER par un objet JSON compact, seul sur sa ligne :\n" +
+          '{"title":string,"category":"resto"|"visite"|"balade"|"plage"|"sport"' +
+          '|"repos"|"trajet"|"fun","location":"Nom, Ville, Pays","confiance":' +
+          '"haute"|"basse"}\n' +
+          "title = le nom tel qu'on le chercherait sur une carte. Jamais une " +
+          "phrase, jamais un slogan, jamais le nom du compte.\n" +
+          "confiance = \"basse\" dès que tu extrapoles. Si tu ne trouves pas le " +
+          "lieu, renvoie {}. Un lieu faux est pire que pas de lieu : il finit " +
+          "dans un carnet de voyage sans être revérifié.",
+        messages: [{
+          role: "user",
+          content: `Post : ${url}\n`
+            + (compte ? `Compte : @${compte}\n` : "")
+            + (destination ? `Le voyage se passe à : ${destination}\n` : "")
+            + "De quel lieu ce post parle-t-il ?",
+        }],
+      }),
+    });
+    clear();
+    // Un refus de l'API — outil indisponible, crédit épuisé, modèle inconnu —
+    // ressemblait à « l'agent n'a rien trouvé ». Ce sont deux pannes opposées :
+    // l'une se répare côté compte, l'autre côté invite. On les distingue.
+    if (!r.ok) {
+      const corps = await r.text().catch(() => "");
+      const type = (corps.match(/"type"\s*:\s*"([a-z_]+_error)"/) || [, ""])[1];
+      return { ok: false, pourquoi: `api_${r.status}${type ? `_${type}` : ""}` };
+    }
+    const d = await r.json();
+    if (d?.stop_reason === "refusal") return { ok: false, pourquoi: "refus_modele" };
+    // La réponse mêle des blocs de recherche et du texte : on ne garde que le
+    // texte, et le dernier objet JSON qu'il contient.
+    const texte = (d?.content || [])
+      .filter((b: any) => b?.type === "text")
+      .map((b: any) => b.text)
+      .join("\n");
+    // Combien de recherches l'agent a réellement lancées : zéro signifie que
+    // l'outil n'a pas tourné, et le diagnostic n'est alors pas le même.
+    const requetes = (d?.content || []).filter((b: any) =>
+      b?.type === "server_tool_use" || b?.type === "web_search_tool_result"
+    ).length;
+    const trouves = texte.match(/\{[^{}]*"title"[^{}]*\}/g);
+    if (!trouves?.length) {
+      return { ok: false, pourquoi: texte.trim() ? `sans_json_${requetes}rq` : `sans_texte_${requetes}rq` };
+    }
+    const o = JSON.parse(trouves[trouves.length - 1]);
+    const titre = typeof o?.title === "string" ? o.title.trim() : "";
+    if (!titre) return { ok: false, pourquoi: `sans_titre_${requetes}rq` };
+    if (o?.confiance === "basse") return { ok: false, pourquoi: `doute_sur_${titre.slice(0, 24)}` };
+    return {
+      ok: true,
+      title: titre,
+      category: VALID_CATEGORIES.includes(o?.category) ? o.category : "",
+      location: typeof o?.location === "string" ? o.location.trim() : "",
+    };
+  } catch (e) {
+    clear();
+    return { ok: false, pourquoi: `jete_${String(e).slice(0, 40)}` };
+  }
+}
+
 async function classifyWithLLM(text: string, _kind: string) {
   // Deux noms acceptés : le secret Supabase est parfois nommé d'après le
   // libellé de la clé côté Anthropic. Une clé posée sous le mauvais nom donne
@@ -1183,10 +1435,14 @@ Deno.serve(async (req) => {
   let url = "";
   let texte = "";
   let sante = false;
+  // La destination du voyage : elle départage deux homonymes quand l'agent
+  // cherche un lieu. Facultative — sans elle il cherche quand même.
+  let destination = "";
   try {
     const body = await req.json();
     url = String(body?.url || "").trim();
     texte = String(body?.texte || "").trim();
+    destination = String(body?.destination || "").trim().slice(0, 120);
     sante = body?.sante === true;
   } catch {
     return json({ error: "invalid_body" }, 400);
@@ -1243,7 +1499,7 @@ Deno.serve(async (req) => {
   try {
     let result = null;
     if (/tiktok\.com/i.test(url)) {
-      result = await handleTikTok(url, origineAutorisee(req));
+      result = await handleTikTok(url, origineAutorisee(req), destination);
     } else if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google|share\.google/i.test(url)) {
       result = await handleGoogleMaps(url);
     } else {

@@ -65,7 +65,11 @@ const delai = (ms) => {
 async function texte(url, ua, { redirect = 'follow' } = {}) {
   const { signal, clear } = delai(15000);
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': ua }, signal, redirect });
+    // `ua` nul = ne rien annoncer de particulier. Tous les interlocuteurs ne
+    // veulent pas d'un navigateur : le lecteur tiers refuse justement ceux-là.
+    const r = await fetch(url, {
+      headers: ua ? { 'User-Agent': ua } : {}, signal, redirect,
+    });
     const corps = await r.text();
     clear();
     return { statut: r.status, url: r.url, corps };
@@ -107,6 +111,30 @@ const legendeGenerique = (t) => {
   const s = (t || '').trim();
   return !s || GENERIQUES.some(re => re.test(s));
 };
+
+/**
+ * La légende telle qu'un lecteur tiers la rend : pas en clair, mais dans le
+ * TEXTE ALTERNATIF des images. Jumelle de `legendeDansTexteAlternatif` dans
+ * `supabase/functions/extract-place/index.ts` — `scripts/verif-legende-alt.mjs`
+ * passe les mêmes cas dans les deux et casse si elles divergent.
+ */
+function legendeDansTexteAlternatif(markdown) {
+  for (const m of markdown.matchAll(/!\[([^\]]{10,900})\]\(([^)\s]*)\)/g)) {
+    const [, alt, image] = m;
+    let t = (alt.match(/[“"]([\s\S]{3,600}?)[”"]\s*\.?\s*$/) || [])[1] || '';
+    if (!t) {
+      const apres = alt.replace(/^[\s\S]*?(?:Comments?|commentaires?)\s*[.:]\s*/i, '');
+      if (apres !== alt) {
+        t = apres
+          .replace(/^(?:image|video|vidéo)?\s*posted by[^:]{0,90}:\s*/i, '')
+          .replace(/^TikTok (?:video|photo) (?:from|de)[^.]{0,90}\.\s*/i, '');
+      }
+    }
+    t = t.trim();
+    if (t.length >= 8 && !legendeGenerique(t)) return { caption: t, image };
+  }
+  return null;
+}
 
 /**
  * Les échelons, du plus souhaitable au dernier recours. L'ordre EST la
@@ -180,6 +208,27 @@ const ECHELONS = [
       return { legende, compte: /^tiktok$/i.test(compte) ? '' : compte, couverture };
     },
   },
+  {
+    nom: 'lecteur-tiers',
+    quoi: 'un lecteur tiers qui rend la page à notre place',
+    secours: true,
+    async lire({ canonique }) {
+      // Sans agent annoncé, comme la fonction Edge. Mesuré le 9 août 2026 : ce
+      // lecteur refuse les navigateurs (403 en 14 ms sur un agent Safari, 200
+      // sans agent et 200 sur un agent Deno). Le canari s'était déguisé en
+      // iPhone et avait déclaré morte une chaîne qui marchait — une alarme
+      // doit mesurer avec l'identité du code qu'elle surveille, pas la sienne.
+      const r = await texte(`https://r.jina.ai/${canonique}`, null);
+      if (r.statut !== 200) return { echec: `HTTP ${r.statut || r.erreur}` };
+      if (/captcha|verify_?page|security check/i.test(r.corps)) {
+        return { echec: 'le lecteur reçoit lui aussi un captcha' };
+      }
+      const lu = legendeDansTexteAlternatif(r.corps);
+      const compte = (r.corps.match(/tiktok\.com\/@([\w.\-]+)/) || [])[1] || '';
+      if (!lu && !compte) return { echec: 'page rendue, mais sans texte alternatif exploitable' };
+      return { legende: lu?.caption || '', compte, couverture: lu?.image || '' };
+    },
+  },
 ];
 
 /**
@@ -210,7 +259,10 @@ async function couvertureUtilisable(url) {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(type)) {
       return { ok: false, pourquoi: `type inattendu (${type || 'inconnu'})` };
     }
-    if (!buf.length || buf.length > 1_500_000) {
+    // 5 Mo, comme `COUVERTURE_MAX` dans la fonction Edge. Le plafond valait
+    // 1,5 Mo du temps des vignettes de partage : depuis que le lecteur tiers
+    // rend les vraies photos, il écartait justement la bonne image.
+    if (!buf.length || buf.length > 5_000_000) {
       return { ok: false, pourquoi: `${Math.round(buf.length / 1024)} ko hors bornes` };
     }
     return { ok: true, pourquoi: `${type}, ${Math.round(buf.length / 1024)} ko` };
@@ -247,7 +299,12 @@ async function mesurer(temoin) {
     });
   }
 
-  const image = resultats.map(x => x.couverture).find(Boolean) || '';
+  // La chaîne retient la MEILLEURE couverture, pas la première : le lecteur
+  // tiers rend la vraie photo là où la page des robots ne rend qu'une vignette
+  // barrée du bouton ▶. Juger sur la première mesurerait ce que l'app n'affiche
+  // pas — et une alarme qui mesure autre chose que la réalité ne sert à rien.
+  const images = resultats.map(x => x.couverture).filter(Boolean);
+  const image = images.find(u => !VIGNETTE_INUTILISABLE.test(u)) || images[0] || '';
   return {
     temoin: temoin.nom, url: temoin.url, resolu: canonique, id,
     // Un captcha n'est PAS une disparition : la page des robots répond 200 et
@@ -278,11 +335,26 @@ async function mesurer(temoin) {
  * dans les deux sens. Un échelon qui ressuscite est une bonne nouvelle qui
  * vaut d'être sue : elle rouvrirait un chemin sans application installée.
  */
-const ATTENDU = {
-  // Ce qu'un serveur obtient aujourd'hui. Mis à jour quand on l'a mesuré.
+/**
+ * L'attendu est PAR TÉMOIN : un post photo et une vidéo ne rendent pas la même
+ * chose au lecteur tiers, et une attente commune ferait sonner l'alarme tous
+ * les matins sur celui des deux qui ne la remplit pas.
+ *
+ * Chaque valeur ici a été MESURÉE, jamais supposée. Une attente devinée qui se
+ * révèle fausse produit exactement l'alarme permanente qu'on cherche à éviter.
+ */
+const ATTENDU_PAR_DEFAUT = {
   echelonsVivants: [],      // aucun échelon ne rend de légende
   couvertureLisible: false, // la vignette porte un bouton play incrusté
 };
+const ATTENDU = {
+  // Mesuré le 9 août 2026 : le lecteur tiers rend la page que TikTok nous
+  // refuse, et la légende s'y trouve dans le texte alternatif des images.
+  'carrousel de lieu': { echelonsVivants: ['lecteur-tiers'], couvertureLisible: true },
+  // Compte institutionnel : à mesurer avant d'affirmer quoi que ce soit.
+  'compte institutionnel': ATTENDU_PAR_DEFAUT,
+};
+const attenduDe = (nom) => ATTENDU[nom] || ATTENDU_PAR_DEFAUT;
 
 function juger(mesures, modele) {
   const vivantes = mesures.filter(m => !m.absent);
@@ -294,9 +366,10 @@ function juger(mesures, modele) {
   }
 
   for (const m of vivantes) {
+    const attendu = attenduDe(m.temoin);
     const nomme = m.echelons.filter(e => e.legende && !e.echec).map(e => e.echelon);
-    const inattendus = nomme.filter(n => !ATTENDU.echelonsVivants.includes(n));
-    const disparus = ATTENDU.echelonsVivants.filter(n => !nomme.includes(n));
+    const inattendus = nomme.filter(n => !attendu.echelonsVivants.includes(n));
+    const disparus = attendu.echelonsVivants.filter(n => !nomme.includes(n));
 
     if (inattendus.length) {
       bonnesNouvelles.push(
@@ -306,10 +379,10 @@ function juger(mesures, modele) {
     if (disparus.length) {
       soucis.push(`« ${m.temoin} » : ${disparus.join(', ')} ne rend plus de légende`);
     }
-    if (m.couverture.ok && !ATTENDU.couvertureLisible) {
+    if (m.couverture.ok && !attendu.couvertureLisible) {
       bonnesNouvelles.push(`« ${m.temoin} » : la couverture est redevenue exploitable`);
     }
-    if (!m.couverture.ok && ATTENDU.couvertureLisible) {
+    if (!m.couverture.ok && attendu.couvertureLisible) {
       soucis.push(`« ${m.temoin} » : la couverture n'est plus exploitable (${m.couverture.pourquoi})`);
     }
   }

@@ -4,10 +4,13 @@ import { supabase } from '../lib/supabase';
 // Resolves short links (TikTok / Google Maps) and returns structured place
 // data. Returns null on any failure so callers can fall back to the legacy
 // client-side parsers.
-export async function extractViaEdge(url) {
+export async function extractViaEdge(url, destination = '') {
   try {
     const { data, error } = await supabase.functions.invoke('extract-place', {
-      body: { url },
+      // La destination départage deux homonymes quand l'agent doit chercher le
+      // lieu à partir du seul lien. Facultative : sans elle il cherche quand
+      // même, il tranche juste moins bien.
+      body: { url, ...(destination ? { destination } : {}) },
     });
     if (error) return null;
     if (data?.ok && data.result && (data.result.title || data.result.lat != null)) {
