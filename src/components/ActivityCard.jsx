@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
@@ -295,8 +296,17 @@ function ActivityCard({
         )}
       </div>
 
-      {/* iOS-style action sheet — rendered outside overflow:hidden container */}
-      {menuOpen && (
+      {/* Un calque plein écran doit être posé sur le document, pas dans la
+          carte. Sortir du `<div>` de la fiche ne suffisait pas : la carte de la
+          Réserve porte `content-visibility: auto` — posé pour la fluidité des
+          longues listes — et cette propriété implique le CONFINEMENT DE
+          PEINTURE, ce qui fait de la carte le bloc conteneur de tout
+          `position: fixed` situé dedans. Mesuré : le voile faisait 356 × 174 px
+          au lieu de 390 × 844, et l'`overflow: hidden` de la carte découpait le
+          reste. « ✏️ Modifier », dessiné plus haut que la boîte, n'existait
+          simplement pas à l'écran — seuls « Supprimer » et « Annuler » y
+          tombaient. Le portail règle les trois calques d'un coup. */}
+      {menuOpen && createPortal(
         <div className="act-sheet-overlay" onClick={() => setMenuOpen(false)}>
           <div className="act-sheet" onClick={e => e.stopPropagation()}>
             <div className="act-sheet__title">{activity.title}</div>
@@ -345,7 +355,8 @@ function ActivityCard({
               Annuler
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {deleteConfirm && (
@@ -360,11 +371,12 @@ function ActivityCard({
         />
       )}
 
-      {lightboxSrc && (
+      {lightboxSrc && createPortal(
         <div className="lightbox-overlay" onClick={() => setLightboxSrc(null)}>
           <img src={lightboxSrc} className="lightbox-img" alt="" />
           <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

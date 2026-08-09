@@ -85,6 +85,29 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Le menu ⋯ d'une activité était prisonnier de sa carte** (août 2026).
+  Signalé par un enregistrement d'écran : au tap sur ⋯, la fiche disparaissait
+  et il ne restait que « Supprimer » et « Annuler ». Diagnostic de
+  l'utilisateur — « c'est une question d'ordre de calque » — exact.
+  Mesuré : `.act-sheet-overlay` est `position: fixed; inset: 0` mais faisait
+  **358 × 174 px au lieu de 390 × 844**. Cause : `.reserve-card` porte
+  `content-visibility: auto` (posé pour la fluidité des longues listes), ce qui
+  implique le **confinement de peinture** — la carte devient donc le bloc
+  conteneur de tout `position: fixed` situé dedans, et son `overflow: hidden`
+  découpe le reste. « ✏️ Modifier », dessiné à y201 alors que la boîte commence
+  à y314, n'existait tout simplement pas à l'écran.
+  Un commentaire du code annonçait pourtant « rendered outside overflow:hidden
+  container » : sortir du `<div>` de la fiche ne suffisait pas.
+  Corrigé par `createPortal` vers `document.body` (menu + lightbox ;
+  `ConfirmDialog` le faisait déjà). **Toute nouvelle modale doit passer par un
+  portail** — règle E8 du playbook.
+  Sonde ajoutée à `/verif-ui` : tout `position: fixed` dont un ancêtre établit
+  un bloc conteneur est signalé, avec le nom du geôlier et la raison. Éprouvée
+  contre le code d'avant : elle sort `[act-sheet-overlay] fait 358×174 au lieu
+  de 390×844 — enfermé par [reserve-card] (content-visibility: auto)`.
+  Écran `Menu d'activité` ajouté — il a aussi révélé le rouge d'iOS (#FF3B30)
+  à 3,39:1 sur « Supprimer », invisible depuis toujours.
+
 - **On ne pouvait pas corriger une activité depuis le Planning** (août 2026).
   Signalé à l'usage. La frise n'a **jamais** porté de chemin vers
   « Modifier » (`git log -S onEdit` sur `TimelineView.jsx` : vide) : une

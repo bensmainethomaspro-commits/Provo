@@ -11,6 +11,7 @@
  *   3. débordement horizontal           — la page part-elle en travers ?
  *   4. action principale hors écran     — faut-il scroller pour valider ?
  *   5. action principale recouverte     — passe-t-elle sous un calque flottant ?
+ *   6. calque plein écran prisonnier    — un ancêtre le réduit-il à sa boîte ?
  *
  * Les deux thèmes sont parcourus, sur le plus petit écran cible.
  * Sortie : un tableau de chiffres et un code de sortie. 0 = rien à signaler.
@@ -308,6 +309,47 @@ const SONDES = `(() => {
       }
     });
 
+  // 6 · Calque plein écran prisonnier d'un ancêtre.
+  //
+  // Un \`position: fixed\` se place par rapport à l'écran — sauf si un ancêtre
+  // établit un bloc conteneur. Le piège est qu'aucune de ces propriétés ne
+  // ressemble à du positionnement : \`transform\`, \`filter\`, \`backdrop-filter\`,
+  // \`contain\`, et surtout \`content-visibility: auto\`, qu'on pose pour la
+  // fluidité d'une longue liste.
+  //
+  // Mesuré : le menu ⋯ d'une activité faisait 356 × 174 px au lieu de
+  // 390 × 844, parce que la carte de la Réserve porte \`content-visibility\`.
+  // Son \`overflow: hidden\` découpait le reste, si bien que « Modifier »
+  // n'était dessiné nulle part — et personne ne pouvait plus modifier une
+  // activité. Troisième fois que ce piège frappe dans ce projet.
+  const captifs = [];
+  document.querySelectorAll('*').forEach(el => {
+    if (getComputedStyle(el).position !== 'fixed') return;
+    if (!visible(el)) return;
+    for (let n = el.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      const raison =
+        s.transform !== 'none' ? \`transform\`
+        : s.filter !== 'none' ? 'filter'
+        : (s.backdropFilter && s.backdropFilter !== 'none') ? 'backdrop-filter'
+        : s.perspective !== 'none' ? 'perspective'
+        : /paint|layout|strict|content/.test(s.contain) ? \`contain: \${s.contain}\`
+        : s.contentVisibility === 'auto' ? 'content-visibility: auto'
+        : /transform|filter|perspective/.test(s.willChange) ? \`will-change: \${s.willChange}\`
+        : null;
+      if (!raison) continue;
+      const r = el.getBoundingClientRect();
+      captifs.push({
+        calque: String(el.className || el.tagName).slice(0, 30),
+        geolier: String(n.className || n.tagName).split(' ')[0].slice(0, 26),
+        raison,
+        taille: \`\${Math.round(r.width)}×\${Math.round(r.height)}\`,
+        ecran: \`\${window.innerWidth}×\${window.innerHeight}\`,
+      });
+      break;
+    }
+  });
+
   // 5 · Boutons muets — une icône seule sans nom n'est lisible par personne.
   const muets = [];
   document.querySelectorAll('button, [role="button"]').forEach(el => {
@@ -320,7 +362,7 @@ const SONDES = `(() => {
     }
   });
 
-  return { contraste, incertains, cibles, deborde, coupables, horsEcran, recouverts, muets };
+  return { contraste, incertains, cibles, deborde, coupables, horsEcran, recouverts, muets, captifs };
 })()`;
 
 // ── Parcours ─────────────────────────────────────────────────────────────────
@@ -377,6 +419,20 @@ const ECRANS = [
       await ouvrirVoyage(p); await onglet(p, /Planning/i);
       await p.locator('.tl-day__open, .tl-day__header').first().click().catch(() => {});
       await p.waitForTimeout(800);
+    },
+  },
+  // Le menu ⋯ d'une idée : c'est là que vit « Modifier », et c'est là que le
+  // calque s'est retrouvé enfermé dans la carte. Une sonde ne trouve que sur
+  // les écrans qu'on lui montre — l'ajouter sans cet écran n'aurait rien
+  // mesuré (règle E6).
+  {
+    nom: 'Menu d’activité',
+    repere: '.act-sheet',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('[aria-label*="Options de l\'activité"]').first()
+        .click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(700);
     },
   },
   {
@@ -473,13 +529,13 @@ if (JSON_OUT) {
   const pad = (s, n) => String(s).padEnd(n);
   console.log('\n' + pad('écran', 18) + pad('thème', 8) + pad('contraste', 11)
     + pad('cibles', 9) + pad('déborde', 9) + pad('hors écran', 12)
-    + pad('recouvert', 11) + 'muets');
-  console.log('─'.repeat(87));
+    + pad('recouvert', 11) + pad('muets', 8) + 'captifs');
+  console.log('─'.repeat(95));
   for (const l of rapport) {
     console.log(pad(l.ecran, 18) + pad(l.theme, 8) + pad(l.contraste.length || '·', 11)
       + pad(l.cibles.length || '·', 9) + pad(l.deborde ? l.deborde + ' px' : '·', 9)
       + pad(l.horsEcran.length || '·', 12) + pad(l.recouverts.length || '·', 11)
-      + (l.muets.length || '·'));
+      + pad(l.muets.length || '·', 8) + (l.captifs.length || '·'));
   }
 
   const detail = (titre, tirer, format) => {
@@ -504,6 +560,9 @@ if (JSON_OUT) {
     x => `« ${x.libelle} » (bas à ${x.bas} px) passe sous [${x.par}]`);
   detail('Boutons sans nom accessible', l => l.muets,
     x => `« ${x.contenu} » [${x.classe}]`);
+  detail("Calque plein écran prisonnier d'un ancêtre", l => l.captifs,
+    x => `[${x.calque}] fait ${x.taille} au lieu de ${x.ecran} — enfermé par `
+       + `[${x.geolier}] (${x.raison})`);
   detail('Erreurs JavaScript', l => l.erreurs, x => x);
   // Non compté comme défaut : une photo de fond n'a pas de couleur unique.
   // La machine ne peut pas trancher — l'œil, si.
@@ -515,7 +574,8 @@ const plantes = rapport.filter(l => l.plante);
 const perdus = rapport.filter(l => l.perdu);
 const total = rapport.reduce((n, l) =>
   n + l.contraste.length + l.cibles.length + (l.deborde ? 1 : 0)
-    + l.horsEcran.length + l.recouverts.length + l.muets.length + l.erreurs.length, 0);
+    + l.horsEcran.length + l.recouverts.length + l.muets.length + l.captifs.length
+    + l.erreurs.length, 0);
 if (!JSON_OUT) {
   // En tête, avant les chiffres : sur un écran planté, tous les autres comptes
   // sont faux — il n'y a plus d'interface à mesurer.
