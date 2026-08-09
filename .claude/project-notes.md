@@ -68,8 +68,18 @@ dit franchement plutôt que de laisser croire à une panne.
 
 ### Lecture des légendes par un modèle
 
-Inspiré de Punkt AI, qui fait lire la vidéo par une IA. Aucune règle ne
-transforme « Perfect restaurant for Gen-Zs » en nom de lieu ; un modèle, si.
+Aucune règle ne transforme « Perfect restaurant for Gen-Zs » en nom de lieu ;
+un modèle, si.
+
+> **Correction (9 août 2026).** Cette section disait « inspiré de Punkt AI, qui
+> fait lire la vidéo par une IA ». C'est une lecture fausse de ce qui fait
+> marcher Punkt, et elle a coûté une journée : elle a fait chercher un meilleur
+> modèle côté serveur, là où le problème n'est pas.
+> Précisé par l'utilisateur : Punkt est une **application installée**, et on lui
+> envoie le post par le menu *Partager*. Son avantage n'est pas l'IA — c'est que
+> sa requête part du téléphone de la personne, à qui TikTok sert la vraie page.
+> Le modèle ne fait que lire la légende **une fois qu'on l'a obtenue**. Voir
+> « TikTok : c'est le téléphone qui lit la page » plus bas, et E10 du playbook.
 
 `classifyWithLLM` s'active dès que le secret **`ANTHROPIC_API_KEY`** est posé
 dans Supabase › Edge Functions › Secrets. Trois garde-fous, parce que la clé
