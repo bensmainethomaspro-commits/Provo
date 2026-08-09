@@ -3,7 +3,7 @@ import { TripsProvider, useTripsContext } from './context/TripsContext';
 import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import AuthScreen from './components/AuthScreen';
-import { decodeTrip, premierLien } from './utils/helpers';
+import { decodeTrip, premierLien, ressembleAUneLegende } from './utils/helpers';
 import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -35,7 +35,14 @@ function AppInner() {
   const [lienPartage, setLienPartage] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const l = premierLien(p.get('ajout'), p.get('lien'), p.get('texte'), p.get('titre'));
-    if (l) { window.history.replaceState(null, '', window.location.pathname); return l; }
+    // iOS n'expose pas les sites installés au menu Partager, et aucune requête
+    // faite depuis un onglet n'obtient la page d'un réseau social. Un raccourci
+    // iOS, lui, tourne en natif : il va chercher la page depuis le téléphone et
+    // nous passe la LÉGENDE entière dans `texte`. Ne pêcher qu'un lien dedans
+    // reviendrait à jeter la seule chose utile qu'il nous transmet.
+    const t = (p.get('texte') || '').trim();
+    const valeur = l || (ressembleAUneLegende(t) ? t : null);
+    if (valeur) { window.history.replaceState(null, '', window.location.pathname); return valeur; }
     return null;
   });
 
