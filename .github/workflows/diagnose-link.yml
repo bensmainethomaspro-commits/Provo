@@ -257,7 +257,7 @@ jobs:
             -H "Origin: $ORIGIN" -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
             -H "Content-Type: application/json" \
             -o /tmp/v --max-time 90 -d "{\"url\":\"$URL\"}"
-          python3 - <<'PY'
+          python3 - <<'PY' | tee /tmp/verdict
           import json
           d = json.load(open('/tmp/v'))
           r = d.get('result') or {}
@@ -272,6 +272,7 @@ jobs:
           print('titre      :', titre or '(vide)')
           print('échelon    :', r.get('etape', '?'))
           print('couverture :', r.get('couverture', '(non renseigné)'))
+          print('recherche  :', r.get('recherche', '(non renseigné)'))
           print('adresse    :', r.get('address') or '—')
           print()
           print('🔴 ÉCHEC — la fiche ne porte pas de nom de lieu' if echoue or not titre
@@ -388,3 +389,12 @@ jobs:
               else:
                   print(f'    (aucun texte alternatif) · {" ".join(corps.split())[:200]}')
           PY
+
+      - name: "Z · Le verdict, redit en tout dernier"
+        # Les étapes précédentes recopient leur propre script dans le journal, et
+        # ce bavardage repousse le verdict hors de portée d'un simple `tail`.
+        # Il est donc redit ici, sans refaire l'appel — qui est payant.
+        if: always()
+        run: |
+          echo "════════ CE QUE L'APP AFFICHERA ════════"
+          cat /tmp/verdict 2>/dev/null || echo "(l'étape L n'a pas tourné)"
