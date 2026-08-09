@@ -213,6 +213,22 @@ sous 44 px et l'écran voisin sept autres. Corollaire : une sonde neuve se
 prouve contre le code d'avant. Si elle ne rougit pas là où le défaut existait,
 elle ne mesure rien.*
 
+**E8. Un calque plein écran se pose sur le document, pas dans le composant qui
+l'ouvre.** `position: fixed` cesse de viser l'écran dès qu'un ancêtre établit un
+bloc conteneur — et aucune des propriétés qui le font ne ressemble à du
+positionnement : `transform` (même `translateX(0)`), `filter`,
+`backdrop-filter`, `perspective`, `contain`, `will-change`, et
+`content-visibility: auto`. Un menu, une modale, une lightbox passent par un
+portail vers `body`.
+*Origine : le menu ⋯ d'une activité mesurait 358 × 174 px au lieu de
+390 × 844, enfermé par la carte qui portait `content-visibility: auto` — posée
+pour la fluidité d'une longue liste. L'`overflow: hidden` de la carte découpait
+le reste, si bien que « Modifier » n'était dessiné nulle part : plus personne
+ne pouvait modifier une activité. Troisième fois que ce piège frappe (voir
+aussi E2), et la seule des trois qu'un commentaire du code annonçait déjà
+comme réglée — « rendered outside overflow:hidden container » — alors qu'elle
+ne l'était pas.*
+
 **E7. Une échelle qu'on ne peut pas réciter n'est pas une échelle.** Tailles de
 texte, graisses, rayons, espacements : chaque famille tient en une poignée de
 valeurs nommées, déclarées une seule fois. Au-delà, ce n'est plus une
@@ -282,6 +298,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | « je ne peux pas cocher comme si le bouton n'en était pas » | A8 |
 | 2026-08 | un parcours de vérification qui ne cliquait sur rien passait au vert | E6 |
 | 2026-08 | « fluidifier et améliorer l'UX/UI », pas « aller plus vite » | E7 |
+| 2026-08 | « on ne peut plus modifier les activités » + « c'est une question d'ordre de calque » | E8 |
 
 ### Récidives repérées
 
@@ -305,6 +322,12 @@ revient trois fois est un problème structurel, pas un détail.
   écran qu'elle ne regardait pas — et la troisième fois, sur un écran qu'elle
   croyait regarder. → E6, et vérifier qu'un écran exerce chaque sonde avant de
   l'ajouter.
+- **Un `position: fixed` enfermé par un ancêtre** : trois fois — la roue,
+  la barre d'onglets sur les dépôts, puis le menu ⋯ d'une activité. À chaque
+  fois le calque semblait correct dans le code et se dessinait au mauvais
+  endroit ; à chaque fois la cause était une propriété sans rapport apparent
+  avec le positionnement, sur un ancêtre lointain. → E8, et le portail plutôt
+  que l'espoir.
 - **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
   une version périmée, preview inaccessible sans compte, mémoire partagée
   laissée sur une branche. À chaque fois le travail était fait *et* hors de

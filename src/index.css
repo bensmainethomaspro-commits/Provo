@@ -4097,7 +4097,10 @@ body {
 }
 .act-sheet__item:active { background: var(--surface-sunken); }
 
-.act-sheet__item--danger { color: #FF3B30; }
+/* #FF3B30 est le rouge d'iOS : 3,39:1 sur une feuille claire. Il est ici sur
+   la seule action irréversible du menu — celle qu'on doit lire sans hésiter.
+   Le jeton de rouge-texte du projet s'éclaircit tout seul en thème sombre. */
+.act-sheet__item--danger { color: var(--red-texte); }
 
 .act-sheet__sep {
   height: 1px; background: var(--border);

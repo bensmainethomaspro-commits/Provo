@@ -782,6 +782,38 @@ const PARCOURS = [
         (await t.texte()).match(/Verre/i) !== null);
     } },
 
+  { groupe: 'Réserve', nom: 'Le menu ⋯ d\'une idée montre toutes ses entrées', depart: 'voyage',
+    intention: "Modifier une idée de la Réserve — l'entrée doit être là, et visible.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('[aria-label*="Options de l\'activité"]', { delai: 800 });
+      t.verifier('le menu s\'ouvre', await t.visible('.act-sheet'));
+      // Le voile est `position: fixed` : il doit couvrir l'écran, pas la carte.
+      // Enfermé dans la fiche (content-visibility ⇒ confinement de peinture),
+      // il faisait 358 × 174 et « Modifier », dessiné plus haut que la boîte,
+      // n'apparaissait nulle part.
+      const m = await t.p.evaluate(() => {
+        const o = document.querySelector('.act-sheet-overlay');
+        const r = o.getBoundingClientRect();
+        const item = [...o.querySelectorAll('.act-sheet__item')]
+          .find(b => /Modifier/.test(b.textContent));
+        const q = item?.getBoundingClientRect();
+        return {
+          voile: [Math.round(r.width), Math.round(r.height)],
+          ecran: [innerWidth, innerHeight],
+          modifier: q ? { haut: Math.round(q.top), dedans: q.top >= r.top && q.bottom <= r.bottom + 1 } : null,
+        };
+      });
+      t.verifier('le voile couvre tout l\'écran',
+        m.voile[0] === m.ecran[0] && m.voile[1] === m.ecran[1],
+        `${m.voile.join('×')} pour ${m.ecran.join('×')}`);
+      t.verifier('« Modifier » est bien dans le cadre du menu',
+        !!m.modifier?.dedans, JSON.stringify(m.modifier));
+      await t.clic('.act-sheet__item', { texte: /Modifier/, delai: 900 });
+      t.verifier('la feuille d\'édition s\'ouvre', await t.visible('.sheet'));
+    } },
+
   { groupe: 'Planning', nom: 'Corriger une activité sans quitter le Planning', depart: 'voyage',
     intention: "Une heure fausse, un prix oublié : on corrige là où on l'a vu.",
     async faire(t) {
