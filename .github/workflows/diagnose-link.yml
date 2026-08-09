@@ -233,3 +233,14 @@ jobs:
                  else 'WEBP' if d[:4]==b'RIFF' and d[8:12]==b'WEBP' else 'inconnu')
           print('  format :', sig)
           "
+
+      - uses: actions/checkout@v4
+
+      - name: "K · Canari — l'état de chaque échelon de la chaîne"
+        # Le diagnostic répond « où ça casse pour CE lien » ; le canari répond
+        # « combien de marge reste-t-il ». Les deux servent, et le second est
+        # celui qui tourne tout seul tous les jours (canari-extraction.yml).
+        run: |
+          set +e
+          node scripts/canari-extraction.mjs
+          echo "--- code de sortie : $? (0 vert · 1 orange · 2 rouge) ---"
