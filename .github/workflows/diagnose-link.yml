@@ -321,12 +321,15 @@ jobs:
                   ['curl','-sS','-o','/tmp/img.bin','-w','%{http_code} %{content_type} %{size_download}',
                    '--max-time','25','-A','facebookexternalhit/1.1','-L',u],
                   capture_output=True, text=True).stdout.split()
-              code, ctype, taille = (out + ['?','?','0'])[:3]
+              code, ctype, taille = (out + ['?', '?', '0'])[:3]
+              # Un curl en échec ne rend pas trois champs : sans ce garde-fou,
+              # l'étape entière meurt et emporte celles qui suivent.
+              octets = int(taille) if str(taille).isdigit() else 0
               dim = ''
-              if code == '200' and int(taille) > 1000:
+              if code == '200' and octets > 1000:
                   d = open('/tmp/img.bin','rb').read()
                   if d[:3] == b'\xff\xd8\xff': dim = ' · ' + taille_jpeg(d)
-              print(f'{nom:14} {code}  {int(taille)//1024:>4} ko  {ctype}{dim}')
+              print(f'{nom:14} {code}  {octets//1024:>4} ko  {ctype}{dim}')
           PY
 
       - name: "N · TikTok — un lecteur tiers obtient-il la légende ?"

@@ -313,10 +313,14 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             // page des robots sans description). Quand la couverture n'a pas
             // suffi, la seule chose qui reste est sous les yeux de la personne
             // — et le dire vaut mieux que « vérifie le titre ».
+            // Ne jamais renvoyer vers un geste impossible : TikTok n'offre pas
+            // de copier la légende d'un post. Le conseil précédent le
+            // demandait — il envoyait dans le mur.
             setImportMsg(result.luSurImage
               ? `« ${result.title} » lu sur l'image ✓ — vérifie, TikTok ne donne plus le texte du post.`
-              : "Vidéo importée ✓ — TikTok ne donne plus le texte des posts. "
-                + "Copie la légende dans TikTok et colle-la ici : je remplis le reste.");
+              : "Vidéo enregistrée ✓ — TikTok ne laisse aucun serveur lire le texte "
+                + "de ses posts. Écris le nom du lieu ici : je trouve l'adresse, "
+                + "les horaires et le reste.");
           }
           return;
         }
