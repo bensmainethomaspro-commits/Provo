@@ -1659,8 +1659,10 @@ const PARCOURS = [
     intention: "Sur iPhone, aucune requête faite depuis l'app n'obtient la page d'un "
       + "réseau social. Un raccourci va la chercher en natif et nous passe le texte.",
     async faire(t) {
-      const legende = 'Le meilleur barbecue coréen de Vienne 🔥 viande grillée devant toi '
-        + 'et banchan à volonté, pense à réserver le week-end #vienne #coreen #bbq';
+      // Le texte tel qu'un raccourci le capture : brut, échappements compris.
+      // C'est ce qui arrive vraiment, pas une version déjà propre.
+      const legende = 'Le meilleur barbecue cor\\u00e9en de Vienne \\ud83d\\udd25 viande grill\\u00e9e '
+        + 'devant toi et banchan \\u00e0 volont\\u00e9, pense \\u00e0 r\\u00e9server le week-end #vienne #coreen #bbq';
       await t.p.goto(`${URL_BASE}/?texte=${encodeURIComponent(legende)}`,
         { waitUntil: 'domcontentloaded' });
       await t.p.waitForTimeout(1400);
@@ -1677,6 +1679,11 @@ const PARCOURS = [
       const titre = await t.p.evaluate(() =>
         document.querySelector('input[placeholder*="Déjeuner au marché"]')?.value || '');
       t.verifier('le nom du lieu est extrait', /Deoun/i.test(titre), titre || '(vide)');
+      // Les échappements du raccourci ne doivent pas finir dans la fiche.
+      const notes = await t.p.evaluate(() =>
+        document.querySelector('textarea')?.value || '');
+      t.verifier('la légende est décodée, pas brute', !/\\u00|\\ud8/.test(notes),
+        notes.slice(0, 60) || '(vide)');
     } },
 
   { groupe: 'Réserve', nom: 'Un lien partagé remplit la Réserve', depart: 'voyage',
