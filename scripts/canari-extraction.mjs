@@ -182,8 +182,18 @@ const ECHELONS = [
  * qu'elle est là et téléchargeable — le reste dépend d'une clé payante, et
  * une alarme ne doit pas coûter à chaque passage.
  */
+// La vignette servie aux robots porte un bouton « play » incrusté, fait
+// 600 x 828 en qualité 20, et son URL est signée — toute variante rend 403
+// (mesuré : sans-bouton, haute-def, gabarit-image, brut). Le modèle n'y lit
+// aucun nom. La compter comme exploitable faisait afficher « orange » à une
+// chaîne où plus rien ne nomme un lieu automatiquement.
+const VIGNETTE_INUTILISABLE = /smartui\/button\/play-icon/i;
+
 async function couvertureUtilisable(url) {
   if (!url) return { ok: false, pourquoi: 'aucune image de couverture' };
+  if (VIGNETTE_INUTILISABLE.test(url)) {
+    return { ok: false, pourquoi: 'vignette au bouton play — illisible, et l\'URL signée interdit mieux' };
+  }
   const { signal, clear } = delai(15000);
   try {
     const r = await fetch(url, { headers: { 'User-Agent': UA_ROBOT_SOCIAL }, signal });

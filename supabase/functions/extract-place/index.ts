@@ -990,10 +990,22 @@ type LectureCouverture =
   | { ok: true; title: string; category: string; location: string }
   | { ok: false; pourquoi: string };
 
+// La vignette que TikTok sert aux robots : 600 x 828, qualité 20, avec un
+// bouton « play » incrusté par-dessus. Mesuré le 9 août 2026 — et l'URL est
+// signée, donc toute tentative d'en obtenir une meilleure version rend 403
+// (essayé : retirer l'incrustation, monter la définition, changer de gabarit,
+// enlever toute transformation). On ne peut rien y lire, et le modèle le dit :
+// « rien_de_lisible ». Appeler quand même coûterait un appel payant par import
+// pour un échec certain.
+const VIGNETTE_INUTILISABLE = /smartui\/button\/play-icon/i;
+
 async function lireCouverture(imageUrl: string): Promise<LectureCouverture> {
   const key = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ANTHROPIC_API_KEY_TB");
   if (!key) return { ok: false, pourquoi: "cle_absente" };
   if (!imageUrl) return { ok: false, pourquoi: "pas_de_vignette" };
+  if (VIGNETTE_INUTILISABLE.test(imageUrl)) {
+    return { ok: false, pourquoi: "vignette_bouton_play" };
+  }
 
   // 1 · Récupérer l'image. Mesuré sur une couverture TikTok : JPEG, 84 ko.
   let base64 = "", media = "image/jpeg";
