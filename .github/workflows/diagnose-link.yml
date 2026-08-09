@@ -62,3 +62,71 @@ jobs:
             HIT=$(grep -oE 'q=Agapii\+Mou|Agapii Mou|q%3DAgapii' /tmp/p 2>/dev/null | head -1)
             echo "$C  ${S}o  ${HIT:-—}  ${P%%\?*}"
           done
+
+      # ── TikTok : la chaîne complète, maillon par maillon ────────────────────
+      # Les liens TikTok sont le cas d'usage majoritaire. Tout repose sur
+      # l'oEmbed : sans légende, la fiche n'a ni nom, ni adresse, ni notes —
+      # elle sort en « Activité TikTok » avec le seul lien. Ces étapes disent
+      # lequel des maillons a lâché.
+      - name: D · TikTok — le lien court se résout-il ?
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+          UA: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+        run: |
+          echo "$URL"
+          FINAL=$(curl -sSL -A "$UA" -o /tmp/tk.html -w '%{url_effective}' --max-time 30 "$URL" || echo 'ÉCHEC')
+          echo "→ URL finale : $FINAL"
+          echo "$FINAL" > /tmp/final
+          echo "--- taille du HTML : $(wc -c < /tmp/tk.html) octets"
+          echo "--- captcha / vérification ?"
+          grep -oiE 'captcha|verify_?page|security check' /tmp/tk.html | sort -u | head -3 || echo "  (aucun marqueur)"
+          echo "--- balises og: présentes ?"
+          grep -oE '<meta[^>]+property="og:(title|description|image)"[^>]*>' /tmp/tk.html | head -3 || echo "  AUCUNE"
+
+      - name: E · TikTok — l'oEmbed répond-il, et avec quoi ?
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+          UA: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36'
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "$URL")
+          BARE="${FINAL%%\?*}"
+          for CAND in "$FINAL" "$BARE" "$URL"; do
+            E=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$CAND")
+            C=$(curl -sS -A "$UA" -o /tmp/o.json -w '%{http_code}' --max-time 20 \
+                 "https://www.tiktok.com/oembed?url=$E" || echo ERR)
+            echo "── $C  sur  $CAND"
+            python3 - <<'PY' || echo "   (corps illisible)"
+          import json
+          try:
+              d = json.load(open('/tmp/o.json'))
+              print('   title  :', (d.get('title') or '(vide)')[:160])
+              print('   author :', d.get('author_name') or '(vide)')
+              print('   thumb  :', 'oui' if d.get('thumbnail_url') else 'non')
+          except Exception as e:
+              print('   pas de JSON :', open('/tmp/o.json').read()[:200].replace('\n',' '))
+          PY
+          done
+
+      - name: F · TikTok — ce que notre fonction Edge en fait
+        if: contains(github.event.inputs.url, 'tiktok')
+        env:
+          URL: ${{ github.event.inputs.url }}
+        run: |
+          curl -sS -X POST "$FN" \
+            -H "Origin: $ORIGIN" \
+            -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+            -H "Content-Type: application/json" \
+            -o /tmp/edge.json --max-time 60 -w '--- CODE: %{http_code} ---\n' \
+            -d "{\"url\":\"$URL\"}"
+          python3 -c "
+          import json
+          try:
+              d = json.load(open('/tmp/edge.json'))
+              for k in ('title','category','address','lat','lon','notes','source','modele','raison'):
+                  if k in d: print(f'   {k:9}:', str(d[k])[:140])
+              if not d: print('   réponse vide')
+          except Exception:
+              print('   corps brut :', open('/tmp/edge.json').read()[:300])
+          "
