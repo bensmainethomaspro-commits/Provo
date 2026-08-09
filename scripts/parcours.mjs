@@ -1654,6 +1654,31 @@ const PARCOURS = [
         dates.join(', '));
     } },
 
+  { groupe: 'Réserve', nom: "Un raccourci iOS transmet la légende, pas le lien", depart: 'voyage',
+    reseau: { legende: 'ok' },
+    intention: "Sur iPhone, aucune requête faite depuis l'app n'obtient la page d'un "
+      + "réseau social. Un raccourci va la chercher en natif et nous passe le texte.",
+    async faire(t) {
+      const legende = 'Le meilleur barbecue coréen de Vienne 🔥 viande grillée devant toi '
+        + 'et banchan à volonté, pense à réserver le week-end #vienne #coreen #bbq';
+      await t.p.goto(`${URL_BASE}/?texte=${encodeURIComponent(legende)}`,
+        { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(1400);
+      t.verifier("l'accueil annonce ce qui est arrivé", /re[çc]u/i.test(await t.texte()));
+
+      await t.clic('.import-banner button', { texte: /Ajouter/, delai: 1200, obligatoire: false })
+        || await t.ouvrirVoyage();
+      await t.p.waitForTimeout(2600);
+      // Le texte doit partir au lecteur de légendes, pas au géocodeur : c'est
+      // la différence entre « une fiche remplie » et « aucun lieu trouvé ».
+      t.verifier('la légende part au lecteur, sans appui sur un bouton',
+        (t.appels().legende || 0) > 0, `${t.appels().legende || 0} appels`);
+      await t.ouvrirDetails();
+      const titre = await t.p.evaluate(() =>
+        document.querySelector('input[placeholder*="Déjeuner au marché"]')?.value || '');
+      t.verifier('le nom du lieu est extrait', /Deoun/i.test(titre), titre || '(vide)');
+    } },
+
   { groupe: 'Réserve', nom: 'Un lien partagé remplit la Réserve', depart: 'voyage',
     reseau: { extractPlace: 'ok' },
     intention: "Recevoir un lien d'Instagram ou TikTok et le ranger sans rien saisir.",

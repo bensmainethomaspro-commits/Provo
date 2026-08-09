@@ -239,8 +239,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     return () => { vivant = false; clearTimeout(minuteur); };
   }, [importUrl, isEdit, tripLat, tripLon]);
 
-  const handleImport = async () => {
-    const raw = importUrl.trim();
+  // `force` permet de lancer l'import sur une valeur qu'on a en main sans
+  // attendre que l'état du champ l'ait reçue — un effet déclenché à
+  // l'ouverture lirait sinon la valeur d'avant, c'est-à-dire rien.
+  // Le test de type protège l'usage en gestionnaire de clic, qui passe un
+  // événement.
+  const handleImport = async (force) => {
+    const raw = (typeof force === 'string' ? force : importUrl).trim();
     setImporting(true);
     setError('');
     setImportMsg('');
@@ -413,6 +418,15 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setImporting(false);
     }
   };
+
+  // Une légende arrivée d'un raccourci iOS : elle est déjà dans le champ, la
+  // lire tout de suite. Faire appuyer sur « Chercher » alors qu'on a déjà tout
+  // ce qu'il faut ajouterait un geste pour rien.
+  useEffect(() => {
+    if (isOpen && lienInitial && ressembleAUneLegende(lienInitial)) {
+      handleImport(lienInitial);
+    }
+  }, [isOpen, lienInitial]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Un lien arrivé du menu Partager est déjà connu : le chercher tout de suite
   // évite un appui de plus. La ref retient ce qui a déjà été lancé — sans elle,
