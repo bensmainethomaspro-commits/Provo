@@ -328,3 +328,36 @@ jobs:
                   if d[:3] == b'\xff\xd8\xff': dim = ' · ' + taille_jpeg(d)
               print(f'{nom:14} {code}  {int(taille)//1024:>4} ko  {ctype}{dim}')
           PY
+
+      - name: "N · TikTok — un lecteur tiers obtient-il la légende ?"
+        # Piste écartée trop vite : ces services vont chercher la page depuis
+        # LEUR infrastructure. Si l'un d'eux n'est pas traité en centre de
+        # données par TikTok, il rend la légende — et l'app y accède depuis
+        # n'importe quel téléphone, iPhone compris, sans raccourci ni app native.
+        if: contains(github.event.inputs.url, 'tiktok')
+        run: |
+          FINAL=$(cat /tmp/final 2>/dev/null || echo "${{ github.event.inputs.url }}")
+          python3 - "$FINAL" <<'PY'
+          import sys, subprocess, urllib.parse, re
+          u = sys.argv[1].split('?')[0]
+          e = urllib.parse.quote(u, safe='')
+          services = [
+              ('jina',       f'https://r.jina.ai/{u}'),
+              ('allorigins', f'https://api.allorigins.win/raw?url={e}'),
+              ('codetabs',   f'https://api.codetabs.com/v1/proxy?quest={e}'),
+              ('corsproxy',  f'https://corsproxy.io/?{e}'),
+          ]
+          for nom, cible in services:
+              r = subprocess.run(
+                  ['curl','-sS','-o','/tmp/px','-w','%{http_code}','--max-time','40','-L',cible],
+                  capture_output=True, text=True)
+              code = (r.stdout or 'ERR').strip()
+              try:
+                  corps = open('/tmp/px', encoding='utf-8', errors='replace').read()
+              except Exception:
+                  corps = ''
+              desc = (re.search(r'"desc"\s*:\s*"((?:[^"\\]|\\.){4,200})"', corps) or [None, ''])[1]
+              captcha = bool(re.search(r'captcha|verify_?page|security check', corps, re.I))
+              verdict = f'LÉGENDE → {desc[:70]}' if desc else ('captcha' if captcha else 'rien')
+              print(f'{nom:11} {code:>4}  {len(corps)//1024:>5} ko  {verdict}')
+          PY
