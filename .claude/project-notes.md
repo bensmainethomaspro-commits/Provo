@@ -85,6 +85,44 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Une échelle d'échelons, et un canari qui prévient** (août 2026). Demandé
+  après le premier correctif TikTok : « trouve plutôt des solutions à long
+  terme […] des plans B ou plan C. Aussi je veux être prévenu dans ce genre de
+  situation. » Le reproche était juste : le correctif réparait le jour même,
+  sans rien changer à ce qui avait permis la panne.
+  L'extraction TikTok est devenue une **liste ordonnée d'échelons
+  indépendants** — `oembed`, `page-embed`, `donnees-page`, `robot-social`, puis
+  la lecture de couverture, puis la légende collée. Celui qui tombe ne fait
+  plus tomber les suivants, et la réponse porte `etape`, l'échelon qui a
+  répondu.
+  `scripts/canari-extraction.mjs` mesure ces mêmes échelons **séparément**,
+  tous les jours (`.github/workflows/canari-extraction.yml`), et ouvre une
+  **alerte GitHub** — une seule à la fois, refermée au retour au vert. Trois
+  états : vert (de la marge), **orange (on ne tient plus que sur les échelons
+  de secours)**, rouge (plus rien ne nomme le lieu). L'alarme sonne à l'orange :
+  c'est le seul moment où il est encore confortable d'agir.
+  Mesuré le 9 août 2026 sur un exécuteur, échelon par échelon :
+  `oembed` 400 · `page-embed` rend le compte, pas la légende · `donnees-page`
+  captcha depuis un centre de données · `robot-social` « TikTok | Make Your
+  Day » · couverture JPEG 82 ko. Verdict : **orange**, l'app ne tient que sur
+  la lecture d'image.
+  Ce que la mesure a rattrapé : le premier correctif était mort-né. La page de
+  secours renvoie « TikTok | Make Your Day », que le code prenait pour une
+  vraie légende — un titre, même faux, faisait sauter la lecture de couverture,
+  qui ne se déclenche que sur un manque. **Le repli existait, il n'était jamais
+  atteint.** Filtre du remplissage générique posé au seul endroit qu'aucun
+  échelon ne contourne, des deux côtés (fonction Edge et canari) : une alarme
+  qui rassure à tort est pire que pas d'alarme.
+  La fonction expose enfin une **sonde de santé** (`{ sante: true }`) qui dit
+  seulement si la clé du modèle est posée — sans rien consommer. Le canari
+  passe au **rouge** si la chaîne dépend de la couverture alors que la clé
+  manque : une clé révoquée ou expirée casserait l'ajout par lien en silence,
+  exactement comme l'oEmbed.
+  À faire quand ce sera fusionné : remplacer les liens témoins s'ils
+  disparaissent (le canari le signale au lieu de crier à la panne), et étendre
+  la même surveillance aux autres fournisseurs uniques — Nominatim, Overpass,
+  Open-Meteo, proxys CORS.
+
 - **TikTok ne rend plus la légende à personne — la couverture, puis le
   presse-papier** (août 2026). Signalé par l'utilisateur : « les ajouts TikTok
   (qui sont majoritaires) ne fonctionnent quasiment pas […] cela met "activité

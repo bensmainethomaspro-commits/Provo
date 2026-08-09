@@ -240,6 +240,26 @@ décisions. Jusqu'à 31 couples taille/graisse sur un seul écran. Les jetons de
 rayon étaient en plus redéclarés quatre fois — le thème sombre arrondissait
 tout davantage que le clair, sans que personne l'ait voulu (voir B5).*
 
+**E9. Ce qui dépend d'un tiers a plusieurs échelons, et l'ordre est écrit.**
+Un service extérieur ne prévient pas quand il ferme. Une fonctionnalité qui
+repose sur une seule source est donc une panne datée, pas un risque. Écrire la
+cascade comme une liste ordonnée d'échelons **indépendants** — celui qui tombe
+ne fait pas tomber les suivants — et faire dire au résultat **quel échelon a
+répondu** : sans ce témoin, une chaîne qui s'effrite reste invisible jusqu'à la
+panne totale.
+**Corollaire : une réponse générique n'est pas une réponse.** Un service qui
+sert le même texte à tout le monde (« TikTok | Make Your Day ») n'a rien
+répondu. L'accepter coûte deux fois : la donnée est fausse, et surtout **elle
+fait sauter les échelons du dessous**, qui ne se déclenchent que sur un manque.
+Le repli le plus soigné ne sert à rien s'il est court-circuité par du
+remplissage. Filtrer au seul endroit qu'aucun échelon ne contourne.
+*Origine : l'oEmbed de TikTok a répondu 400 du jour au lendemain, y compris sur
+des comptes publics célèbres. Toute l'extraction reposait dessus : les fiches
+sortaient « Activité TikTok » avec le seul lien. Et le premier correctif était
+lui-même mort-né — la page de secours renvoyait « TikTok | Make Your Day », que
+le code prenait pour une vraie légende, ce qui empêchait la lecture de la
+couverture de se déclencher. Le repli existait, il n'était jamais atteint.*
+
 ---
 
 ## F · Livraison
@@ -269,6 +289,25 @@ et CGU interdisant d'afficher ces données sur une carte non-Google.*
 **F4. Dire ce qui n'a pas pu être vérifié.** Une limite annoncée vaut mieux
 qu'une confiance démentie à l'usage. Ne jamais présenter comme corrigé ce qui
 n'a pas été mesuré : une hypothèse s'annonce comme une hypothèse.
+**Corollaire :** une question qu'on peut trancher soi-même ne se renvoie pas à
+l'utilisateur. « Je n'ai pas vérifié, dis-moi si tu veux que je le fasse » est
+du travail non fait déguisé en politesse.
+
+**F5. Ce qui peut se dégrader en silence doit avoir une alarme — et elle
+sonne à l'orange, pas au rouge.** Une vérification qui ne dit que « ça marche /
+ça ne marche plus » prévient toujours trop tard. Mesurer chaque étage
+séparément, et alerter dès qu'il ne reste plus que les étages de secours :
+c'est le seul moment où il est encore confortable d'agir. L'alarme part vers
+l'utilisateur (ticket, notification), pas dans un journal que personne ne lit ;
+elle se referme toute seule au retour à la normale, sinon on cesse de la lire.
+**Corollaire : une alarme qui rassure à tort est pire que pas d'alarme.** Si le
+service répond du remplissage générique, la sonde doit le refuser comme réponse
+— sinon elle affiche vert sur une chaîne morte.
+*Origine : « trouve plutôt des solutions à long terme […] des plans B ou plan C.
+Aussi je veux être prévenu dans ce genre de situation. » L'oEmbed de TikTok
+s'est éteint sans prévenir ; toute l'extraction reposait dessus et personne ne
+l'a su avant qu'un utilisateur ne signale des fiches vides. Deux fautes, pas
+une : une source unique, et aucune alarme.*
 
 ---
 
@@ -299,6 +338,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | un parcours de vérification qui ne cliquait sur rien passait au vert | E6 |
 | 2026-08 | « fluidifier et améliorer l'UX/UI », pas « aller plus vite » | E7 |
 | 2026-08 | « on ne peut plus modifier les activités » + « c'est une question d'ordre de calque » | E8 |
+| 2026-08 | « pas d'excuse, trouve des solutions à long terme […] je veux être prévenu » | E9, F4 (corollaire), F5 |
 
 ### Récidives repérées
 
@@ -328,6 +368,14 @@ revient trois fois est un problème structurel, pas un détail.
   endroit ; à chaque fois la cause était une propriété sans rapport apparent
   avec le positionnement, sur un ancêtre lointain. → E8, et le portail plutôt
   que l'espoir.
+- **Une dépendance extérieure tombée sans que rien ne le dise** : l'oEmbed de
+  TikTok, mais le schéma est plus large — l'app s'appuie aussi sur Nominatim,
+  Overpass, Open-Meteo, les proxys CORS. À chaque fois, un seul fournisseur
+  tient une fonctionnalité entière, et rien ne surveille sa santé. Ici c'est un
+  utilisateur qui a dû signaler la panne, alors que les liens TikTok sont
+  « majoritaires » chez lui. → E9 pour la redondance, F5 pour l'alarme. Les
+  deux ensemble : sans échelons il n'y a rien à surveiller, sans alarme les
+  échelons s'usent sans qu'on le sache.
 - **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
   une version périmée, preview inaccessible sans compte, mémoire partagée
   laissée sur une branche. À chaque fois le travail était fait *et* hors de
