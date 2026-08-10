@@ -277,6 +277,36 @@ Elle est installée : elle sort par la connexion de la personne, avec un agent
 mobile ordinaire, et TikTok lui sert la page complète. Il ne fallait pas un
 meilleur extracteur côté serveur — il fallait faire la même requête d'ailleurs.*
 
+**E11. Quand une source te refuse, chercher qui elle ne refuse pas — et ce
+qu'elle laisse passer ailleurs.** Un mur n'est presque jamais fermé à tout le
+monde : il trie. Avant de conclure « c'est impossible », faire deux listes.
+D'abord **qui** peut déjà lire cette source sans être bloqué — un service de
+rendu, un agrégateur, un moteur : ils vont la chercher depuis *leur*
+infrastructure, et te la rendent. Ensuite **où** la donnée ressort quand la
+porte principale est close : elle est rarement là où on l'attend, mais dans le
+texte alternatif d'une image, un attribut, une balise de partage, un flux.
+**Corollaire : demander la matière brute peut échouer là où le rendu passe.**
+Réclamer la source à un service de lecture peut ramener le mur, quand sa sortie
+rendue, elle, contient la donnée. Ne pas « optimiser » un chemin qui marche en
+réclamant l'amont.
+*Origine : après des heures à établir que rien ne rendait plus la légende d'un
+post à un serveur — API éteinte, page en captcha, vignette illisible, URL
+signée —, un lecteur tiers a rendu la page entière, et la légende s'y trouvait
+dans le texte alternatif des images. Gratuit, immédiat, et valable depuis
+n'importe quel téléphone. Lui réclamer le HTML brut, lui, ramenait le captcha.*
+
+**E12. Une fonction qui répond à deux questions répond mal à l'une des deux.**
+Quand deux besoins voisins partagent un même bout de code parce que la même
+donnée y ressemble, l'un des deux finit servi par la réponse de l'autre. Le
+signe : on hésite sur l'ordre des cas, et changer l'ordre répare un appelant en
+cassant l'autre. **Séparer, même si les deux corps se ressemblent d'abord** —
+ils divergeront, et c'est le but.
+*Origine : « comment ça s'appelle » et « où c'est » lisaient la même légende par
+la même fonction. Elle rendait le nom épinglé, bon pour titrer, mauvais pour
+situer : la fiche s'est appelée « DEOUN » et a été placée à 30 km de là, alors
+que l'adresse complète était écrite deux lignes plus bas. Mettre l'adresse en
+premier corrigeait le lieu et titrait la fiche « 9 Rue Harispe ».*
+
 ---
 
 ## F · Livraison
@@ -300,8 +330,25 @@ chercher.*
 
 **F3. Aucune API payante, ni compte de facturation, sans accord explicite.**
 Vérifier aussi les conditions d'utilisation, pas seulement le prix.
-*Origine : Google Places écarté — carte bancaire obligatoire depuis mars 2025,
-et CGU interdisant d'afficher ces données sur une carte non-Google.*
+**Corollaire : le coût d'un échelon suit sa fréquence, et se révise quand elle
+change.** Le dernier recours d'une cascade prend le moyen le plus cher tant
+qu'il est le seul espoir — c'est justifié. Mais le jour où un échelon gratuit
+passe devant lui, il devient rare : garder le modèle le plus cher, les
+recherches sans limite et la minute d'attente, c'est payer un prix calculé pour
+une autre situation. **Rouvrir le budget de chaque échelon quand l'ordre de la
+cascade change**, pas seulement quand quelqu'un se plaint de la facture.
+**Second corollaire : un accès ouvert est une dépense ouverte.** Toute fonction
+serveur qui appelle un service facturé doit filtrer qui l'appelle — la clé
+publique du client est lisible par n'importe qui. Et la règle se pose **une
+fois, dans un module partagé** : recopiée, elle ne suivra pas les fonctions
+ajoutées ensuite. Dire aussi ce que le filtre **ne** couvre pas, sinon on croit
+la porte fermée.
+*Origines : (1) Google Places écarté — carte bancaire obligatoire depuis mars
+2025, et CGU interdisant d'afficher ces données sur une carte non-Google ;
+(2) « essaie quelque chose de moins cher, c'est très onéreux là » — un agent de
+recherche au modèle le plus cher, devenu dernier recours rare après qu'un
+chemin gratuit l'a précédé ; (3) trois fonctions serveur ajoutées après la
+règle appelaient le modèle payant sans aucun contrôle d'origine.*
 
 **F4. Dire ce qui n'a pas pu être vérifié.** Une limite annoncée vaut mieux
 qu'une confiance démentie à l'usage. Ne jamais présenter comme corrigé ce qui
@@ -326,6 +373,17 @@ de la signaler sonne tous les matins pour une situation sur laquelle personne
 n'agira — et une alarme qui sonne toujours ne se lit plus. Inscrire l'état
 attendu dans la sonde et n'alerter que sur l'écart, dans les deux sens : ce qui
 ressuscite mérite d'être su autant que ce qui meurt.
+**Troisième corollaire : une sonde mesure avec l'identité du code qu'elle
+surveille, pas la sienne.** Elle n'a pas à être commode, elle a à être
+représentative : même agent annoncé, même en-têtes, même absence d'en-têtes.
+Sinon elle rapporte **sa** panne comme celle du produit — et une alarme fausse
+coûte plus qu'une alarme absente, parce qu'on y répond. C'est E10 appliqué à la
+surveillance : là-bas on mesurait depuis le mauvais poste, ici sous le mauvais
+nom.
+*Origine : un canari s'est annoncé comme un navigateur mobile pour interroger un
+service qui refuse justement les navigateurs — 403 en 14 ms. Il a déclaré ROUGE
+« la chaîne est morte » sur un échelon qui marchait parfaitement pour l'app, qui
+n'annonce rien.*
 *Origine : « trouve plutôt des solutions à long terme […] des plans B ou plan C.
 Aussi je veux être prévenu dans ce genre de situation. » L'oEmbed de TikTok
 s'est éteint sans prévenir ; toute l'extraction reposait dessus et personne ne
@@ -362,6 +420,10 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | « fluidifier et améliorer l'UX/UI », pas « aller plus vite » | E7 |
 | 2026-08 | « on ne peut plus modifier les activités » + « c'est une question d'ordre de calque » | E8 |
 | 2026-08 | « pas d'excuse, trouve des solutions à long terme […] je veux être prévenu » | E9, F4 (corollaire), F5 |
+| 2026-08 | un mur déclaré infranchissable, qu'un lecteur tiers traversait déjà | E11 |
+| 2026-08 | une fiche justement nommée, située à 30 km — deux questions, une fonction | E12 |
+| 2026-08 | un canari déguisé en navigateur déclare morte une chaîne qui marche | F5 (3ᵉ corollaire) |
+| 2026-08 | « essaie quelque chose de moins cher, c'est très onéreux là » | F3 (corollaires) |
 
 ### Récidives repérées
 
