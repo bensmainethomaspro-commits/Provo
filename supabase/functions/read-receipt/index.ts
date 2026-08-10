@@ -17,6 +17,7 @@
 // croire à une panne.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { origineAutorisee } from "../_shared/origine.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,11 @@ const SYSTEME =
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  // Cette fonction appelle le modèle payant : seules les origines de
+  // l'app la déclenchent. Sans ce contrôle, n'importe quel site pouvait
+  // faire dépenser le crédit du compte — la clé publiable est lisible
+  // dans le paquet du navigateur.
+  if (!origineAutorisee(req)) return json({ error: "origine_refusee" }, 403);
 
   const key = Deno.env.get("ANTHROPIC_API_KEY") ||
     Deno.env.get("ANTHROPIC_API_KEY_TB");

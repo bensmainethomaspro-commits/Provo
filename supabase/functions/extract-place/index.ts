@@ -14,6 +14,7 @@
 // cleans up messy social-media captions into a tidy title/category/location.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { origineAutorisee } from "../_shared/origine.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -1086,22 +1087,8 @@ async function handleGeneric(rawUrl: string) {
 //      contient déjà « 📍 Bouillon Chartier, Paris » n'a besoin de personne.
 //   3. La réponse du modèle n'est jamais crue sur parole : le lieu qu'il
 //      propose repasse par le géocodeur, qui refuse ce qui ne correspond à rien.
-const ORIGINES_AUTORISEES = [
-  /^https:\/\/provo-tbens\.vercel\.app$/,
-  /^https:\/\/provo-[a-z0-9-]+-tbens\.vercel\.app$/,
-  /^https:\/\/localhost(:\d+)?$/,
-  /^http:\/\/localhost(:\d+)?$/,
-  /^capacitor:\/\//,
-  /^https:\/\/localhost$/,
-];
-
-function origineAutorisee(req: Request): boolean {
-  const o = req.headers.get("origin") || "";
-  // Une application native n'envoie pas d'origine : on ne la bloque pas, mais
-  // elle n'ouvre pas non plus la porte à un navigateur tiers.
-  if (!o) return true;
-  return ORIGINES_AUTORISEES.some((re) => re.test(o));
-}
+// La liste des origines et le contrôle vivent dans `_shared/origine.ts` :
+// écrits ici seuls, ils n'ont pas suivi les trois fonctions ajoutées après.
 
 /**
  * Lire le NOM du lieu sur l'image de couverture d'un post.

@@ -30,6 +30,14 @@ create policy "ses propres abonnements — création"
   on public.push_subscriptions for insert
   with check (auth.uid() = user_id);
 
+-- Pas de `with check` ici, et c'est volontaire — pas un oubli. PostgreSQL :
+-- « pour les politiques UPDATE, si aucune expression WITH CHECK n'est définie,
+-- l'expression USING sert aussi de contrôle sur la nouvelle ligne. »
+-- Réaffecter sa ligne à l'`user_id` d'un autre échoue donc déjà, et
+-- `pg_policies` affiche `with_check: null` précisément dans ce cas.
+-- Un audit d'août 2026 y a lu une faille et a proposé un correctif ; l'attaque
+-- n'avait pas été exercée. Si elle l'est un jour et qu'elle passe, c'est ce
+-- commentaire qui est faux — pas l'inverse.
 create policy "ses propres abonnements — mise à jour"
   on public.push_subscriptions for update
   using (auth.uid() = user_id);

@@ -15,6 +15,7 @@
 // d'où vient l'information.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { origineAutorisee } from "../_shared/origine.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -238,6 +239,11 @@ async function extraire(nom: string, texte: string, categorie: string) {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ erreur: "methode" }, 405);
+  // Cette fonction appelle le modèle payant : seules les origines de
+  // l'app la déclenchent. Sans ce contrôle, n'importe quel site pouvait
+  // faire dépenser le crédit du compte — la clé publiable est lisible
+  // dans le paquet du navigateur.
+  if (!origineAutorisee(req)) return json({ erreur: "origine_refusee" }, 403);
 
   let corps: Record<string, unknown>;
   try {
