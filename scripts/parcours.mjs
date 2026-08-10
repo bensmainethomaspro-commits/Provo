@@ -820,6 +820,48 @@ const PARCOURS = [
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
     } },
 
+  { groupe: 'Dépenses', nom: 'Une chambre partagée compte double', depart: 'voyage',
+    intention: "Payer 60 € à trois dont un couple, et que l'app fasse la répartition "
+      + "au lieu de m'obliger à couper la dépense en deux.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
+      await t.saisir('input.form-input:not([type="number"])', 'Chambre');
+      const montant = t.p.locator('input[type="number"]').first();
+      if (!(await montant.count())) t.injouable('pas de champ montant');
+      await montant.fill('60');
+      await t.clic('button', { texte: /Détails/i, delai: 400 });
+      const parts = t.p.locator('button', { hasText: /Parts inégales/i }).first();
+      if (!(await parts.count())) t.injouable('pas de réglage des parts');
+      await parts.click();
+      await t.p.waitForTimeout(300);
+      const plus = t.p.locator('.expense-parts__btn', { hasText: '+' }).first();
+      if (!(await plus.count())) t.injouable('pas de bouton +');
+      await plus.click();
+      await t.p.waitForTimeout(300);
+      const apres = await t.texte();
+      t.verifier('la part se compte en parts, pas en personnes',
+        /parts?\s*=/.test(apres) || /la part/.test(apres));
+      await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1000 });
+      const v = await t.voyage();
+      const dep = (v.expenses || []).find(e => e.description === 'Chambre');
+      t.verifier('la dépense est enregistrée', !!dep);
+      if (!dep) return;
+      const parts2 = dep.parts || {};
+      const total = (dep.participantIds || []).reduce((s, id) => s + (parts2[id] || 1), 0);
+      const premier = (dep.participantIds || [])[0];
+      t.verifier('la part inégale est bien retenue', (parts2[premier] || 1) === 2,
+        JSON.stringify(parts2));
+      // Le point qui compte : la somme des parts retombe sur le montant. Une
+      // répartition qui ne boucle pas fabrique de l'argent dans le carnet.
+      const somme = (dep.participantIds || [])
+        .reduce((s, id) => s + (dep.eurAmount ?? dep.amount) * (parts2[id] || 1) / total, 0);
+      t.verifier('la somme des parts fait le montant',
+        Math.abs(somme - (dep.eurAmount ?? dep.amount)) < 0.01,
+        `${somme.toFixed(2)} vs ${dep.eurAmount ?? dep.amount}`);
+    } },
+
   { groupe: 'Dépenses', nom: 'La catégorie « Verre » existe', depart: 'voyage',
     intention: "Noter un verre — la dépense la plus fréquente en voyage.",
     async faire(t) {

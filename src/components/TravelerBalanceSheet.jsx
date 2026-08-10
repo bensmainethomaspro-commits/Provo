@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { formatPrice } from '../utils/helpers';
+import { formatPrice, partEnEuros } from '../utils/helpers';
 
 export default function TravelerBalanceSheet({ traveler, travelers, expenses, debts, onClose, onDelete }) {
   const getName = (id) => travelers.find(t => t.id === id)?.name || id;
@@ -9,9 +9,12 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
     .filter(e => e.payerId === traveler.id)
     .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
 
+  // La part vient de `partEnEuros`, pas d'une division locale : à parts
+  // inégales, cette feuille afficherait sinon un chiffre différent de celui
+  // des dettes juste en dessous — sur la même dépense.
   const share = expenses.reduce((s, e) => {
-    if (!e.participantIds.includes(traveler.id)) return s;
-    return s + (e.eurAmount ?? e.amount) / (e.participantIds.length || 1);
+    if (!(e.participantIds || []).includes(traveler.id)) return s;
+    return s + partEnEuros(e, traveler.id);
   }, 0);
 
   const balance = paid - share;
@@ -112,7 +115,7 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
                     <div className="tbs__exp-info">
                       <div className="tbs__exp-desc">{exp.description}</div>
                       <div className="tbs__exp-meta">
-                        {isPayer ? `A payé ${formatPrice(eurAmt)}` : `Part : ${formatPrice(eurAmt / (exp.participantIds.length || 1))}`}
+                        {isPayer ? `A payé ${formatPrice(eurAmt)}` : `Part : ${formatPrice(partEnEuros(exp, traveler.id))}`}
                       </div>
                     </div>
                     <span className={`tbs__exp-badge${isPayer ? ' tbs__exp-badge--paid' : ''}`}>

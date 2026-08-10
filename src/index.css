@@ -2410,6 +2410,71 @@ body {
   color: var(--accent-texte);
 }
 
+/* ─── PARTS INÉGALES ─────────────────────────────────────── */
+/* Une dépense se partage à parts égales par défaut. Ce bloc n'existe que pour
+   l'exception — une chambre partagée, un menu en plus — et reste replié tant
+   qu'on n'y touche pas : le cas courant ne paie rien pour lui. */
+.chip-part { font-weight: 800; }
+
+.expense-parts__toggle {
+  display: block; width: 100%; margin-top: 8px;
+  /* 44 px de haut comme toute cible de l'app : c'est un bouton, pas un lien. */
+  min-height: 44px; padding: 8px 4px;
+  background: none; border: none; text-align: left;
+  font-size: var(--t-sm); font-weight: 700; color: var(--accent-texte);
+  cursor: pointer;
+}
+
+.expense-parts {
+  margin-top: 4px; padding: 12px;
+  background: var(--surface-sunken); border-radius: var(--radius-md);
+}
+.expense-parts__aide {
+  margin: 0 0 10px; font-size: var(--t-xs); color: var(--text-muted); line-height: 1.4;
+}
+.expense-parts__row {
+  display: flex; align-items: center; gap: 10px; min-height: 44px;
+}
+.expense-parts__row + .expense-parts__row { border-top: 1px solid var(--border); }
+.expense-parts__who {
+  flex: 1; min-width: 0; font-size: var(--t-sm); font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.expense-parts__stepper {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+}
+.expense-parts__btn {
+  width: 44px; height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--t-md); font-weight: 800; color: var(--text);
+  cursor: pointer;
+}
+.expense-parts__btn:disabled { opacity: 0.35; cursor: default; }
+.expense-parts__n {
+  min-width: 28px; text-align: center;
+  font-size: var(--t-md); font-weight: 800; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+/* Le résultat en euros : c'est lui qu'on vérifie, pas le nombre de parts.
+   Largeur fixe et chiffres tabulaires pour que la colonne ne danse pas
+   quand on appuie sur + ou −. */
+.expense-parts__euros {
+  min-width: 68px; flex-shrink: 0; text-align: right;
+  /* `--green` est une couleur de REMPLISSAGE : posée en texte sur la surface
+     creusée, elle donne 1,97:1 en thème clair — mesuré. `--green-texte` est le
+     jeton fait pour ça, et il s'éclaircit tout seul en sombre. */
+  font-size: var(--t-sm); font-weight: 700; color: var(--green-texte);
+  font-variant-numeric: tabular-nums;
+}
+.expense-parts__reset {
+  display: block; width: 100%; min-height: 44px; margin-top: 6px;
+  background: none; border: none;
+  font-size: var(--t-sm); font-weight: 600; color: var(--text-muted);
+  cursor: pointer;
+}
+
 /* ─── SETTINGS TOGGLE ────────────────────────────────────── */
 /* Chaque réglage prend sa ligne. En `inline-flex`, deux libellés se posaient
    côte à côte et se chevauchaient : sur un iPhone, l'interrupteur des
@@ -2551,7 +2616,15 @@ body {
   border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 12px;
   font-size: var(--t-sm); color: var(--text-muted); line-height: 1.5;
 }
-.expenses-tab { padding: 12px 0; }
+/* Marge basse au-delà de la barre d'onglets flottante — même valeur que la
+   vue Notes, pour la même raison. Le formulaire d'ajout était jusque-là plus
+   court que l'écran, et son bouton de validation dégageait tout seul ; ouvrir
+   le réglage des parts l'a rallongé et « ✅ Ajouter » est repassé sous la
+   barre (mesuré à 871 px). Une marge sur le CONTENEUR tient quelle que soit
+   la hauteur du formulaire — le correctif précédent, qui reposait sur la
+   position de défilement, ne tenait que tant que le formulaire tenait à
+   l'écran. */
+.expenses-tab { padding: 12px 0 110px; }
 .expenses-summary {
   background: var(--surface-raised); border-radius: var(--radius-md);
   padding: 14px 16px; margin-bottom: 12px;

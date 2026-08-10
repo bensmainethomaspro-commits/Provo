@@ -105,6 +105,43 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Parts inégales, à la manière de Provo** (août 2026). Demandé : « inspire-toi
+  de Tricount ». Provo avait déjà le règlement minimal, les soldes, le
+  multi-devise, la lecture de ticket et les catégories ; ce qui manquait, c'est
+  que le partage était TOUJOURS égal. Une chambre partagée, un menu que
+  quelqu'un n'a pas pris, un billet gratuit : le seul contournement était de
+  couper la dépense en deux — c'est-à-dire de faire le calcul soi-même, ce que
+  le principe produit interdit explicitement.
+  Écarté : la façon de faire de Tricount, un sélecteur à quatre modes (égal /
+  parts / montants / pourcentages) sur son propre écran. Trop lourd ici, et il
+  fait payer au cas courant une exception que peu utilisent.
+  Retenu : le cas courant ne bouge pas d'un pixel — un tap sur la pastille, et
+  parts égales. Le réglage n'apparaît qu'à partir de deux personnes, replié,
+  DANS le pli « Détails » qui existait déjà. La part se lit sur la pastille de
+  la personne (`Thomas ×2`) : il n'y a pas d'autre endroit où l'on cherche
+  « combien compte Thomas ». Et chaque ligne montre le résultat EN EUROS —
+  c'est lui qu'on vérifie, pas le nombre de parts.
+  **La règle de partage vit dans `helpers.js` seule** (`partEnEuros`) : elle
+  était écrite trois fois — dettes, soldes, feuille par voyageur — et trois
+  copies d'un calcul d'argent finissent par ne plus dire la même chose.
+  Compatible en arrière : sans `parts`, ou à parts toutes égales, le calcul est
+  exactement l'ancien. Une part absente, nulle ou aberrante vaut 1 — dans un
+  carnet de comptes, un partage égal vaut mieux qu'une division par zéro.
+  Deux défauts trouvés par `/verif-ui`, que l'œil avait laissés passer :
+  `--green` en texte donnait 1,97:1 en thème clair (le jeton `--green-texte`
+  existait déjà), et le formulaire rallongé faisait repasser « ✅ Ajouter » sous
+  la barre d'onglets — le bug de la tâche #33, revenu parce que son correctif
+  reposait sur la position de défilement et ne tenait que tant que le
+  formulaire tenait à l'écran. La marge est désormais sur le CONTENEUR :
+  mesuré, le bouton dégage la barre de 155 px une fois défilé.
+  L'écran « Dépense (parts) » entre dans `/verif-ui` : replié, la moitié des
+  contrôles du formulaire échappait à la mesure.
+  **Non traité, signalé** : ce même écran révèle trois cibles sous 44 px qui
+  préexistaient (pastilles de catégorie à 25 px, « Tout décocher » à 12 px) —
+  les agrandir change la densité de tout le formulaire, c'est une décision de
+  conception à part.
+
+
 - **TikTok : un lecteur tiers rend la page, et la légende est dans le texte
   alternatif des images** (9 août 2026). **La conclusion qui tient, et elle
   remplace les deux précédentes.** Coller un lien remplit de nouveau la fiche —
