@@ -77,10 +77,10 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
 
 | Fonction | Rôle | Clé Anthropic | Contrôle d'origine |
 |---|---|---|---|
-| `extract-place` | liens et légendes | oui | **oui** (`origineAutorisee`) |
-| `enrich-place` | site du lieu | oui | non |
-| `read-booking` | confirmation collée | oui | non |
-| `read-receipt` | photo de ticket (vision) | oui | non |
+| `extract-place` | liens et légendes | oui | **oui** |
+| `enrich-place` | site du lieu | oui | **oui** (depuis A-018) |
+| `read-booking` | confirmation collée | oui | **oui** (depuis A-018) |
+| `read-receipt` | photo de ticket (vision) | oui | **oui** (depuis A-018) |
 | `push-tick` | rappels planifiés | non | non (assumé, voir project-notes) |
 
 Aucun `supabase/config.toml` : les fonctions sont déployées avec la vérification
@@ -89,9 +89,20 @@ dans le bundle et dans deux workflows. Le contrôle d'origine est donc le seul
 filtre réel sur les fonctions qui dépensent la clé payante — c'est la raison
 d'être de la règle écrite dans `project-notes.md` (« garde-fou n°1 »).
 
-`diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app` :
-ajouter `origineAutorisee` aux trois fonctions qui en manquent **ne casserait
-pas** ce diagnostic. Ne pas redécouvrir ce point avant de trancher A-018.
+`origineAutorisee` ne vit plus dans `extract-place` mais dans
+`supabase/functions/_shared/origine.ts`, importé par les quatre fonctions —
+c'est sa recopie qui l'avait laissé derrière quand trois fonctions ont été
+ajoutées. **Toute nouvelle fonction qui dépense la clé payante l'importe.**
+Le dossier `_shared` n'a pas d'`index.ts` : la boucle de déploiement l'ignore
+comme fonction, et le CLI l'embarque dans chaque paquet qui l'importe.
+
+Ce que ce contrôle NE fait pas : l'en-tête `Origin` n'est imposé que par les
+navigateurs. Il ferme l'abus depuis un autre site — le vecteur réaliste d'une
+dépense massive — pas l'appel forgé en ligne de commande. Ne pas le présenter
+comme une fermeture complète.
+
+`diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app`,
+le diagnostic n'a donc pas été cassé par cet ajout.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
@@ -111,8 +122,16 @@ Supabase que l'application sœur JobWatch, dont les tables sont préfixées
 (`supabase/migrations/20260806_push_subscriptions.sql`). Vérifié le 2026-08-10 :
 la table déployée porte bien les quatre politiques du fichier, la clé est
 l'`endpoint`, et `anon` comme `authenticated` ont les quatre droits — seules
-les politiques protègent. La politique UPDATE n'a **pas** de `WITH CHECK` :
-c'est le constat A-017.
+les politiques protègent. La politique UPDATE n'a pas de `WITH CHECK`, et
+**ce n'est pas une faille** : PostgreSQL précise que pour une politique `UPDATE`
+sans `WITH CHECK`, l'expression `USING` sert AUSSI de contrôle sur la nouvelle
+ligne. `using (auth.uid() = user_id)` fait donc échouer la réaffectation d'une
+ligne à l'`user_id` d'un autre, et `pg_policies` affiche `with_check: null`
+précisément dans ce cas. C'était le constat A-017, **passé en REFUSÉ** ; la
+raison et sa condition de réfutation sont dans le fichier de migration.
+**Ne pas le remonter à nouveau sur la seule lecture de `pg_policies`** : un
+`with_check: null` sur une politique `UPDATE` ne prouve rien à lui seul, il faut
+lire l'expression `USING`.
 
 ## Coexistence avec le système .claude/ existant
 
