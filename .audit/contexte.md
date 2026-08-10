@@ -70,7 +70,28 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   liens courts et extrait les métadonnées d'une page tierce. Utilise
   optionnellement le secret ANTHROPIC_API_KEY.
 - `.github/workflows/deploy-edge-functions.yml` : déploie automatiquement sur push
-  vers main dès que `supabase/functions/**` change.
+  vers main dès que `supabase/functions/**` change. Il **parcourt le dossier**
+  depuis le 2026-08-04 : ajouter une fonction suffit à la déployer.
+
+### Les cinq fonctions Edge — relevé le 2026-08-10
+
+| Fonction | Rôle | Clé Anthropic | Contrôle d'origine |
+|---|---|---|---|
+| `extract-place` | liens et légendes | oui | **oui** (`origineAutorisee`) |
+| `enrich-place` | site du lieu | oui | non |
+| `read-booking` | confirmation collée | oui | non |
+| `read-receipt` | photo de ticket (vision) | oui | non |
+| `push-tick` | rappels planifiés | non | non (assumé, voir project-notes) |
+
+Aucun `supabase/config.toml` : les fonctions sont déployées avec la vérification
+de jeton par défaut. **La clé publiable suffit à la satisfaire**, et elle est
+dans le bundle et dans deux workflows. Le contrôle d'origine est donc le seul
+filtre réel sur les fonctions qui dépensent la clé payante — c'est la raison
+d'être de la règle écrite dans `project-notes.md` (« garde-fou n°1 »).
+
+`diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app` :
+ajouter `origineAutorisee` aux trois fonctions qui en manquent **ne casserait
+pas** ce diagnostic. Ne pas redécouvrir ce point avant de trancher A-018.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
@@ -81,9 +102,17 @@ un oubli.
 Supabase avec synchronisation différée de 700 ms et comparaison d'empreinte, puis
 Realtime via `postgres_changes`.
 
-Tables Supabase : `trips`, `trip_members`, `profiles`, `shared_trips`. Elles
-cohabitent dans le même projet Supabase que l'application sœur JobWatch, dont les
-tables sont préfixées `jobwatch_`.
+Tables Supabase : `trips`, `trip_members`, `profiles`, `shared_trips`, et
+`push_subscriptions` depuis le 2026-08-06. Elles cohabitent dans le même projet
+Supabase que l'application sœur JobWatch, dont les tables sont préfixées
+`jobwatch_`.
+
+`push_subscriptions` est la **première table dont le SQL vit dans le dépôt**
+(`supabase/migrations/20260806_push_subscriptions.sql`). Vérifié le 2026-08-10 :
+la table déployée porte bien les quatre politiques du fichier, la clé est
+l'`endpoint`, et `anon` comme `authenticated` ont les quatre droits — seules
+les politiques protègent. La politique UPDATE n'a **pas** de `WITH CHECK` :
+c'est le constat A-017.
 
 ## Coexistence avec le système .claude/ existant
 

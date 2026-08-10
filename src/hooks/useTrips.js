@@ -153,9 +153,10 @@ export function useTrips() {
 
   // ── Cache localStorage (toujours) ─────────────────────────────────────────
   // Vrai dès qu'une écriture locale échoue : le voyage ne tient plus.
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchroniser
-  // React avec un système extérieur (le stockage du navigateur) est exactement
-  // ce à quoi un effet sert ; l'écriture ne se produit qu'au changement d'état.
+  // Synchroniser React avec un système extérieur (le stockage du navigateur)
+  // est exactement ce à quoi un effet sert ; l'écriture ne se produit qu'au
+  // changement d'état. (La règle `set-state-in-effect` ne se déclenche plus
+  // ici : la directive qui la taisait était devenue morte.)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
