@@ -212,6 +212,19 @@ et n'a jamais rien signalé — pendant que la vraie fiche accumulait trois cibl
 sous 44 px et l'écran voisin sept autres. Corollaire : une sonde neuve se
 prouve contre le code d'avant. Si elle ne rougit pas là où le défaut existait,
 elle ne mesure rien.*
+**Second corollaire : vérifier que le SUJET a démarré avant de le juger.**
+Une suite qui interroge une page morte ne mesure pas le produit, elle mesure
+son environnement — et elle rend le verdict sous le nom du produit. Poser un
+contrôle de démarrage AVANT de jouer quoi que ce soit, ne rien jouer s'il
+échoue, et le dire en TÊTE du rapport, pas après cent lignes. Sortir en erreur
+même sans défaut constaté : sinon l'intégration continue passe au vert sur une
+app qui ne s'affiche pas.
+*Origine : la suite de parcours de Provo, lancée sur une app dont le paquet JS
+manquait, rendait quatre constats CASSÉS — « l'accueil annonce le départ à
+venir » — sur une page entièrement vide, plus 76 lignes « introuvable » qui se
+lisaient comme une régression d'interface. Quatre minutes pour désigner le
+mauvais coupable. Une demi-journée avait déjà été passée à chercher une
+intermittence dans le produit, qui n'y était pas.*
 
 **E8. Un calque plein écran se pose sur le document, pas dans le composant qui
 l'ouvre.** `position: fixed` cesse de viser l'écran dès qu'un ancêtre établit un
