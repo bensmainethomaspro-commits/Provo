@@ -86,6 +86,16 @@ dans Supabase › Edge Functions › Secrets. Trois garde-fous, parce que la cl�
 est payante et que la clé publique Supabase est lisible dans le bundle :
 
 1. Seules les origines de l'app déclenchent l'appel (`origineAutorisee`).
+   **Ce garde-fou vit dans `supabase/functions/_shared/origine.ts`, importé par
+   les quatre fonctions.** Écrit une seule fois dans `extract-place`, il n'avait
+   pas suivi les trois ajoutées ensuite — `read-booking`, `read-receipt` et
+   `enrich-place` appelaient toutes le modèle payant sans aucun contrôle. Toute
+   nouvelle fonction qui dépense l'importe. Le dossier `_shared` n'a pas
+   d'`index.ts` : la boucle de déploiement l'ignore comme fonction, et le CLI
+   l'embarque dans chaque paquet qui l'importe.
+   Ce que ce contrôle **ne** fait pas : l'en-tête `Origin` n'est imposé que par
+   les navigateurs. Il ferme l'abus depuis un autre site — le vecteur réaliste
+   d'une dépense massive — pas l'appel forgé en ligne de commande.
 2. Le modèle n'est appelé que si les règles ont échoué — une légende contenant
    déjà « 📍 Bouillon Chartier, Paris » se lit sans lui.
 3. Sa réponse repasse par le géocodeur, qui refuse ce qui ne correspond à rien,
@@ -95,7 +105,39 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **TikTok : un lecteur tiers rend la page, et la légende est dans le texte
+  alternatif des images** (9 août 2026). **La conclusion qui tient, et elle
+  remplace les deux précédentes.** Coller un lien remplit de nouveau la fiche —
+  sur iPhone, sans raccourci ni application installée, et sans rien payer.
+  Un service de lecture va chercher la page depuis SON infrastructure, que
+  TikTok ne traite pas en centre de données : là où notre serveur reçoit un
+  captcha, lui reçoit la page et nous la rend rendue. La légende n'y est pas en
+  clair — elle est dans le texte alternatif des images :
+  `![Image 1: 835 Likes, 6 Comments. image posted by () on : “📍DEOUN | …”](…)`.
+  Mesuré sur la fonction déployée : titre « DEOUN », échelon `lecteur-tiers`,
+  adresse « Rue Harispe, Biarritz ». En prime, les images rendues sont les
+  vraies photos du post, sans l'incrustation du bouton ▶ — elles remplacent
+  donc la vignette de partage, même venant d'un échelon plus bas.
+  **Deux pièges, refermés et commentés dans le code :** lui demander le HTML
+  brut (`x-return-format: html`) ramène le captcha — c'est le RENDU qui passe,
+  pas la récupération ; et il **refuse les navigateurs** (403 en 14 ms sur un
+  agent Safari, 200 sans agent). Le canari s'était déguisé en iPhone et avait
+  déclaré ROUGE une chaîne qui marchait.
+  **Nommer et situer sont séparés** : `extractLocationHint` dit comment ça
+  s'appelle, `extractGeoHint` dit où c'est (adresse écrite d'abord, puis
+  l'épingle complète avec sa ville). Une seule fonction pour les deux avait
+  nommé « DEOUN » et situé la fiche à 30 km.
+  L'agent chercheur reste derrière, pour les posts sans légende — sur le modèle
+  bon marché, trois recherches au plus, 25 s : un recours devenu rare ne
+  justifie plus le modèle le plus cher.
+  `scripts/verif-legende-alt.mjs` passe les mêmes cas dans les **deux**
+  exemplaires de la lecture — celui de l'app, celui du canari : si l'une est
+  corrigée sans l'autre, il casse.
+
 - **TikTok : c'est le téléphone qui lit la page, pas le serveur** (août 2026).
+  ⚠️ **Dépassé par l'entrée ci-dessus** — un serveur y arrive, via un lecteur
+  tiers. Ce qui reste vrai : la voie native existe et fonctionne. Ce qui est
+  faux : « seul un téléphone tranche ».
   La conclusion de la journée, et elle invalide la précédente. Tout ce qui a été
   mesuré depuis un exécuteur — oEmbed 400, captcha sur la page complète,
   vignette de couverture illisible, URL signée refusant toute variante (403 sur
