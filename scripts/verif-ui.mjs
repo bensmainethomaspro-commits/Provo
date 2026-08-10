@@ -385,6 +385,21 @@ const ECRANS = [
       await p.waitForTimeout(800);
     },
   },
+  {
+    // Le formulaire DÉPLIÉ, parts comprises. Replié, la moitié de ses contrôles
+    // échappait à la mesure — dont le réglage des parts, arrivé en août 2026.
+    // Un écran qu'on n'ouvre pas est un écran qu'on ne mesure pas.
+    nom: 'Dépense (parts)',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Dépenses/i);
+      await p.locator('.expenses-add-top').click().catch(() => {});
+      await p.waitForTimeout(600);
+      await p.locator('button', { hasText: /Détails/i }).first().click().catch(() => {});
+      await p.waitForTimeout(400);
+      await p.locator('button', { hasText: /Parts inégales/i }).first().click().catch(() => {});
+      await p.waitForTimeout(500);
+    },
+  },
   { nom: 'Carte', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200); } },
   // Deux écrans arrivés en août 2026 et jamais mesurés : le pli du formulaire
   // d'ajout, et les billets du voyage. Le débordement de la zone de notes

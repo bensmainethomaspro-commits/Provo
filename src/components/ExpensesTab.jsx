@@ -1,5 +1,8 @@
 import { useState, useRef, useMemo } from 'react';
-import { formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage } from '../utils/helpers';
+import {
+  formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage,
+  partEnEuros, partsDeDepense, totalDesParts, partageInegal,
+} from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
@@ -76,9 +79,12 @@ function calcDebts(expenses, travelers) {
     const n = (exp.participantIds || []).length;
     if (!n) return;
     const eurAmount = exp.eurAmount ?? exp.amount;
-    const share = eurAmount / n;
     bal[exp.payerId] = (bal[exp.payerId] || 0) + eurAmount;
-    exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - share; });
+    // La part de chacun vient de `partEnEuros`, jamais d'une division locale :
+    // un partage inégal doit donner le même chiffre ici, dans les soldes et
+    // dans la feuille par voyageur. Trois copies d'un calcul d'argent finissent
+    // par ne plus dire la même chose.
+    exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - partEnEuros(exp, id); });
   });
 
   const creditors = Object.entries(bal).filter(([, v]) => v > 0.005).sort((a, b) => b[1] - a[1]);
@@ -111,10 +117,8 @@ function calcBalances(expenses, travelers) {
     // formé fait tomber toute la vue voyage — barre d'onglets comprise.
     const n = (exp.participantIds || []).length;
     if (!n) return;
-    const eurAmount = exp.eurAmount ?? exp.amount;
-    const share = eurAmount / n;
-    bal[exp.payerId] = (bal[exp.payerId] || 0) + eurAmount;
-    exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - share; });
+    bal[exp.payerId] = (bal[exp.payerId] || 0) + (exp.eurAmount ?? exp.amount);
+    exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - partEnEuros(exp, id); });
   });
   return bal;
 }
@@ -131,7 +135,7 @@ const EXPENSE_CATEGORIES = [
 
 const CAT_DEFAUT = EXPENSE_CATEGORIES.find(c => c.id === 'autre');
 
-const BLANK = { description: '', amount: '', payerId: '', participantIds: [], activityId: '', currency: 'EUR', expenseCategory: 'autre' };
+const BLANK = { description: '', amount: '', payerId: '', participantIds: [], parts: {}, activityId: '', currency: 'EUR', expenseCategory: 'autre' };
 
 const CAT_COLORS = ['#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e', '#14b8a6', '#06b6d4'];
 
@@ -208,6 +212,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const [showDebtDetail, setShowDebtDetail] = useState(false);
   const [editingId, setEditingId] = useState(null); // dépense en cours de modification
   const [detailsOuverts, setDetailsOuverts] = useState(false);
+  const [partsOuvertes, setPartsOuvertes] = useState(false);
   const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
@@ -218,8 +223,25 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   const toggleParticipant = (id) => {
     const ids = form.participantIds;
-    set('participantIds', ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+    const sort = ids.includes(id);
+    // Retirer quelqu'un retire aussi sa part : la garder ferait réapparaître
+    // un « ×3 » oublié le jour où on le remet dans la dépense.
+    const parts = { ...(form.parts || {}) };
+    if (sort) delete parts[id];
+    setForm(f => ({
+      ...f,
+      participantIds: sort ? ids.filter(x => x !== id) : [...ids, id],
+      parts,
+    }));
   };
+
+  // Une part se règle de 1 à 9 : au-delà ce n'est plus un partage, c'est une
+  // autre dépense. Les bornes évitent aussi qu'un appui répété parte à l'infini.
+  const reglerPart = (id, delta) => setForm(f => {
+    const actuelles = partsDeDepense({ participantIds: f.participantIds, parts: f.parts });
+    const n = Math.max(1, Math.min(9, (actuelles[id] || 1) + delta));
+    return { ...f, parts: { ...(f.parts || {}), [id]: n } };
+  });
 
   // `block: 'center'` centrait un formulaire plus haut que l'écran : ses deux
   // boutons tombaient sous la barre d'onglets flottante — mesuré à 29 px
@@ -237,10 +259,14 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       amount: String(exp.amount ?? ''),
       payerId: exp.payerId || '',
       participantIds: exp.participantIds || [],
+      parts: exp.parts || {},
       activityId: exp.activityId || '',
       currency: exp.currency || 'EUR',
       expenseCategory: exp.expenseCategory || 'autre',
     });
+    // Un partage inégal doit se voir dès l'ouverture : replié, il se perdrait
+    // en silence à la première modification.
+    setPartsOuvertes(partageInegal(exp));
     setEditingId(exp.id);
     setError('');
     setDetailsOuverts(false);
@@ -297,6 +323,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   const openForm = () => {
     setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
+    setPartsOuvertes(false);
     setEditingId(null);
     setError('');
     setDetailsOuverts(false);
@@ -310,15 +337,32 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // voit donc SON propre solde, pas celui du propriétaire du voyage.
   const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
 
+  // La dépense telle qu'elle sera enregistrée — sert à l'aperçu et aux parts,
+  // pour que les deux disent le même chiffre que la fiche une fois validée.
+  const depenseEnCours = useMemo(() => {
+    const amt = parseFloat(form.amount);
+    const eur = !amt || amt <= 0 ? 0
+      : (form.currency === 'EUR' ? amt : convertToEur(amt, form.currency));
+    return { participantIds: form.participantIds, parts: form.parts, eurAmount: eur };
+  }, [form.amount, form.currency, form.participantIds, form.parts, convertToEur]);
+
+  const partsFormulaire = partsDeDepense(depenseEnCours);
+  const inegalEnCours = partageInegal(depenseEnCours);
+
   // Aperçu du partage pendant la saisie : « 60 € ÷ 2 = 30 € par personne »
   const splitPreview = (() => {
-    const amt = parseFloat(form.amount);
+    const eur = depenseEnCours.eurAmount;
     const n = form.participantIds.length;
-    if (!amt || amt <= 0 || n === 0) return null;
-    const eur = form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
+    if (!eur || n === 0) return null;
     if (n === 1) {
       const only = travelers.find(t => t.id === form.participantIds[0]);
       return `${formatPrice(eur)} pour ${only ? only.name : '1 personne'} seul·e`;
+    }
+    // À parts inégales, « par personne » serait faux : on donne la valeur de
+    // LA PART, et le détail par personne se lit juste à côté, dans les parts.
+    const total = totalDesParts(depenseEnCours);
+    if (partageInegal(depenseEnCours)) {
+      return `${formatPrice(eur)} ÷ ${total} parts = ${formatPrice(eur / total)} la part`;
     }
     return `${formatPrice(eur)} ÷ ${n} = ${formatPrice(eur / n)} par personne`;
   })();
@@ -329,8 +373,10 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const resumeDetails = (() => {
     const cat = EXPENSE_CATEGORIES.find(c => c.id === form.expenseCategory) || CAT_DEFAUT;
     const n = form.participantIds.length;
+    const inegal = partageInegal(depenseEnCours);
     const partage = !hasTravelers ? null
       : n === 0 ? 'partagé avec personne'
+      : inegal ? `partagé entre ${n}, à parts inégales`
       : n === travelers.length ? 'partagé avec tout le monde'
       : n === 1 ? `pour ${getName(form.participantIds[0])} seul·e`
       : `partagé entre ${n}`;
@@ -356,6 +402,13 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       eurAmount: Math.round(eurAmount * 100) / 100,
       description: form.description.trim(),
     };
+    // Un partage égal ne garde pas d'objet `parts` : c'est le cas courant, et
+    // la fiche doit rester lisible telle qu'une version antérieure l'écrirait.
+    // `{}` plutôt que la suppression du champ : sur une dépense qu'on MODIFIE
+    // pour revenir à parts égales, omettre la clé laisserait l'ancienne valeur.
+    if (!partageInegal({ participantIds: form.participantIds, parts: form.parts })) {
+      payload.parts = {};
+    }
     if (editingId) onUpdateExpense?.(editingId, payload);
     else onAddExpense(payload);
     setEditingId(null);
@@ -402,7 +455,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
           .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
         const share = expenses.reduce((s, e) => {
           if (!(e.participantIds || []).includes(t.id)) return s;
-          return s + (e.eurAmount ?? e.amount) / ((e.participantIds || []).length || 1);
+          return s + partEnEuros(e, t.id);
         }, 0);
         return { ...t, paid, share, balance: paid - share };
       }),
@@ -793,21 +846,89 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                 <button
                   type="button"
                   className="expense-form__all-btn"
-                  onClick={() => set('participantIds',
-                    form.participantIds.length === travelers.length ? [] : travelers.map(t => t.id))}
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    participantIds: f.participantIds.length === travelers.length
+                      ? [] : travelers.map(t => t.id),
+                    parts: {},
+                  }))}
                 >
                   {form.participantIds.length === travelers.length ? 'Tout décocher' : 'Tout le monde'}
                 </button>
               </label>
               <div className="traveler-assign-row">
-                {travelers.map(t => (
-                  <button key={t.id} type="button"
-                    className={`traveler-assign-chip${form.participantIds.includes(t.id) ? ' traveler-assign-chip--on' : ''}`}
-                    onClick={() => toggleParticipant(t.id)}>
-                    {t.emoji} {t.name}
-                  </button>
-                ))}
+                {travelers.map(t => {
+                  const dedans = form.participantIds.includes(t.id);
+                  const n = partsFormulaire[t.id] || 1;
+                  return (
+                    <button key={t.id} type="button"
+                      className={`traveler-assign-chip${dedans ? ' traveler-assign-chip--on' : ''}`}
+                      onClick={() => toggleParticipant(t.id)}>
+                      {t.emoji} {t.name}
+                      {/* La part se lit sur la pastille de la personne — il n'y
+                          a pas d'autre endroit où l'on cherche « combien compte
+                          Léa ». Rien ne s'affiche à parts égales. */}
+                      {dedans && n > 1 && <span className="chip-part"> ×{n}</span>}
+                    </button>
+                  );
+                })}
               </div>
+              {/* Le réglage des parts n'apparaît qu'à partir de deux personnes,
+                  et reste replié : à parts égales — le cas courant — il n'y a
+                  rien à régler, et l'afficher ferait payer à tout le monde une
+                  exception que peu utilisent. */}
+              {form.participantIds.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    className="expense-parts__toggle"
+                    onClick={() => setPartsOuvertes(o => !o)}
+                    aria-expanded={partsOuvertes}
+                  >
+                    {partsOuvertes ? '▴' : '▾'} Parts inégales
+                    {!partsOuvertes && inegalEnCours && ' · en cours'}
+                  </button>
+                  {partsOuvertes && (
+                    <div className="expense-parts">
+                      <p className="expense-parts__aide">
+                        Une part chacun par défaut. Deux parts pour qui compte
+                        double — une chambre partagée, un menu en plus.
+                      </p>
+                      {form.participantIds.map(id => (
+                        <div key={id} className="expense-parts__row">
+                          <span className="expense-parts__who">
+                            {getEmoji(id)} {getName(id)}
+                          </span>
+                          <div className="expense-parts__stepper">
+                            <button type="button" className="expense-parts__btn"
+                              onClick={() => reglerPart(id, -1)}
+                              disabled={(partsFormulaire[id] || 1) <= 1}
+                              aria-label={`Moins de parts pour ${getName(id)}`}>−</button>
+                            <span className="expense-parts__n">{partsFormulaire[id] || 1}</span>
+                            <button type="button" className="expense-parts__btn"
+                              onClick={() => reglerPart(id, +1)}
+                              disabled={(partsFormulaire[id] || 1) >= 9}
+                              aria-label={`Plus de parts pour ${getName(id)}`}>+</button>
+                          </div>
+                          {/* Le résultat en euros, à côté du réglage : c'est lui
+                              qu'on vérifie, pas le nombre de parts. */}
+                          <span className="expense-parts__euros">
+                            {depenseEnCours.eurAmount
+                              ? formatPrice(partEnEuros(depenseEnCours, id))
+                              : '—'}
+                          </span>
+                        </div>
+                      ))}
+                      {inegalEnCours && (
+                        <button type="button" className="expense-parts__reset"
+                          onClick={() => set('parts', {})}>
+                          Revenir à parts égales
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
           {(activitiesByDay.length > 0 || (trip.reserve || []).length > 0) && (

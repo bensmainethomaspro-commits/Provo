@@ -1332,3 +1332,48 @@ export async function lireRecu(imageDataUrl) {
     return { error: 'hors_ligne' };
   }
 }
+
+// ── Partage d'une dépense ────────────────────────────────────────────────────
+// Une dépense se partage à parts ÉGALES par défaut : c'est le cas courant, et
+// il ne demande aucune saisie. `parts` ne porte que les exceptions — « Léa
+// compte double parce qu'elle partage la chambre », « Tom n'a pas pris le
+// menu ». Une dépense sans `parts`, ou dont toutes les parts valent 1, se
+// divise donc exactement comme avant : celles déjà enregistrées et celles
+// qu'une version antérieure de l'app écrit encore restent justes.
+//
+// La règle vit ICI et nulle part ailleurs. Elle était écrite trois fois —
+// soldes, dettes, feuille par voyageur — et trois copies d'un calcul d'argent
+// finissent par ne plus dire la même chose.
+
+/** Les parts effectives, une par participant. Jamais vide, jamais zéro. */
+export function partsDeDepense(exp) {
+  const ids = exp?.participantIds || [];
+  const brut = exp?.parts || {};
+  const parts = {};
+  for (const id of ids) {
+    const v = Number(brut[id]);
+    // Une part absente, nulle, négative ou aberrante vaut 1. Dans un carnet de
+    // comptes, un partage égal vaut mieux qu'une division par zéro.
+    parts[id] = Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 99) : 1;
+  }
+  return parts;
+}
+
+export function totalDesParts(exp) {
+  return Object.values(partsDeDepense(exp)).reduce((s, v) => s + v, 0);
+}
+
+/** Ce que cette personne doit sur cette dépense, en euros. 0 si elle n'y est pas. */
+export function partEnEuros(exp, id) {
+  const parts = partsDeDepense(exp);
+  const total = Object.values(parts).reduce((s, v) => s + v, 0);
+  if (!total || !parts[id]) return 0;
+  const montant = exp?.eurAmount ?? exp?.amount ?? 0;
+  return montant * parts[id] / total;
+}
+
+/** Vrai seulement si le partage n'est PAS égal — sert à ne le dire que là. */
+export function partageInegal(exp) {
+  const v = Object.values(partsDeDepense(exp));
+  return v.length > 1 && v.some(x => x !== v[0]);
+}
