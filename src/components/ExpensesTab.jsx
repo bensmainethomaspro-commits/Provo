@@ -284,6 +284,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         : lu.confiance === 'basse'
           ? `${lu.montant} ${lu.devise || ''} — photo peu nette, vérifie avant d'enregistrer.`
           : `Lu sur le ticket : ${lu.montant} ${lu.devise || ''}. Vérifie et enregistre.`);
+    } catch {
+      // `reduireImage` rejette sur un fichier que le navigateur ne sait pas
+      // décoder — un HEIC transmis tel quel, une image tronquée. Sans ce
+      // rattrapage, l'indicateur s'éteignait et il ne se passait plus rien :
+      // ni montant, ni message. On ne saurait même pas qu'il faut recommencer.
+      setRecuMsg("Cette photo n'a pas pu être ouverte. Reprends-la, ou saisis le montant à la main.");
     } finally {
       setLectureRecu(false);
     }
