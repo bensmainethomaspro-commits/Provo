@@ -41,6 +41,12 @@ Produit et UX, puis retour au début.
 | A-014 | 2026-08-03 | Fiabilité | `resolve()` systématique sur TikTok alors que le dépôt a mesuré que la page renvoie un captcha depuis un serveur : jusqu'à 10 s perdues par import (`index.ts:596`) | Mineur | PROPOSÉ |
 | A-015 | 2026-08-03 | Fiabilité | `fetchPlaceData` appelait `res.json()` sans vérifier `res.ok` : le 429 de Nominatim levait au lieu de rendre `null` | Mineur | CORRIGÉ |
 | A-016 | 2026-08-03 | Dette technique | Liaison morte `finalUrl` dans `handleGeneric`, neutralisée par un `void` | Mineur | CORRIGÉ |
+| A-017 | 2026-08-10 | Sécurité | `push_subscriptions` : politique UPDATE sans `WITH CHECK` (vérifié en production). Un compte connecté réaffecte sa propre ligne à l'`user_id` d'un autre : `push-tick` lui pousse alors les titres et adresses des activités de l'autre | Majeur | PROPOSÉ |
+| A-018 | 2026-08-10 | Sécurité | `read-booking`, `read-receipt` et `enrich-place` n'appellent pas `origineAutorisee` : la clé Anthropic est dépensable par quiconque lit la clé publiable du bundle (`read-receipt` accepte 1,5 Mo d'image par appel) | Majeur | PROPOSÉ |
+| A-019 | 2026-08-10 | Sécurité | `enrich-place` : le garde-fou SSRF ne valide que l'URL initiale, `lirePage` suit ensuite les redirections sans revérifier (`index.ts:146`) | Majeur | PROPOSÉ |
+| A-020 | 2026-08-10 | Fiabilité | Photo de ticket que le navigateur ne sait pas décoder : `reduireImage` rejette, `lireLeRecu` n'avait qu'un `finally` — écran muet (`ExpensesTab.jsx:287`) | Mineur | CORRIGÉ |
+| A-021 | 2026-08-10 | Dette technique | Deux directives `eslint-disable` mortes, signalées par ESLint lui-même | Mineur | CORRIGÉ |
+| A-022 | 2026-08-10 | Méthode | `.audit/contexte.md.` (point final parasite) subsiste et a divergé de `contexte.md` : deux mémoires d'audit, dont une périmée | Mineur | PROPOSÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -49,13 +55,16 @@ Exemple de ligne, à supprimer :
 
 ## Dernier audit effectif
 
-Date : 2026-08-03
-Type : LÉGER (5 jours écoulés, 28 commits dont 8 significatifs → axes sécurité
-et fiabilité uniquement, pas d'axe rotatif)
-Dernier axe rotatif couvert : Dette technique (au 2026-07-29)
-Prochain axe rotatif : Produit et UX
-Référence ESLint à la date de l'audit : 53 erreurs, 3 avertissements
-(inchangé depuis le 2026-07-29 — le code ajouté n'a pas aggravé la dette)
+Date : 2026-08-10
+Type : PROFOND (7 jours écoulés seulement, mais **89 commits** sur `main` depuis
+le 2026-08-03, dont quatre nouvelles fonctions Edge et une nouvelle table —
+au-delà du seuil de 40 commits, la profondeur ne se décide plus au calendrier)
+Dernier axe rotatif couvert : Produit et UX (au 2026-08-10, dans le cadre PROFOND)
+Prochain axe rotatif : Performance et coûts
+Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** après
+correction (52 erreurs / 6 avertissements avant). La dette d'erreurs n'a pas
+augmenté malgré +14 500 lignes ; les deux avertissements de plus étaient des
+directives `eslint-disable` mortes, retirées ici.
 
 ### Historique
 
@@ -63,3 +72,4 @@ Référence ESLint à la date de l'audit : 53 erreurs, 3 avertissements
 |---|---|---|---|
 | 2026-07-29 | PROFOND | Tous + roadmap | A-001 à A-010 |
 | 2026-08-03 | LÉGER | Sécurité, Fiabilité | A-011 à A-016 |
+| 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
