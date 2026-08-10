@@ -139,23 +139,70 @@ function imageDeLaPage(html: string, base: URL): string | null {
   return null;
 }
 
+const REDIRECTIONS = new Set([301, 302, 303, 307, 308]);
+const SAUTS_MAX = 5;
+
+/**
+ * Suivre les redirections À LA MAIN, en repassant chaque saut par `urlSure`.
+ *
+ * `redirect: "follow"` ne validait que l'URL de départ : une adresse publique
+ * qui renvoie vers `http://169.254.169.254` faisait traverser le garde-fou à
+ * l'arrivée. Le contrôle doit porter sur chaque saut, pas sur le premier.
+ *
+ * CE QUE ÇA NE COUVRE PAS : un nom d'hôte public qui *résout* vers une adresse
+ * interne (réattribution DNS). Le filtre lit le nom, pas l'adresse résolue —
+ * et Deno ne donne pas la main entre la résolution et la connexion. Le dire
+ * plutôt que de croire la porte fermée.
+ */
+async function suivreRedirections(
+  depart: URL, signal: AbortSignal,
+): Promise<{ reponse: Response; urlFinale: URL } | null> {
+  let courante = depart;
+  for (let saut = 0; saut <= SAUTS_MAX; saut++) {
+    const r = await fetch(courante.toString(), {
+      signal,
+      redirect: "manual",
+      headers: { "User-Agent": UA, "Accept-Language": "fr,en;q=0.8" },
+    });
+    if (!REDIRECTIONS.has(r.status)) return { reponse: r, urlFinale: courante };
+    // Le corps d'une réponse de redirection ne sert à rien, mais le laisser
+    // ouvert retient la connexion.
+    await r.body?.cancel().catch(() => {});
+    const cible = r.headers.get("location");
+    if (!cible) return null;
+    // Une `Location` a le droit d'être relative : la résoudre avant de la
+    // juger, sinon `urlSure` refuserait une redirection parfaitement normale.
+    let resolue: string;
+    try {
+      resolue = new URL(cible, courante).toString();
+    } catch {
+      return null;
+    }
+    const sure = urlSure(resolue);
+    if (!sure) return null;
+    courante = sure;
+  }
+  // Plus de sauts que permis : une boucle, ou quelqu'un qui joue.
+  return null;
+}
+
 async function lirePage(url: URL): Promise<{ texte: string; image: string | null } | null> {
   const { signal, clear } = withTimeout(12000);
   try {
-    const r = await fetch(url.toString(), {
-      signal,
-      redirect: "follow",
-      headers: { "User-Agent": UA, "Accept-Language": "fr,en;q=0.8" },
-    });
+    const suivi = await suivreRedirections(url, signal);
     clear();
+    if (!suivi) return null;
+    const { reponse: r, urlFinale } = suivi;
     if (!r.ok) return null;
     const type = r.headers.get("content-type") || "";
     if (!/text\/html|application\/xhtml/i.test(type)) return null;
     // Une page de 5 Mo n'apporte rien de plus que ses 400 premiers ko.
     const brut = (await r.text()).slice(0, 400_000);
     // L'image se lit AVANT le nettoyage : les balises `meta` disparaissent
-    // avec le reste du balisage.
-    const image = imageDeLaPage(brut, new URL(r.url || url.toString()));
+    // avec le reste du balisage. Elle se résout sur l'URL d'ARRIVÉE : depuis
+    // qu'on suit les sauts nous-mêmes, `r.url` porte l'URL demandée, pas la
+    // dernière — une image relative s'y résoudrait sur le mauvais domaine.
+    const image = imageDeLaPage(brut, urlFinale);
     const texte = texteLisible(brut);
     return texte.length > 80 ? { texte, image } : (image ? { texte: "", image } : null);
   } catch {
