@@ -40,7 +40,7 @@ export function usePlaceSuggestions(lat, lon, enabled = true) {
         setSuggestions(places);
       })
       .catch(() => {});
-  }, [lat, lon, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lat, lon, enabled]);
 
   return { suggestions };
 }
