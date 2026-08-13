@@ -2083,7 +2083,15 @@ for (const parcours of choisis) {
   let injoue = null;
   try {
     await p.goto(URL_BASE + '/', { waitUntil: 'domcontentloaded' });
-    await p.waitForTimeout(1100);
+    // ATTENDRE le montage, ne pas le CONSTATER à instant fixe. Les 1100 ms
+    // d'attente aveugle d'avant suffisaient à vide, pas quand les services
+    // distants sont rejoués : l'app démarrait après le délai, et le parcours
+    // partait sur une page encore vide. Ses sélecteurs échouaient alors un peu
+    // plus loin, sous un nom qui n'avait plus rien à voir avec la cause — de
+    // quoi chercher longtemps un défaut d'interface qui n'existe pas.
+    await p.locator('#root > *').first()
+      .waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+    await p.waitForTimeout(400);
     // L'APP A-T-ELLE SEULEMENT DÉMARRÉ ? Mesuré le 10 août 2026 en la tuant
     // exprès (paquet JS absent) : la suite rendait 4 constats CASSÉS —
     // « l'accueil annonce le départ à venir » — sur une page entièrement
