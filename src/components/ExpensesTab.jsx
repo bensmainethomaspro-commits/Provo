@@ -322,7 +322,17 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   };
 
   const openForm = () => {
-    setForm({ ...BLANK, payerId: travelers[0]?.id || '', participantIds: travelers.map(t => t.id), currency: 'EUR' });
+    // MOI par défaut, pas le premier voyageur de la liste. C'est presque
+    // toujours celui qui saisit qui vient de payer — proposer quelqu'un
+    // d'autre coûtait un tap de correction à CHAQUE dépense, à tous ceux qui
+    // ne sont pas premiers dans la liste. C4 du playbook : se placer du point
+    // de vue du compte connecté.
+    setForm({
+      ...BLANK,
+      payerId: me?.id || travelers[0]?.id || '',
+      participantIds: travelers.map(t => t.id),
+      currency: 'EUR',
+    });
     setPartsOuvertes(false);
     setEditingId(null);
     setError('');
@@ -502,17 +512,10 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <span className="expenses-summary__label">Total dépensé</span>
             <span className="expenses-summary__amount">{formatPrice(totalSpent)}</span>
           </div>
-          {tripBudget > 0 && (
-            <div className="expenses-summary__budget">
-              <div className="expenses-budget-bar">
-                <div className="expenses-budget-fill" style={{
-                  width: `${Math.min(100, (totalSpent / tripBudget) * 100)}%`,
-                  background: budgetOver ? 'var(--red)' : 'var(--green)'
-                }} />
-              </div>
-              <span className="expenses-summary__per">{formatPrice(tripBudget - totalSpent > 0 ? tripBudget - totalSpent : totalSpent - tripBudget)} {budgetOver ? 'de dépassement' : 'restants'}</span>
-            </div>
-          )}
+          {/* Ni barre de budget ni « X € restants » : l'en-tête du voyage le
+              dit déjà, 250 px plus haut, avec les mêmes mots. Le doublon
+              coûtait 90 px avant la première dépense — et sur cet écran, la
+              première dépense est ce qu'on vient voir. */}
           {hasTravelers && (
             <div className="expenses-summary__per">
               soit {formatPrice(totalSpent / travelers.length)} par personne
@@ -521,10 +524,11 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         </div>
       )}
 
-      {/* Le bouton vient après le total : on lit d'abord où on en est, on
-          ajoute ensuite. Hors de la condition sur le nombre de dépenses —
-          c'est justement quand il n'y en a aucune qu'il faut pouvoir en
-          ajouter une. */}
+      {/* Ce bouton est le SEUL moyen d'ajouter une dépense : le « + » de
+          l'en-tête ouvre le formulaire d'ACTIVITÉ, pas celui-ci. Je l'ai
+          retiré une fois en le croyant redondant — sept parcours l'ont
+          rattrapé avant livraison. Ne pas refaire : vérifier ce que le « + »
+          de l'en-tête ouvre avant de le déclarer doublon. */}
       {!showForm && (
         <button className="btn btn--primary expenses-add-top" onClick={openForm}>
           + Ajouter une dépense
