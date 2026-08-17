@@ -23,7 +23,7 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur } from '../utils/helpers';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
@@ -602,7 +602,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const undoableDeleteExpense = withUndo('Dépense supprimée',
     (expId) => deleteExpense(tripId, expId));
   const undoableDeleteTraveler = withUndo('Voyageur supprimé',
-    (id) => updateTrip(tripId, { tripTravelers: (trip.tripTravelers || []).filter(t => t.id !== id) }));
+    // Même règle qu'ailleurs, au même endroit : sa part ne doit plus être
+    // comptée dans les dépenses une fois qu'il n'est plus du voyage.
+    (id) => updateTrip(tripId, voyageSansVoyageur(trip, id)));
 
   const handleEditSave = (updates) => {
     if (!editingActivity) return;
