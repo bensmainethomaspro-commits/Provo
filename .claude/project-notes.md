@@ -156,6 +156,59 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   traitées » l'avant-veille : les pastilles de catégorie ont disparu avec le
   pli « Détails ».
 
+- **Un seul dessin de fiche, et la Réserve s'ouvre sur des idées** (17 août
+  2026, tâches #39 et #44). Deux dettes anciennes, sur l'écran qui EST le
+  produit. Tout est mesuré sur le même voyage de référence, écran de 844 px.
+
+  **La fiche.** Trois dessins cohabitaient : frise 278×32, jour 358×66,
+  Réserve 358×**174**. Les 108 px d'écart tenaient dans deux rangées à moitié
+  vides que la Réserve empilait autour de la fiche commune — la ligne d'état
+  (« Ouvert · 1,2 km · 2 infos à compléter ») au-dessus, le bouton
+  « Assigner » en dessous, avec 250 px de vide à sa gauche. Elles rentrent
+  toutes les deux dans la fiche, par deux fentes ouvertes dans `ActivityCard` :
+  · `etat` se range dans la ligne de méta, avec durée, prix et adresse — une
+    seule ligne de faits, comme sur la fiche d'un jour ;
+  · `action` se range dans la rangée du haut, à côté du ⋯ : cette rangée fait
+    déjà 52 px de haut à cause de la vignette, le bouton n'y coûte rien.
+  Résultat : **174 → 118 px**, soit la fiche d'un jour plus sa vignette. Le
+  choix du jour passe par un calque — la fiche porte `content-visibility:
+  auto`, qui découpe tout ce qu'on dessine dedans (quatrième fois que ce piège
+  frappe ici).
+  Le bouton d'assignation porte un **＋ typographique et pas un émoji de
+  calendrier** : tous en portent un quantième, et une fiche pas encore assignée
+  qui affiche « 17 » se lit comme une fiche déjà posée.
+
+  **L'écran.** 182 px de commandes avant la première idée : un champ de
+  recherche pleine largeur, puis une rangée tri + filtres, puis une bande de
+  dépôt invisible de 18 px. Deux idées visibles. Maintenant **114 px** et
+  quatre idées, par trois gestes :
+  · la recherche se replie derrière son 🔍 et reprend toute la largeur quand on
+    la demande (règle A5 : ce qui rétrécit en premier, c'est le chrome) ;
+  · « coller », « ouvert », « grouper » et le tri tiennent sur la même ligne ;
+    « Tout (8) » ne sert qu'à revenir, il est muet tant qu'on n'est parti
+    nulle part ;
+  · la zone de dépôt, c'est la liste elle-même.
+
+  **Deux pièges rencontrés, à ne pas refaire.**
+  1. J'ai donné la classe `reserve-filter__pill` au bouton « Chercher une
+     idée ». Le parcours qui filtre par catégorie vise
+     `.reserve-filter__pill[aria-label*="idée"]` — il a cliqué sur la
+     recherche. Une commande n'est pas un filtre : `.reserve-cmd` porte le même
+     dessin sans le même sens.
+  2. Les pastilles de catégorie avaient rejoint la rangée des commandes. À cinq
+     contrôles devant elles, il fallait faire défiler la rangée pour en
+     atteindre une — et le défilement décalait la cible sous le doigt. Elles
+     ont retrouvé leur propre rangée, qui n'existe qu'en vue liste.
+
+  **Ce que les deux nouveaux écrans de `/verif-ui` ont trouvé aussitôt** (règle
+  E6 : une sonde ne trouve que sur les écrans qu'on lui montre) : « J1 » à
+  « J6 » du choix de jour à 2,6:1, et la poignée de réordonnancement à 22 px de
+  large — alors que la tâche #21 avait posé 44 px comme règle. Les deux
+  préexistaient et n'avaient jamais été mesurés. Pour la poignée, le
+  pseudo-élément qui étend les autres cibles ne peut rien : elle est collée au
+  bord gauche d'une fiche qui découpe ce qui dépasse. Elle s'élargit donc pour
+  de bon, et la gouttière avec elle.
+
 - **Parts inégales, à la manière de Provo** (août 2026) — ⚠️ **en partie
   dépassé par l'entrée ci-dessus** : le pli « Détails » et les pastilles
   `Thomas ×2` n'existent plus, remplacés par le sélecteur de mode et les

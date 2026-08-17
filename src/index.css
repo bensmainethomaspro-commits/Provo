@@ -1420,15 +1420,20 @@ body {
    pastille de catégorie faisait descendre la première idée d'une ligne entière
    — sur l'écran dont tout le métier est de montrer des idées. La bande garde
    une hauteur constante quel que soit le nombre de filtres. */
+/* La rangée des pastilles de catégorie — vue liste seulement. */
 .reserve-filter {
   display: flex; flex-wrap: nowrap; gap: 6px;
   overflow-x: auto; scrollbar-width: none;
-  padding: 8px 0 12px;
-  scroll-snap-type: x proximity;
+  padding: 0 0 10px;
 }
 .reserve-filter::-webkit-scrollbar { display: none; }
-.reserve-filter > * { flex-shrink: 0; scroll-snap-align: start; }
-.reserve-filter__pill {
+.reserve-filter > * { flex-shrink: 0; }
+
+/* La liste d'idées est elle-même la zone de dépôt : plus de bande vide avant
+   la première fiche pour un geste qui n'existe qu'à la souris. */
+.reserve-liste { border-radius: var(--radius-md); border: 2px dashed transparent; transition: border-color 0.15s; }
+.reserve-liste--depot { border-color: var(--accent); }
+.reserve-filter__pill, .reserve-cmd {
   /* 24 px de haut mesurés : sous le pouce, on visait. */
   min-height: 44px; padding: 4px 14px;
   display: inline-flex; align-items: center; gap: 4px;
@@ -1441,8 +1446,13 @@ body {
   transition: all 0.15s;
   white-space: nowrap;
 }
-.reserve-filter__pill:hover { background: var(--surface-sunken); }
-.reserve-filter__pill--active {
+.reserve-filter__pill:hover, .reserve-cmd:hover { background: var(--surface-sunken); }
+/* Une commande (chercher, coller, grouper, fermer) n'est pas un filtre : elle
+   porte sa propre classe, sinon le sélecteur qui vise « les pastilles de
+   catégorie » attrape « Chercher une idée » — c'est arrivé, et le parcours
+   ouvrait la recherche en croyant filtrer. Le dessin, lui, reste commun. */
+.reserve-cmd { width: 44px; padding: 0; justify-content: center; font-size: var(--t-md); }
+.reserve-filter__pill--active, .reserve-cmd--on {
   background: var(--orange);
   color: #fff;
   border-color: var(--orange);
@@ -2162,9 +2172,24 @@ body {
 }
 
 /* ─── RESERVE SEARCH + SORT ─────────────────────────────────── */
-.reserve-search-bar {
-  display: flex; gap: 8px; padding: 4px 0 8px;
+/* La rangée unique de commandes de la Réserve : recherche repliée, coller,
+   filtres et tri sur la même ligne. Elle défile horizontalement quand les
+   pastilles de catégorie s'y ajoutent (vue liste seulement). */
+.reserve-barre {
+  display: flex; flex-wrap: nowrap; align-items: center; gap: 6px;
+  overflow-x: auto; scrollbar-width: none;
+  padding: 4px 0 10px;
 }
+.reserve-barre::-webkit-scrollbar { display: none; }
+/* Pas d'aimantation : la rangée est plus longue qu'avant (la recherche et
+   « coller » l'ont rejointe), et `scroll-snap` ramenait en arrière chaque
+   défilement vers une pastille de catégorie — impossible d'en atteindre une
+   sans se battre avec le rebond. Mesuré : le parcours qui filtre par catégorie
+   n'arrivait plus à cliquer du tout. */
+.reserve-barre > * { flex-shrink: 0; }
+/* Ouverte, la recherche prend toute la ligne — c'est le seul moment où elle
+   la mérite. */
+.reserve-barre > .reserve-search-field { flex: 1; min-width: 0; }
 .reserve-search-input {
   flex: 1; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
   padding: 8px 12px; font-size: var(--t-md); font-family: inherit;
@@ -3185,6 +3210,7 @@ body {
 /* ─── BETTER INLINE CHIP ACTIVE STATES ───────────────────── */
 .day-pill:active,
 .reserve-filter__pill:active,
+.reserve-cmd:active,
 .category-btn:active,
 .traveler-assign-chip:active {
   transform: scale(0.93);
@@ -6349,31 +6375,22 @@ button.budget-inline:active { transform: scale(0.98); }
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Une pastille alignée à droite, pas une barre pleine largeur : répété sur huit
    fiches, un bandeau étiqueté coûtait 368 px de pure redite. */
-.reserve-assign {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 0 10px 8px;
-}
+/* Le bouton d'assignation tient dans la rangée du haut de la fiche, à côté du
+   ⋯ : cette rangée fait déjà 60 px de haut à cause de la vignette, il n'y
+   coûte donc aucune hauteur — là où il occupait sa propre rangée de 52 px,
+   dont 250 px de vide à sa gauche. */
 .reserve-assign__toggle {
-  display: inline-flex; align-items: center; gap: 5px;
-  min-height: 44px; padding: 5px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface-sunken);
-  font-size: var(--t-xs); font-weight: 600;
-  color: var(--text-muted);
-  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  min-width: 44px; min-height: 44px; padding: 0;
+  border: none; background: none;
+  font-size: var(--t-lg); line-height: 1; color: var(--text-muted);
+  cursor: pointer; opacity: 0.75;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s, color 0.12s, transform 0.08s;
+  transition: opacity 0.12s, transform 0.08s;
 }
-.reserve-assign__toggle:active { transform: scale(0.94); }
-.reserve-assign--open .reserve-assign__toggle {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-.reserve-assign__chevron { font-size: var(--t-xs); opacity: 0.8; }
+.reserve-assign__toggle:active { transform: scale(0.9); opacity: 1; }
+.reserve-assign__toggle--on { opacity: 1; }
 
 /* Trois colonnes égales : les jours se lisent en grille, pas en paragraphe. */
 .reserve-assign__days {
@@ -6381,7 +6398,7 @@ button.budget-inline:active { transform: scale(0.98); }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
-  margin-top: 8px;
+  padding: 4px 4px 10px;
 }
 .reserve-assign__day {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -6396,7 +6413,10 @@ button.budget-inline:active { transform: scale(0.98); }
 }
 .reserve-assign__day:active { transform: scale(0.94); }
 .reserve-assign__day-num {
-  font-size: var(--t-sm); font-weight: 800; color: var(--accent);
+  /* --accent en texte : 2,6:1 sur le fond du calque, mesuré le jour où le
+     choix du jour est enfin passé sous l'outil. `--accent-texte` est le jeton
+     fait pour ça. */
+  font-size: var(--t-sm); font-weight: 800; color: var(--accent-texte);
   line-height: 1;
 }
 .reserve-assign__day-date {
@@ -6408,7 +6428,7 @@ button.budget-inline:active { transform: scale(0.98); }
    trois fois la hauteur d'une fiche sans image, et la liste perdait tout
    rythme. En vignette, les fiches se scannent d'un coup d'œil. */
 .reserve-card .activity-card__photo {
-  width: 60px; height: 60px;
+  width: 52px; height: 52px;
   object-fit: cover;
   border-radius: var(--radius-md);
   float: left;
@@ -6708,6 +6728,7 @@ button.budget-inline:active { transform: scale(0.98); }
 .undo-toast__btn,
 .today-act-card__btn,
 .reserve-filter__pill,
+.reserve-cmd,
 .reserve-assign__toggle,
 .today-geo__toggle,
 .tool-btn,
@@ -6722,6 +6743,7 @@ button.budget-inline:active { transform: scale(0.98); }
 .undo-toast__btn::after,
 .today-act-card__btn::after,
 .reserve-filter__pill::after,
+.reserve-cmd::after,
 .reserve-assign__toggle::after,
 .today-geo__toggle::after,
 .tool-btn::after,
@@ -7028,36 +7050,68 @@ button.budget-inline:active { transform: scale(0.98); }
 /* ─── Réserve : ce qu'il faut savoir avant de piocher ─────────────────────
    Une ligne, trois signaux au plus. Un indicateur qui parle tout le temps ne
    parle plus : « à compléter » reste gris et discret, jamais alarmant. */
-.reserve-etat {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  /* La carte a `overflow: hidden` et des coins arrondis : une ligne collée
-     aux bords s'y fait rogner. Elle suit donc la gouttière interne. */
-  padding: 9px 14px 0;
-  font-size: var(--t-xs); color: var(--text-muted);
-  min-width: 0;
-}
-.reserve-etat > * { min-width: 0; }
+/* Les mentions d'état vivent dans la ligne de méta de la fiche, entre le prix
+   et l'adresse : elles héritent de ses points de séparation, mais pas de sa
+   taille — la ligne de méta n'en fixe aucune, et sans ça « Ouvert » sortait
+   en 16 px vert vif, plus gros que le nom du lieu. */
+.reserve-etat__ouvert,
+.reserve-etat__ferme,
+.reserve-etat__km,
+.reserve-etat__plan,
+.reserve-etat__auteur { font-size: var(--t-sm); }
 .reserve-etat__ouvert {
   /* --green (#22c55e) est fait pour remplir, pas pour écrire : 2,18:1 sur une
      carte claire. --green-deep tient le seuil. */
   color: var(--green-texte); font-weight: 600;
 }
-.reserve-etat__ouvert::before { content: '● '; }
+/* Le rond a disparu : la ligne de méta sépare déjà ses éléments par un point,
+   et « · ● Ouvert » faisait deux marques pour une seule information. Le mot
+   porte la couleur, elle suffit. */
 .reserve-etat__ferme { color: var(--text-light); font-weight: 600; }
-.reserve-etat__ferme::before { content: '○ '; }
 .reserve-etat__km { font-weight: 600; color: var(--accent-deep, var(--accent)); }
 .reserve-etat__plan { font-style: italic; }
 /* C'est un bouton depuis qu'il fait quelque chose : il lance la recherche
    pour cette fiche. Il garde l'allure d'une mention discrète — souligné
    pointillé, comme les adresses cliquables — sans devenir un bouton de plus. */
 .reserve-etat__manque {
-  margin-left: auto;
   border: none; background: none; font: inherit;
+  font-size: var(--t-sm);
+  /* La cible fait 44 px, la ligne n'en fait que 22 : le rembourrage déborde
+     sur les marges au lieu d'écarter la ligne de méta. Sans ça, une fiche
+     incomplète était 22 px plus haute que sa voisine, sur le seul écran où
+     les fiches doivent se comparer d'un coup d'œil. */
   display: inline-flex; align-items: center; min-height: 44px;
+  padding-block: 11px; margin-block: -11px;
+  /* Poussée à droite, jamais coupée en deux : c'est une phrase, pas une
+     mention. Elle prend une ligne pour elle quand elle ne rentre pas — et
+     sans le point de séparation, qui se retrouvait seul en début de ligne. */
+  margin-left: auto; white-space: nowrap;
   color: var(--accent-texte);
   text-decoration: underline dotted; text-underline-offset: 3px;
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
+/* L'adresse et « X infos à compléter » prennent une ligne pour elles : ce sont
+   les deux éléments longs de la ligne de méta, et les laisser s'y insérer
+   faisait passer « 18 € » ou « Ouvert » à la ligne suivante — précédés de leur
+   point de séparation, qui se lit alors comme une coquille. */
+.activity-card__meta > .activity-card__address,
+.activity-card__meta > .reserve-etat__manque { flex-basis: 100%; }
+
+/* Pas de point de séparation devant les mentions d'état : la ligne de méta est
+   étroite, elles passent souvent à la ligne suivante, et le point se
+   retrouvait seul en tête de ligne — ça se lit comme une coquille. Un écart
+   les sépare, et la couleur fait le reste. */
+.activity-card__meta > .reserve-etat__manque::before,
+.activity-card__meta > .reserve-etat__ouvert::before,
+.activity-card__meta > .reserve-etat__ferme::before,
+.activity-card__meta > .reserve-etat__km::before,
+.activity-card__meta > .reserve-etat__plan::before,
+.activity-card__meta > .reserve-etat__auteur::before { content: none; }
+.activity-card__meta > .reserve-etat__ouvert,
+.activity-card__meta > .reserve-etat__ferme,
+.activity-card__meta > .reserve-etat__km,
+.activity-card__meta > .reserve-etat__plan,
+.activity-card__meta > .reserve-etat__auteur { margin-right: 8px; }
 .reserve-etat__manque:disabled { color: var(--text-light); text-decoration: none; cursor: default; }
 .reserve-etat__manque:active:not(:disabled) { opacity: 0.6; }
 
@@ -7103,9 +7157,15 @@ button.budget-inline:active { transform: scale(0.98); }
 /* Glisser-déposer dans la Réserve. La poignée n'apparaît qu'en liste à plat :
    groupée ou triée, la position manuelle ne se voit plus, donc la déplacer ne
    voudrait rien dire. */
+/* 44 px de large, pas 22. Le pseudo-élément qui étend les autres cibles ne
+   peut rien ici : la poignée est collée au bord gauche de la fiche, et la
+   fiche a `overflow: hidden` — tout ce qui déborde à gauche est découpé, donc
+   inatteignable. La gouttière s'élargit d'autant, pour que la poignée ne
+   morde pas sur la vignette. */
 .reserve-card__grip {
   position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 22px; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; min-height: 44px;
   border: none; background: transparent;
   font-size: var(--t-md); color: var(--text-light); cursor: grab;
   z-index: 2; line-height: 1;
@@ -7113,7 +7173,10 @@ button.budget-inline:active { transform: scale(0.98); }
   touch-action: none; -webkit-tap-highlight-color: transparent;
 }
 .reserve-card__grip:active { cursor: grabbing; }
-.reserve-card[data-reorder-id] { position: relative; padding-left: 18px; }
+/* 30 px, pas 44 : la fiche intérieure a déjà 14 px de gouttière, et les deux
+   s'additionnent. Le contenu commence donc exactement là où la poignée
+   s'arrête. */
+.reserve-card[data-reorder-id] { position: relative; padding-left: 30px; }
 .reserve-card--drag { opacity: 0.4; }
 /* Où la carte va atterrir : un trait, pas un déplacement fantôme. */
 .reserve-card--cible { box-shadow: 0 -3px 0 -1px var(--accent), var(--shadow-sm); }
@@ -7232,14 +7295,18 @@ button.budget-inline:active { transform: scale(0.98); }
    idée — dans l'écran qui est le cœur du produit. Il est maintenant DANS le
    champ de recherche, à la manière d'une croix d'effacement : même tap unique,
    une rangée de moins avant le contenu. */
-.reserve-search-field { position: relative; flex: 1; display: flex; }
-.reserve-search-field .reserve-search-input { flex: 1; padding-right: 48px; }
-.reserve-search-coller {
-  position: absolute; right: 2px; top: 50%; transform: translateY(-50%);
-  display: flex; align-items: center; justify-content: center;
-  width: 44px; height: 44px;
+.reserve-search-field { position: relative; flex: 1; display: flex; gap: 6px; }
+.reserve-search-field .reserve-search-input { flex: 1; min-width: 0; padding-right: 48px; }
+/* Recherche ouverte, « coller » se pose DANS le champ ; refermée, il redevient
+   une pastille comme les autres — d'où la remise à plat du positionnement. */
+.reserve-search-field .reserve-search-coller {
+  position: absolute; right: 52px; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; padding: 0;
   border: none; background: none; font-size: var(--t-lg);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.reserve-search-coller {
+  display: flex; align-items: center; justify-content: center;
 }
 .reserve-search-coller:active { opacity: 0.55; }
 

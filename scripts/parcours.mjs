@@ -597,7 +597,11 @@ const PARCOURS = [
       // de filtrer — et surtout on vise une CATÉGORIE, pas la pastille
       // voisine : « Ouvert » dépend de l'heure qu'il est, et un parcours qui
       // passe le matin et rougit à midi finit par ne plus être lu.
-      await t.clic('.reserve-filter__pill', { texte: /Group/, delai: 600, obligatoire: false });
+      // Le bouton de groupement n'a plus de libellé écrit — il ne montre plus
+      // que ⊞ ou ☰. Son `aria-label` est le repère stable ; viser son texte
+      // faisait cliquer sur la pastille voisine, qui se trouvait être la
+      // recherche, et le parcours mesurait alors une liste non filtrée.
+      await t.clic('[aria-label="Afficher en liste, réordonnable"]', { delai: 600, obligatoire: false });
       // Les pastilles de catégorie portent leur libellé en `aria-label`
       // (« Resto — 3 idées ») : c'est le seul repère stable, la liste se
       // reconstruit à chaque clic et un index gardé en main pointe dans le vide.
@@ -624,7 +628,7 @@ const PARCOURS = [
       // Les poignées n'apparaissent qu'en liste à plat : groupée ou triée, une
       // position manuelle ne voudrait rien dire.
       if (!(await t.combien('.reserve-card__grip')))
-        await t.clic('.reserve-filter__pill', { texte: /Group/, delai: 700, obligatoire: false });
+        await t.clic('[aria-label="Afficher en liste, réordonnable"]', { delai: 700, obligatoire: false });
       if (!(await t.combien('.reserve-card__grip')))
         t.injouable('aucune poignée même en liste à plat');
       const avant = (await t.voyage()).reserve.map(a => a.id);
