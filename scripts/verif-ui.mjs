@@ -372,6 +372,30 @@ const ECRANS = [
   { nom: 'Accueil', aller: async () => {} },
   { nom: 'Planning', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Planning/i); } },
   { nom: 'Réserve', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Réserve/i); } },
+  {
+    // La Réserve en vue LISTE : c'est le seul état où les pastilles de
+    // catégorie et les poignées de réordonnancement existent. Mesurée en vue
+    // groupée seulement, la moitié de l'écran cœur du produit échappait à la
+    // sonde — règle E6.
+    nom: 'Réserve (liste)',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('[aria-label="Afficher en liste, réordonnable"]').first()
+        .click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(600);
+    },
+  },
+  {
+    // Le choix du jour est passé par un calque en août 2026 : c'est le geste
+    // qui vide la Réserve dans le programme, et il n'était mesuré nulle part.
+    nom: 'Assigner un jour',
+    repere: '.act-sheet',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('.reserve-assign__toggle').first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(700);
+    },
+  },
   { nom: 'Dépenses', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Dépenses/i); } },
   // Le formulaire d'ajout d'une dépense n'était jamais ouvert ici : c'est
   // pour ça que ses deux boutons ont pu passer sous la barre d'onglets sans

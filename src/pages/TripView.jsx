@@ -129,6 +129,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // chaque aller-retour est un impôt sur l'écran le plus utilisé.
   const [reserveFilter, setReserveFilter] = useEtatRetenu(`${tripId}_filtre`, 'all');
   const [reserveSearch, setReserveSearch] = useState('');
+  // La recherche est repliée derrière son 🔍 : sur l'écran qui EST le produit,
+  // un champ pleine largeur en permanence coûtait 56 px avant la première idée
+  // pour un geste qu'on ne fait pas à chaque visite.
+  const [rechercheOuverte, setRechercheOuverte] = useState(false);
   const [reserveSort, setReserveSort] = useEtatRetenu(`${tripId}_tri`, 'default');
   // Sur place, la question est « qu'est-ce qui est ouvert, près de moi ».
   const [ouvertSeul, setOuvertSeul] = useEtatRetenu(`${tripId}_ouvert`, false);
@@ -1135,74 +1139,128 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     la première idée. Il vit maintenant DANS le champ de
                     recherche, comme la croix d'effacement : une rangée de moins
                     avant le contenu, et toujours un seul tap. */}
-                <div className="reserve-search-bar">
-                  <div className="reserve-search-field">
-                    <input
-                      className="reserve-search-input"
-                      placeholder="🔍 Chercher, ou coller un lien"
-                      value={reserveSearch}
-                      onChange={e => setReserveSearch(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="reserve-search-coller"
-                      onClick={collerUnLien}
-                      title="Coller un lien depuis le presse-papier"
-                      aria-label="Coller un lien depuis le presse-papier"
-                    >📋</button>
+                {/* UNE rangée de commandes, pas deux.
+                    L'écran qui EST le produit s'ouvrait sur 182 px de réglages :
+                    un champ de recherche pleine largeur, puis un tri, puis trois
+                    filtres — deux idées visibles sur un écran de 844 px. La
+                    recherche se replie derrière son 🔍 et reprend toute la
+                    largeur quand on la demande ; tout le reste tient sur la même
+                    ligne. C'est la règle A5 : ce qui rétrécit en premier, c'est
+                    le chrome, jamais le contenu. */}
+                <div className="reserve-barre">
+                  {rechercheOuverte ? (
+                    <div className="reserve-search-field">
+                      <input
+                        className="reserve-search-input"
+                        placeholder="Chercher une idée"
+                        autoFocus
+                        value={reserveSearch}
+                        onChange={e => setReserveSearch(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="reserve-search-coller"
+                        onClick={collerUnLien}
+                        title="Coller un lien depuis le presse-papier"
+                        aria-label="Coller un lien depuis le presse-papier"
+                      >📋</button>
+                      <button
+                        type="button"
+                        className="reserve-cmd"
+                        onClick={() => { setRechercheOuverte(false); setReserveSearch(''); }}
+                        aria-label="Fermer la recherche"
+                      >✕</button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className={`reserve-cmd${reserveSearch ? ' reserve-cmd--on' : ''}`}
+                        onClick={() => setRechercheOuverte(true)}
+                        aria-label="Chercher une idée"
+                      >🔍</button>
+                      {/* Remplir le vivier est le geste le plus fréquent avant le
+                          départ. Sur iPhone, le menu Partager ne peut pas viser
+                          une app web (WebKit n'implémente pas le Web Share
+                          Target) : coller reste le chemin le plus court, et il
+                          marche partout. Il garde donc sa place au premier rang,
+                          recherche ouverte comme fermée. */}
+                      <button
+                        type="button"
+                        className="reserve-cmd reserve-search-coller"
+                        onClick={collerUnLien}
+                        title="Coller un lien depuis le presse-papier"
+                        aria-label="Coller un lien depuis le presse-papier"
+                      >📋</button>
+                      {/* Un lieu dont on ignore les horaires n'est jamais masqué :
+                          le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
+                      <button
+                        className={`reserve-filter__pill reserve-filter__pill--ouvert${ouvertSeul ? ' reserve-filter__pill--active' : ''}`}
+                        onClick={() => setOuvertSeul(v => !v)}
+                        aria-pressed={ouvertSeul}
+                      >🟢 Ouvert</button>
+                      <button
+                        className={`reserve-cmd${grouper ? ' reserve-cmd--on' : ''}`}
+                        onClick={() => setGrouper(v => !v)}
+                        aria-pressed={grouper}
+                        aria-label={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
+                        title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
+                      >{grouper ? '⊞' : '☰'}</button>
+                      {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
+                          toutes lettres prenait 130 px pour ne rien apprendre. */}
+                      <select className="reserve-sort-select" value={reserveSort} aria-label="Trier les idées"
+                        onChange={e => setReserveSort(e.target.value)}>
+                        <option value="default">Ajout</option>
+                        <option value="alpha">A–Z</option>
+                        <option value="duration">Durée</option>
+                        <option value="price">Prix</option>
+                        {geoReserve.position && <option value="proche">Le plus proche</option>}
+                      </select>
+                    </>
+                  )}
+                </div>
+                {/* Les pastilles de catégorie ont leur propre rangée, et ne
+                    servent qu'en vue liste : en vue groupée — la vue par défaut
+                    — chaque en-tête porte déjà « 🍽 RESTO · 3 ».
+                    Elles avaient rejoint la rangée des commandes ; à cinq
+                    contrôles devant elles, il fallait faire défiler la rangée
+                    pour en atteindre une, et le défilement décalait la cible
+                    sous le doigt. Mesuré : le parcours qui filtre par catégorie
+                    ouvrait la recherche à la place. */}
+                {!grouper && !rechercheOuverte && (
+                  <div className="reserve-filter">
+                    {/* « Tout » ne sert qu'à revenir : muet tant qu'on n'est
+                        parti nulle part. */}
+                    {reserveFilter !== 'all' && (
+                      <button
+                        className="reserve-filter__pill"
+                        onClick={() => setReserveFilter('all')}
+                      >Tout ({trip.reserve.length})</button>
+                    )}
+                    {CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
+                      const count = trip.reserve.filter(a => a.category === cat.id).length;
+                      return (
+                        <button key={cat.id}
+                          className={`reserve-filter__pill${reserveFilter === cat.id ? ' reserve-filter__pill--active' : ''}`}
+                          onClick={() => setReserveFilter(cat.id)}
+                          aria-label={`${cat.label} — ${count} idée${count > 1 ? 's' : ''}`}
+                          aria-pressed={reserveFilter === cat.id}
+                        >{cat.emoji} {count}</button>
+                      );
+                    })}
                   </div>
-                </div>
-                <div className="reserve-filter">
-                  {/* Le tri vivait à côté du champ de recherche : il en mangeait
-                      la largeur — le mot « lien » s'y coupait en « lier » — et
-                      débordait lui-même du cadre. Trier n'est pas chercher :
-                      il rejoint la rangée où l'on range, et la recherche
-                      récupère toute la largeur. */}
-                  <select className="reserve-sort-select" value={reserveSort} onChange={e => setReserveSort(e.target.value)}>
-                    <option value="default">Ordre d'ajout</option>
-                    <option value="alpha">A–Z</option>
-                    <option value="duration">Durée</option>
-                    <option value="price">Prix</option>
-                    {geoReserve.position && <option value="proche">Le plus proche</option>}
-                  </select>
-                  <button
-                    className={`reserve-filter__pill${reserveFilter === 'all' ? ' reserve-filter__pill--active' : ''}`}
-                    onClick={() => setReserveFilter('all')}
-                  >Tout ({trip.reserve.length})</button>
-                  {/* Un lieu dont on ignore les horaires n'est jamais masqué :
-                      le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
-                  <button
-                    className={`reserve-filter__pill reserve-filter__pill--ouvert${ouvertSeul ? ' reserve-filter__pill--active' : ''}`}
-                    onClick={() => setOuvertSeul(v => !v)}
-                    aria-pressed={ouvertSeul}
-                  >🟢 Ouvert</button>
-                  <button
-                    className={`reserve-filter__pill${grouper ? ' reserve-filter__pill--active' : ''}`}
-                    onClick={() => setGrouper(v => !v)}
-                    aria-pressed={grouper}
-                    title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
-                  >{grouper ? '⊞ Groupé' : '☰ Liste'}</button>
-                  {/* En vue groupée, chaque en-tête porte déjà « 🍽 RESTO · 3 » :
-                      ces pastilles disaient la même chose sur une deuxième
-                      rangée, juste au-dessus. Elles ne servent qu'en vue liste. */}
-                  {!grouper && CATEGORIES.filter(cat => trip.reserve.some(a => a.category === cat.id)).map(cat => {
-                    const count = trip.reserve.filter(a => a.category === cat.id).length;
-                    return (
-                      <button key={cat.id}
-                        className={`reserve-filter__pill${reserveFilter === cat.id ? ' reserve-filter__pill--active' : ''}`}
-                        onClick={() => setReserveFilter(cat.id)}
-                        aria-label={`${cat.label} — ${count} idée${count > 1 ? 's' : ''}`}
-                        aria-pressed={reserveFilter === cat.id}
-                      >{cat.emoji} {count}</button>
-                    );
-                  })}
-                </div>
+                )}
+                {/* Déposer ici une activité venue d'un jour. C'était une bande
+                    vide de 18 px, posée avant la première idée, pour un geste
+                    qui n'existe qu'à la souris : la zone est maintenant la
+                    liste elle-même, et elle ne se signale que pendant le
+                    glissement. */}
                 <div
-                  style={{ borderRadius: 'var(--radius-md)', border: reserveDragOver ? '2px dashed var(--orange)' : '2px dashed transparent', transition: 'border-color 0.15s', marginBottom: 10, minHeight: 8 }}
+                  className={`reserve-liste${reserveDragOver ? ' reserve-liste--depot' : ''}`}
                   onDragOver={(e) => { e.preventDefault(); setReserveDragOver(true); }}
                   onDragLeave={() => setReserveDragOver(false)}
                   onDrop={handleDropOnReserve}
-                />
+                >
                 {(() => {
                   const q = reserveSearch.toLowerCase();
                   const pos = geoReserve.position;
@@ -1280,48 +1338,60 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                         aria-label={`Déplacer ${activity.title}`}
                       >⠿</button>
                     )}
-                    {/* Ce qu'il faut savoir avant de piocher, en une ligne
-                        discrète : ouvert ou non, à quelle distance, et ce qui
-                        manquera sur place. */}
-                    {(() => {
-                      const ouv = ouvertMaintenant(activity.openingHours);
-                      const km = dist(activity);
-                      const m = manques(activity);
-                      const planifiee = dejaPlanifiee(activity, trip.days);
-                      if (ouv === null && km == null && !m.length && !planifiee) return null;
-                      return (
-                        <div className="reserve-etat">
-                          {ouv === true && <span className="reserve-etat__ouvert">Ouvert</span>}
-                          {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
-                          {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
-                          {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
-                          {/* Qui l'a proposée. Muet quand on voyage seul, et
-                              muet pour ses propres idées : « proposé par moi »
-                              sur chaque fiche n'apprendrait rien. */}
-                          {activity.proposePar && activity.proposePar !== userId && (
-                            <span className="reserve-etat__auteur">
-                              {auteurDe(activity.proposePar)}
-                            </span>
-                          )}
-                          {m.length > 0 && (
-                            <button
-                              type="button"
-                              className="reserve-etat__manque"
-                              title={`Manque : ${m.join(', ')} — toucher pour chercher`}
-                              disabled={completionEnCours.has(activity.id)}
-                              onClick={(e) => { e.stopPropagation(); completerUneFiche(activity); }}
-                            >
-                              {completionEnCours.has(activity.id)
-                                ? 'Recherche…'
-                                : `${m.length} info${m.length > 1 ? 's' : ''} à compléter`}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
                     <ActivityCard
                       activity={activity}
                       enVoiture={enVoiture}
+                      /* Ce qu'il faut savoir avant de piocher : ouvert ou non,
+                         à quelle distance, et ce qui manquera sur place. Ces
+                         mentions avaient leur propre rangée AU-DESSUS de la
+                         fiche — 21 px pour trois mots, et une fiche de Réserve
+                         qui ne ressemblait plus à celle d'un jour. Elles se
+                         rangent maintenant dans la ligne de méta, avec la
+                         durée, le prix et l'adresse : une seule ligne de
+                         faits, le même dessin partout. */
+                      etat={(() => {
+                        const ouv = ouvertMaintenant(activity.openingHours);
+                        const km = dist(activity);
+                        const m = manques(activity);
+                        const planifiee = dejaPlanifiee(activity, trip.days);
+                        if (ouv === null && km == null && !m.length && !planifiee) return null;
+                        return (
+                          <>
+                            {ouv === true && <span className="reserve-etat__ouvert">Ouvert</span>}
+                            {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
+                            {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
+                            {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
+                            {/* Qui l'a proposée. Muet quand on voyage seul, et
+                                muet pour ses propres idées : « proposé par moi »
+                                sur chaque fiche n'apprendrait rien. */}
+                            {activity.proposePar && activity.proposePar !== userId && (
+                              <span className="reserve-etat__auteur">
+                                {auteurDe(activity.proposePar)}
+                              </span>
+                            )}
+                            {m.length > 0 && (
+                              <button
+                                type="button"
+                                className="reserve-etat__manque"
+                                title={`Manque : ${m.join(', ')} — toucher pour chercher`}
+                                disabled={completionEnCours.has(activity.id)}
+                                onClick={(e) => { e.stopPropagation(); completerUneFiche(activity); }}
+                              >
+                                {completionEnCours.has(activity.id)
+                                  ? 'Recherche…'
+                                  : `${m.length} info${m.length > 1 ? 's' : ''} à compléter`}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                      action={(
+                        <ReserveAssign
+                          days={trip.days}
+                          titre={activity.title}
+                          onAssign={(dayId) => undoableAssignFromReserve(dayId, activity.id)}
+                        />
+                      )}
                       context="reserve"
                       isPastTrip={isPast}
                       onStatusChange={(s) => setActivityStatus(tripId, { type: 'reserve' }, activity.id, s)}
@@ -1337,15 +1407,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       compareSelected={compareSelectedIds.has(activity.id)}
                       onToggleCompare={() => toggleCompare(activity.id)}
                     />
-                    <ReserveAssign
-                      days={trip.days}
-                      onAssign={(dayId) => undoableAssignFromReserve(dayId, activity.id)}
-                    />
                   </div>
                       ))}
                     </div>
                   ));
                 })()}
+                </div>
               </>
             )}
           </>

@@ -12,6 +12,13 @@ function ActivityCard({
   days, currentDayId, onDuplicate,
   compareMode, compareSelected, onToggleCompare,
   onTouchDragStart, enVoiture,
+  // Deux fentes, pour que la Réserve n'ait pas son propre dessin de fiche.
+  // Elle empilait sa ligne d'état au-dessus et son bouton « Assigner » en
+  // dessous : 73 px de rangées à moitié vides, et une fiche qui ne ressemblait
+  // plus à celle d'un jour. `etat` se range dans la ligne de méta, où vivent
+  // déjà durée, prix et adresse ; `action` se range dans la rangée du haut, à
+  // côté du ⋯, qui a de la hauteur à revendre.
+  etat, action,
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -202,6 +209,7 @@ function ActivityCard({
                 {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.start} – {slot.end}</span>}
                 {dur > 0 && <span className="activity-card__duration">{formatDuration(dur)}</span>}
                 {activity.price > 0 && <span className="activity-card__price">{formatPrice(parseFloat(activity.price))}</span>}
+                {etat}
                 {activity.address && (itineraire
                   ? (
                     <a
@@ -227,6 +235,7 @@ function ActivityCard({
                 }}
               >⠿</div>
             )}
+            {!compareMode && action}
             {!compareMode && (
               <button
                 className="activity-card__dots-btn"
