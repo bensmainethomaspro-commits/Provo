@@ -308,6 +308,26 @@ signée —, un lecteur tiers a rendu la page entière, et la légende s'y trouv
 dans le texte alternatif des images. Gratuit, immédiat, et valable depuis
 n'importe quel téléphone. Lui réclamer le HTML brut, lui, ramenait le captcha.*
 
+**E13. Une règle posée quelque part se cherche PARTOUT ailleurs — au grep, pas
+de mémoire.** Quand on pose un garde-fou, une validation, un calcul partagé :
+avant de refermer, chercher dans tout le dépôt qui fait déjà la même chose.
+Pas « relire les endroits auxquels je pense » — un motif, exécuté. Ce qu'on
+n'écrit qu'à un endroit ne suit pas les frères ajoutés ensuite, et personne ne
+s'en aperçoit avant l'incident. **Le signe qu'on est en train de commettre la
+faute : annoncer un nombre d'occurrences sans l'avoir compté.**
+Corollaire : quand la même règle doit vivre à deux endroits, elle vit dans UN
+fichier importé par les deux — jamais recopiée. Une copie ne se corrige jamais
+deux fois.
+*Origine : trois audits consécutifs ont trouvé la MÊME faute. Le contrôle
+d'origine, écrit dans une fonction serveur, n'avait pas suivi les trois
+ajoutées ensuite — qui dépensaient toutes une clé payante. La semaine suivante,
+c'était le filtre d'hôte : partagé pour l'origine, laissé sur place pour le
+SSRF, deux fonctions faisant la même chose dont une seule protégée. Et entre
+les deux, j'ai annoncé qu'un calcul d'argent était écrit « trois fois » ; il
+l'était quatre, et le quatrième — l'écran le plus lu — affichait un montant que
+les trois autres contredisaient. À chaque fois j'ai corrigé le cas, pas le
+réflexe. Un `grep` de dix secondes aurait trouvé les trois.*
+
 **E12. Une fonction qui répond à deux questions répond mal à l'une des deux.**
 Quand deux besoins voisins partagent un même bout de code parce que la même
 donnée y ressemble, l'un des deux finit servi par la réponse de l'autre. Le
@@ -437,6 +457,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | une fiche justement nommée, située à 30 km — deux questions, une fonction | E12 |
 | 2026-08 | un canari déguisé en navigateur déclare morte une chaîne qui marche | F5 (3ᵉ corollaire) |
 | 2026-08 | « essaie quelque chose de moins cher, c'est très onéreux là » | F3 (corollaires) |
+| 2026-08 | trois audits de suite : une règle posée à un endroit ne suit pas les autres | E13 |
 
 ### Récidives repérées
 
