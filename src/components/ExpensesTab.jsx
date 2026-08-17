@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import {
   formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage,
-  partEnEuros, partageInegal,
+  partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
 } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
@@ -150,6 +150,12 @@ const TYPES = [
   { id: 'transfert', label: 'Transfert', titre: 'Noter un remboursement', signe: 1 },
 ];
 
+// Les quatre signes de la calculatrice du champ « Montant ». Les caractères
+// mathématiques (× ÷ −) et pas leurs sosies du clavier (x / -) : c'est ce qui
+// se lit sur un ticket, et `evaluerMontant` accepte les deux.
+const OPERATEURS = ['+', '−', '×', '÷'];
+const NOM_OPERATEUR = { '+': 'plus', '−': 'moins', '×': 'multiplié par', '÷': 'divisé par' };
+
 // Les quatre façons de diviser. `egal` ne demande aucune saisie — c'est le cas
 // courant, et il ne doit rien coûter.
 const MODES = [
@@ -182,8 +188,8 @@ function repartir(mode, participants, valeurs, total) {
     return {
       part,
       ecart: Math.abs(reste) < 0.005 ? null
-        : reste > 0 ? `Il reste ${formatPrice(reste)} à répartir`
-        : `${formatPrice(-reste)} de trop`,
+        : reste > 0 ? `Il reste ${formatMontantExact(reste)} à répartir`
+        : `${formatMontantExact(-reste)} de trop`,
     };
   }
 
@@ -293,6 +299,10 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const [lectureRecu, setLectureRecu] = useState(false);
   const [recuMsg, setRecuMsg] = useState('');
   const formRef = useRef(null);
+  // Le champ du montant accepte une opération : il faut pouvoir y insérer un
+  // signe au point d'insertion, et lui rendre le focus juste après.
+  const montantRef = useRef(null);
+  const [calculOuvert, setCalculOuvert] = useState(false);
   const { convertToEur } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -442,12 +452,60 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     setShowForm(false); setEditingId(null); setEmojisOuverts(false); setError('');
   };
 
-  // Le total en euros, tel qu'il sera enregistré.
+  // Le total en euros, tel qu'il sera enregistré. Le champ peut porter un
+  // CALCUL (« 12,50+8 ») : c'est son résultat qui compte, ici comme partout.
   const totalEuros = useMemo(() => {
-    const amt = parseFloat(form.amount);
+    const amt = evaluerMontant(form.amount);
     if (!amt || amt <= 0) return 0;
     return form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
   }, [form.amount, form.currency, convertToEur]);
+
+  // L'aperçu « = 20,50 € », affiché pendant qu'on tape l'opération. Muet sur un
+  // nombre simple — il n'apprendrait rien — et muet sur une opération
+  // incomplète ou fautive, plutôt que d'annoncer un montant qu'on ne saisira
+  // pas.
+  const apercuCalcul = useMemo(() => {
+    if (!estUnCalcul(form.amount)) return null;
+    const v = evaluerMontant(form.amount);
+    return v == null ? null : formatMontantExact(v, form.currency);
+  }, [form.amount, form.currency]);
+
+  // Au moment où l'on quitte le champ, l'opération laisse la place à son
+  // résultat : ce qui reste écrit est ce qui sera enregistré.
+  const figerLeCalcul = () => {
+    if (!estUnCalcul(form.amount)) return;
+    const v = evaluerMontant(form.amount);
+    if (v != null) set('amount', String(v));
+  };
+
+  // La rangée de signes se referme APRÈS le clic, pas pendant.
+  //
+  // Repliée dès la perte du focus, elle disparaissait au `mousedown` sur
+  // « Ajouter » : les 50 px qu'elle occupait s'évanouissaient, tout remontait,
+  // et le `mouseup` tombait à côté du bouton — donc aucun clic. Le parcours
+  // « Modifier puis supprimer une dépense » l'a attrapé : la modification
+  // n'était jamais enregistrée. Sous un vrai doigt, le bouton saute au moment
+  // où on le touche : même cause, même effet.
+  const fermetureCalc = useRef(null);
+  const fermerLeCalcul = () => {
+    clearTimeout(fermetureCalc.current);
+    fermetureCalc.current = setTimeout(() => setCalculOuvert(false), 180);
+  };
+
+  const taperOperateur = (op) => {
+    const champ = montantRef.current;
+    const texte = form.amount ?? '';
+    // Au point d'insertion, pas à la fin : on corrige souvent le milieu d'une
+    // opération. Sans sélection connue, on ajoute au bout.
+    const d = champ?.selectionStart ?? texte.length;
+    const f = champ?.selectionEnd ?? texte.length;
+    const suite = texte.slice(0, d) + op + texte.slice(f);
+    set('amount', suite);
+    requestAnimationFrame(() => {
+      champ?.focus();
+      champ?.setSelectionRange(d + 1, d + 1);
+    });
+  };
 
   // LA RÉPARTITION EN DIRECT — le point de tout cet écran. Chacun voit ce
   // qu'il doit pendant qu'on tape, au lieu de le découvrir après coup.
@@ -457,8 +515,13 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   const handleAdd = () => {
     if (!form.description.trim()) { setError('Donne un titre.'); return; }
-    const amount = parseFloat(form.amount);
-    if (!amount || amount <= 0) { setError('Montant invalide.'); return; }
+    const amount = evaluerMontant(form.amount);
+    if (!amount || amount <= 0) {
+      setError(estUnCalcul(form.amount)
+        ? "Ce calcul ne tombe pas juste — vérifie l'opération."
+        : 'Montant invalide.');
+      return;
+    }
     if (hasTravelers) {
       if (!form.payerId) { setError(form.type === 'transfert' ? 'De qui ?' : 'Qui a payé ?'); return; }
       if (!form.participantIds.length) {
@@ -659,9 +722,17 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
           <div className="form-group">
             <label className="form-label">Montant</label>
             <div className="ef__ligne">
-              <input className="form-input ef__montant" type="number" inputMode="decimal"
-                min="0" step="0.5" placeholder="0,00" autoFocus
-                value={form.amount} onChange={e => set('amount', e.target.value)} />
+              {/* `type="text"` et non `number` : un champ numérique refuse
+                  « 12,50+8 ». `inputMode="decimal"` garde le pavé numérique
+                  sur téléphone — c'est lui qu'on veut, pas le clavier complet.
+                  Les opérateurs, eux, viennent de la rangée ci-dessous : aucun
+                  clavier système ne les propose sur un pavé décimal. */}
+              <input className="form-input ef__montant" type="text" inputMode="decimal"
+                placeholder="0,00" autoFocus ref={montantRef}
+                value={form.amount}
+                onChange={e => set('amount', e.target.value)}
+                onFocus={() => { clearTimeout(fermetureCalc.current); setCalculOuvert(true); }}
+                onBlur={() => { figerLeCalcul(); fermerLeCalcul(); }} />
               <select className="form-select ef__devise" value={form.currency}
                 aria-label="Devise" onChange={e => set('currency', e.target.value)}>
                 {SUPPORTED_CURRENCIES.map(c => (
@@ -669,9 +740,34 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                 ))}
               </select>
             </div>
-            {form.currency !== 'EUR' && form.amount && (
+
+            {/* La calculatrice de Tricount, adaptée au web : là-bas le pavé
+                numérique est dessiné par l'app et porte ses opérateurs ; ici le
+                clavier appartient au système, donc les quatre signes vivent
+                juste sous le champ. Ils n'apparaissent que pendant la saisie du
+                montant — le cas courant est un nombre, et il ne doit rien payer
+                pour l'exception. */}
+            {calculOuvert && (
+              <div className="ef__calc" role="group" aria-label="Calculer le montant">
+                {OPERATEURS.map(op => (
+                  <button key={op} type="button" className="ef__calc-touche"
+                    aria-label={`Ajouter ${NOM_OPERATEUR[op]}`}
+                    /* Sans ça, toucher une touche sort du champ : le clavier se
+                       referme et la rangée disparaît sous le doigt. */
+                    onMouseDown={e => e.preventDefault()}
+                    onTouchStart={e => e.preventDefault()}
+                    onFocus={() => clearTimeout(fermetureCalc.current)}
+                    onClick={() => taperOperateur(op)}>
+                    {op}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {(apercuCalcul || form.currency !== 'EUR') && form.amount && (
               <div className="currency-hint">
-                ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
+                {apercuCalcul && <strong>= {apercuCalcul}</strong>}
+                {form.currency !== 'EUR' && <> ≈ {formatMontantExact(totalEuros)}</>}
               </div>
             )}
           </div>
@@ -743,7 +839,10 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                           onChange={e => reglerValeur(t.id, e.target.value)} />
                       )}
                       <span className="ef__euros">
-                        {dedans ? formatPrice(repartition[t.id] || 0) : '—'}
+                        {/* Au centime, pas à l'euro : « 33 € · 33 € · 33 € »
+                            pour 100 € partagés en trois se lit comme une
+                            erreur de calcul. */}
+                        {dedans ? formatMontantExact(repartition[t.id] || 0) : '—'}
                       </span>
                     </div>
                   );

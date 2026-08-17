@@ -156,6 +156,41 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   traitées » l'avant-veille : les pastilles de catégorie ont disparu avec le
   pli « Détails ».
 
+- **Le montant d'une dépense peut être un CALCUL** (17 août 2026). Retour :
+  « on ne peut toujours pas faire de calcul directement en ajoutant le montant,
+  sur Tricount on peut le faire ». Le champ accepte désormais « 12,50+8 »,
+  « 36/3 », « 3×4,50+6 », et quatre touches `+ − × ÷` s'ouvrent sous lui —
+  aucun clavier système ne les propose sur un pavé décimal, c'est pour ça que
+  Tricount dessine le sien.
+
+  · L'évaluateur est écrit à la main dans `helpers.js`, **jamais `eval` ni
+    `new Function`** : ce champ reçoit du texte tapé, dans une app qui
+    synchronise son contenu entre appareils.
+  · Il rend `null` au moindre doute — « 12€ », « 1o », « 12++8 », « 10/0 »,
+    et même « 12 8 » (deux nombres séparés par une espace, qui devenait 128 en
+    silence). Entre deviner et demander de retaper, un carnet de comptes
+    demande. `scripts/verif-calcul.mjs` fige les 45 cas.
+  · Un opérateur en attente s'ignore (« 12+ » vaut 12) : sinon l'aperçu
+    clignoterait à chaque frappe.
+  · Le champ passe en `type="text"` — un champ numérique refuse le texte d'une
+    opération — avec `inputMode="decimal"` pour garder le pavé numérique.
+  · Les montants du formulaire s'écrivent au centime (`formatMontantExact`) :
+    « 33 € · 33 € · 33 € » pour 100 € partagés en trois se lit comme une erreur
+    de calcul, et depuis qu'on peut taper une division, les sommes rondes sont
+    l'exception. `formatPrice` (arrondi à l'euro) reste la règle partout
+    ailleurs — c'est le bon choix pour lire un budget.
+
+  **Le piège, attrapé par un parcours.** La rangée de touches se repliait dès
+  la perte du focus : au `mousedown` sur « Ajouter », ses 50 px s'évanouissaient,
+  tout remontait, et le `mouseup` tombait à côté du bouton — donc aucun clic, et
+  la modification n'était jamais enregistrée. Sous un vrai doigt : le bouton
+  saute au moment où on le touche. La rangée se referme maintenant 180 ms après,
+  pas pendant. **Règle générale : un élément qui disparaît au blur ne doit pas
+  déplacer ce qu'on est en train de toucher.**
+
+  Quatre parcours visaient le champ par `input[type="number"]` — un détail
+  d'implémentation. Ils visent maintenant `.ef__montant`.
+
 - **Un seul dessin de fiche, et la Réserve s'ouvre sur des idées** (17 août
   2026, tâches #39 et #44). Deux dettes anciennes, sur l'écran qui EST le
   produit. Tout est mesuré sur le même voyage de référence, écran de 844 px.

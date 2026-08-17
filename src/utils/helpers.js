@@ -1491,3 +1491,90 @@ export function voyageSansVoyageur(trip, id) {
     expenses,
   };
 }
+
+/**
+ * Le montant d'une dépense peut être un CALCUL, pas seulement un nombre.
+ *
+ * « 12,50 + 8 », « 36/3 », « 4×2,5 » : trois personnes au restaurant, une
+ * addition partagée, un prix unitaire. Le principe produit dit que l'app
+ * calcule et que l'utilisateur lit — sortir la calculatrice du téléphone pour
+ * revenir taper le résultat, c'est exactement le contraire.
+ *
+ * Écrit à la main, jamais avec `eval` ni `new Function` : ce champ reçoit du
+ * texte tapé, et un évaluateur générique dans une app qui synchronise le
+ * contenu entre appareils est une porte ouverte.
+ *
+ * Règles :
+ *  · virgule ou point, indifféremment — un clavier français donne la virgule ;
+ *  · × ÷ − (les signes des boutons) valent * / - ;
+ *  · × et ÷ passent avant + et − ;
+ *  · un opérateur en attente à la fin est ignoré : « 12+ » vaut 12, pour que
+ *    l'aperçu reste juste PENDANT la frappe ;
+ *  · tout le reste rend `null` — au minuscule doute, on ne devine pas un
+ *    montant.
+ *
+ * Rend un nombre arrondi au centime, ou `null`.
+ */
+export function evaluerMontant(texte) {
+  if (texte == null) return null;
+  // Deux nombres séparés par une espace ne sont pas une opération. Sans cette
+  // garde, « 12 8 » — deux montants tapés à la suite, ou « 1 000 » avec son
+  // séparateur de milliers — devenait 128 en silence. Entre deviner et
+  // demander de retaper, un carnet de comptes demande.
+  if (/\d[\s]+\d/.test(String(texte))) return null;
+  const brut = String(texte)
+    .replace(/\s/g, '')
+    .replace(/[×xX]/g, '*')
+    .replace(/[÷:]/g, '/')
+    .replace(/[−–—]/g, '-');
+  if (!brut) return null;
+
+  const jetons = brut.match(/\d+(?:[.,]\d*)?|[+\-*/]/g);
+  // Un caractère refusé ne laisse pas de trace dans les jetons : on le repère
+  // en recollant. Sans ça, « 12€ » rendrait 12 et « 1o » rendrait 1.
+  if (!jetons || jetons.join('') !== brut) return null;
+  if (!/\d/.test(jetons[0])) return null;
+
+  const nb = (t) => parseFloat(t.replace(',', '.'));
+  // Une pile de termes à additionner : × et ÷ modifient le dernier terme,
+  // + et − en empilent un nouveau. Deux priorités, une seule passe.
+  const termes = [nb(jetons[0])];
+  for (let i = 1; i < jetons.length; i += 2) {
+    const op = jetons[i], suite = jetons[i + 1];
+    if (suite === undefined) break;            // opérateur en attente
+    if (!/[+\-*/]/.test(op) || !/\d/.test(suite)) return null;
+    const v = nb(suite);
+    if (op === '*') termes[termes.length - 1] *= v;
+    else if (op === '/') { if (v === 0) return null; termes[termes.length - 1] /= v; }
+    else if (op === '+') termes.push(v);
+    else termes.push(-v);
+  }
+  const somme = termes.reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(somme)) return null;
+  return Math.round(somme * 100) / 100;
+}
+
+/** Vrai si le texte porte un signe de calcul — donc si l'aperçu a un sens. */
+export function estUnCalcul(texte) {
+  return /[+\-*/×xX÷:−–—]/.test(String(texte ?? ''));
+}
+
+/**
+ * Un montant écrit au centime près, sans arrondi de confort.
+ *
+ * `formatPrice` arrondit à l'euro : c'est le bon choix pour lire un budget,
+ * mais pas pour un écran où l'on RÉPARTIT — « 33 € · 33 € · 33 € » pour
+ * 100 € partagés en trois se lit comme une erreur de calcul, et depuis que le
+ * montant peut être une opération, les sommes rondes sont l'exception.
+ */
+export function formatMontantExact(valeur, devise = 'EUR') {
+  if (valeur == null || !Number.isFinite(valeur)) return null;
+  // « 19,50 € » et non « 19,5 € » : dès qu'il y a des centimes, on les écrit
+  // tous les deux. Un compte rond, lui, reste rond — « 20,00 € » alourdit une
+  // colonne pour rien.
+  const rond = Number.isInteger(valeur);
+  return new Intl.NumberFormat('fr-FR', {
+    style: 'currency', currency: devise,
+    minimumFractionDigits: rond ? 0 : 2, maximumFractionDigits: 2,
+  }).format(valeur);
+}
