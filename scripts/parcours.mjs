@@ -2046,6 +2046,8 @@ if (SEUL) choisis = choisis.filter(x => (x.nom + x.groupe).toLowerCase().include
 
 const navigateur = await chromium.launch({ executablePath: trouverChromium() });
 const rapport = [];
+let mortsDAffilee = 0;
+let abandon = false;
 
 for (const parcours of choisis) {
   const ctx = await navigateur.newContext({
@@ -2081,7 +2083,28 @@ for (const parcours of choisis) {
   let injoue = null;
   try {
     await p.goto(URL_BASE + '/', { waitUntil: 'domcontentloaded' });
-    await p.waitForTimeout(1100);
+    // ATTENDRE le montage, ne pas le CONSTATER à instant fixe. Les 1100 ms
+    // d'attente aveugle d'avant suffisaient à vide, pas quand les services
+    // distants sont rejoués : l'app démarrait après le délai, et le parcours
+    // partait sur une page encore vide. Ses sélecteurs échouaient alors un peu
+    // plus loin, sous un nom qui n'avait plus rien à voir avec la cause — de
+    // quoi chercher longtemps un défaut d'interface qui n'existe pas.
+    await p.locator('#root > *').first()
+      .waitFor({ state: 'attached', timeout: 8000 }).catch(() => {});
+    await p.waitForTimeout(400);
+    // L'APP A-T-ELLE SEULEMENT DÉMARRÉ ? Mesuré le 10 août 2026 en la tuant
+    // exprès (paquet JS absent) : la suite rendait 4 constats CASSÉS —
+    // « l'accueil annonce le départ à venir » — sur une page entièrement
+    // vide. Elle accusait le produit d'une panne d'environnement, et 76
+    // lignes « introuvable : .trip-card » se lisaient comme une régression
+    // d'interface. C'est le pire défaut possible pour un filet de sécurité :
+    // il désigne le mauvais coupable, et on cherche des heures au mauvais
+    // endroit. Sans montage, on ne joue rien — donc on n'invente rien.
+    if (!(await p.locator('#root > *').count().catch(() => 0))) {
+      throw new Interrompu("l'application n'a pas démarré — page vide, "
+        + 'paquet JS absent ou périmé. Reconstruire (`npm run build`) et '
+        + "relancer l'aperçu.");
+    }
     // Un voile d'accueil avale les premiers clics et ferait échouer des
     // parcours parfaitement sains.
     await p.evaluate(() => document.querySelector('.onboarding-overlay__skip, .onboarding__close')?.click());
@@ -2116,6 +2139,12 @@ for (const parcours of choisis) {
     frictions: journal.filter(j => j.type === 'friction').length });
   await ctx.close();
   process.stderr.write('.');
+  // Trois échecs de démarrage d'affilée : ce n'est plus un hasard, c'est
+  // l'aperçu qui ne sert pas l'app. Continuer coûterait quatre minutes pour
+  // produire 76 lignes qui disent toutes la même chose.
+  if (injoue && /n'a pas démarré/.test(injoue)) {
+    if (++mortsDAffilee >= 3) { abandon = true; break; }
+  } else mortsDAffilee = 0;
 }
 await navigateur.close();
 process.stderr.write('\n');
@@ -2138,6 +2167,15 @@ if (JSON_OUT) {
       .map(j => `  ${r.groupe} · ${r.nom}\n      ${j.quoi}${j.detail ? ` — ${j.detail}` : ''}`));
     if (lignes.length) console.log(`\n${titre}\n${lignes.join('\n')}`);
   };
+  // En tête, avant tout le reste : une app qui n'a pas démarré n'est pas un
+  // défaut du produit, et rien de ce qui suit ne veut dire quoi que ce soit.
+  // Le dire APRÈS 76 lignes, c'est le dire trop tard.
+  const morts = rapport.filter(r => r.injoue && /n'a pas démarré/.test(r.injoue));
+  if (morts.length) {
+    console.log('\n🔌 L\'APPLICATION N\'A PAS DÉMARRÉ — rien n\'a été mesuré');
+    console.log(`   ${morts[0].injoue}`);
+    console.log('   Aucun constat ci-dessous ne concerne le produit.');
+  }
   bloc('✗ CASSÉ — la fonction ne fait pas ce qu\'elle promet', 'casse');
   bloc('⚠ FRICTION — ça marche, mais ça coûte', 'friction');
 
@@ -2148,6 +2186,9 @@ if (JSON_OUT) {
   }
 
   const nc = rapport.reduce((s, r) => s + r.casses, 0);
+  if (abandon) {
+    console.log(`\n⛔ Arrêté après ${rapport.length} parcours : l'application ne démarre pas.`);
+  }
   console.log(`\n${rapport.length} parcours · ${nc} constat(s) cassé(s)`
     + ` · ${rapport.reduce((s, r) => s + r.frictions, 0)} friction(s)`
     + ` · ${nonJoues.length} non joué(s)`);
@@ -2158,4 +2199,6 @@ if (JSON_OUT) {
   console.log('forme actuelle de leurs réponses — voir les scripts diag-*.mjs.');
 }
 
-process.exit(rapport.some(r => r.casses) ? 1 : 0);
+// Une app qui ne démarre pas sort en ERREUR même sans constat cassé : sinon
+// l'intégration continue passerait au vert sur une app morte.
+process.exit(rapport.some(r => r.casses) || abandon ? 1 : 0);
