@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import {
   formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage,
-  partEnEuros, partsDeDepense, totalDesParts, partageInegal,
+  partEnEuros, partageInegal,
 } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
@@ -135,7 +135,85 @@ const EXPENSE_CATEGORIES = [
 
 const CAT_DEFAUT = EXPENSE_CATEGORIES.find(c => c.id === 'autre');
 
-const BLANK = { description: '', amount: '', payerId: '', participantIds: [], parts: {}, activityId: '', currency: 'EUR', expenseCategory: 'autre' };
+// Les trois natures d'une opération, comme chez Tricount.
+// Un REVENU est enregistré en montant NÉGATIF plutôt qu'avec un drapeau :
+// sept fichiers somment de l'argent dans ce dépôt, et un drapeau obligerait
+// chacun à s'en souvenir — c'est exactement la faute que E13 décrit. Le signe
+// vit dans la valeur ; les totaux, les soldes et les dettes suivent sans rien
+// savoir de la nouveauté.
+// Un TRANSFERT est un remboursement : il existait déjà sous `isSettlement`,
+// mais seulement atteignable depuis le panneau des dettes. On peut désormais
+// le noter au moment où on le fait.
+const TYPES = [
+  { id: 'depense',   label: 'Dépense',   titre: 'Ajouter une dépense',   signe: 1 },
+  { id: 'revenu',    label: 'Revenu',    titre: 'Ajouter un revenu',     signe: -1 },
+  { id: 'transfert', label: 'Transfert', titre: 'Noter un remboursement', signe: 1 },
+];
+
+// Les quatre façons de diviser. `egal` ne demande aucune saisie — c'est le cas
+// courant, et il ne doit rien coûter.
+const MODES = [
+  { id: 'egal',        label: 'Également',       unite: 'part' },
+  { id: 'parts',       label: 'En parts',        unite: 'parts' },
+  { id: 'montants',    label: 'En montants',     unite: 'montant en euros' },
+  { id: 'pourcentages', label: 'En pourcentages', unite: 'pourcentage' },
+];
+
+/**
+ * Ce que chaque participant doit, PENDANT la saisie.
+ *
+ * C'est le cœur de cet écran : on voit le partage se faire au fur et à mesure,
+ * au lieu de le découvrir après enregistrement. Rend aussi l'écart à combler,
+ * parce qu'un partage qui ne tombe pas juste doit se voir avant de valider et
+ * pas se découvrir dans les dettes à la fin du voyage.
+ */
+function repartir(mode, participants, valeurs, total) {
+  const part = {};
+  if (!participants.length) return { part, ecart: null };
+  const lu = (id) => {
+    const v = parseFloat(valeurs[id]);
+    return Number.isFinite(v) && v >= 0 ? v : null;
+  };
+
+  if (mode === 'montants') {
+    let somme = 0;
+    participants.forEach(id => { part[id] = lu(id) ?? 0; somme += part[id]; });
+    const reste = Math.round((total - somme) * 100) / 100;
+    return {
+      part,
+      ecart: Math.abs(reste) < 0.005 ? null
+        : reste > 0 ? `Il reste ${formatPrice(reste)} à répartir`
+        : `${formatPrice(-reste)} de trop`,
+    };
+  }
+
+  if (mode === 'pourcentages') {
+    let somme = 0;
+    participants.forEach(id => { const v = lu(id) ?? 0; part[id] = total * v / 100; somme += v; });
+    const reste = Math.round((100 - somme) * 100) / 100;
+    return {
+      part,
+      ecart: Math.abs(reste) < 0.005 ? null
+        : reste > 0 ? `Il reste ${reste} % à répartir` : `${-reste} % de trop`,
+    };
+  }
+
+  // `egal` et `parts` : une part chacun par défaut, donc les deux se calculent
+  // pareil — « également » n'est que « toutes les parts à 1 ».
+  const parts = {};
+  let somme = 0;
+  participants.forEach(id => {
+    const v = mode === 'parts' ? (lu(id) ?? 1) : 1;
+    parts[id] = v > 0 ? v : 1;
+    somme += parts[id];
+  });
+  participants.forEach(id => { part[id] = somme ? total * parts[id] / somme : 0; });
+  return { part, ecart: null };
+}
+
+const BLANK = { description: '', amount: '', payerId: '', participantIds: [], parts: {},
+  activityId: '', currency: 'EUR', expenseCategory: 'autre',
+  type: 'depense', mode: 'egal', valeurs: {}, date: '' };
 
 const CAT_COLORS = ['#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e', '#14b8a6', '#06b6d4'];
 
@@ -211,8 +289,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [showDebtDetail, setShowDebtDetail] = useState(false);
   const [editingId, setEditingId] = useState(null); // dépense en cours de modification
-  const [detailsOuverts, setDetailsOuverts] = useState(false);
-  const [partsOuvertes, setPartsOuvertes] = useState(false);
+  const [emojisOuverts, setEmojisOuverts] = useState(false);
+  const [lectureRecu, setLectureRecu] = useState(false);
+  const [recuMsg, setRecuMsg] = useState('');
   const formRef = useRef(null);
   const { convertToEur } = useCurrencyRates();
 
@@ -238,52 +317,72 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     }));
   };
 
-  // Une part se règle de 1 à 9 : au-delà ce n'est plus un partage, c'est une
-  // autre dépense. Les bornes évitent aussi qu'un appui répété parte à l'infini.
-  const reglerPart = (id, delta) => setForm(f => {
-    const actuelles = partsDeDepense({ participantIds: f.participantIds, parts: f.parts });
-    const n = Math.max(1, Math.min(9, (actuelles[id] || 1) + delta));
-    return { ...f, parts: { ...(f.parts || {}), [id]: n } };
-  });
+  // Un écran partagé répond « et moi, où j'en suis ? », pas seulement « quel
+  // est l'état global ». La personne connectée sert de payeur par défaut, se
+  // marque « (Moi) » dans les listes, et sa part est celle qu'on affiche.
+  const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
 
-  // `block: 'center'` centrait un formulaire plus haut que l'écran : ses deux
-  // boutons tombaient sous la barre d'onglets flottante — mesuré à 29 px
-  // recouverts — et rien ne le laissait voir. On amène le haut du formulaire
-  // en haut du cadre : c'est là qu'on va taper, et la validation reste dedans.
-  const scrollToForm = () => {
-    requestAnimationFrame(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const aujourdhui = () => new Date().toISOString().slice(0, 10);
+
+  const openForm = () => {
+    setForm({
+      ...BLANK,
+      // MOI par défaut : c'est presque toujours celui qui saisit qui vient de
+      // payer. C4 du playbook — se placer du point de vue du compte connecté.
+      payerId: me?.id || travelers[0]?.id || '',
+      participantIds: travelers.map(t => t.id),
+      date: aujourdhui(),
     });
+    setEditingId(null);
+    setEmojisOuverts(false);
+    setRecuMsg('');
+    setError('');
+    setShowForm(true);
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
   const openEditForm = (exp) => {
+    // Une dépense enregistrée ne porte que des PARTS — c'est la seule unité que
+    // connaît `partEnEuros`. On rouvre donc en « parts », jamais en montants
+    // ou en pourcentages : les rejouer demanderait de deviner l'unité saisie,
+    // et on afficherait un chiffre que personne n'a tapé.
+    const parts = exp.parts || {};
+    const inegal = partageInegal(exp);
+    const valeurs = {};
+    if (inegal) {
+      // Ramenées à la plus petite, pour lire « 2 » et « 1 » plutôt que
+      // « 0,666… » et « 0,333… ».
+      const brutes = (exp.participantIds || []).map(id => parts[id] || 0).filter(v => v > 0);
+      const mini = brutes.length ? Math.min(...brutes) : 1;
+      (exp.participantIds || []).forEach(id => {
+        valeurs[id] = String(Math.round(((parts[id] || 0) / mini) * 100) / 100);
+      });
+    }
     setForm({
+      ...BLANK,
       description: exp.description || '',
-      amount: String(exp.amount ?? ''),
+      // Un revenu est stocké en négatif : le formulaire, lui, montre toujours
+      // un montant positif et laisse le segment porter le sens.
+      amount: String(Math.abs(exp.amount ?? '')),
+      type: exp.isSettlement ? 'transfert' : ((exp.eurAmount ?? exp.amount ?? 0) < 0 ? 'revenu' : 'depense'),
+      mode: inegal ? 'parts' : 'egal',
+      valeurs,
       payerId: exp.payerId || '',
       participantIds: exp.participantIds || [],
-      parts: exp.parts || {},
+      parts,
       activityId: exp.activityId || '',
       currency: exp.currency || 'EUR',
       expenseCategory: exp.expenseCategory || 'autre',
+      date: exp.date || aujourdhui(),
     });
-    // Un partage inégal doit se voir dès l'ouverture : replié, il se perdrait
-    // en silence à la première modification.
-    setPartsOuvertes(partageInegal(exp));
     setEditingId(exp.id);
+    setEmojisOuverts(false);
+    setRecuMsg('');
     setError('');
-    setDetailsOuverts(false);
     setShowForm(true);
-    scrollToForm();
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   };
 
-  const [lectureRecu, setLectureRecu] = useState(false);
-  const [recuMsg, setRecuMsg] = useState('');
-
-  /**
-   * Lit le ticket photographié et REMPLIT le formulaire — sans l'enregistrer.
-   * L'utilisateur relit et corrige : c'est lui qui valide, comme avant.
-   */
   const lireLeRecu = async (e) => {
     const fichier = e.target.files?.[0];
     e.target.value = '';
@@ -324,108 +423,84 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     }
   };
 
-  const openForm = () => {
-    // MOI par défaut, pas le premier voyageur de la liste. C'est presque
-    // toujours celui qui saisit qui vient de payer — proposer quelqu'un
-    // d'autre coûtait un tap de correction à CHAQUE dépense, à tous ceux qui
-    // ne sont pas premiers dans la liste. C4 du playbook : se placer du point
-    // de vue du compte connecté.
-    setForm({
-      ...BLANK,
-      payerId: me?.id || travelers[0]?.id || '',
-      participantIds: travelers.map(t => t.id),
-      currency: 'EUR',
-    });
-    setPartsOuvertes(false);
-    setEditingId(null);
-    setError('');
-    setDetailsOuverts(false);
-    setShowForm(true);
-    // Le formulaire s'ouvre sous la liste : on l'amène à l'écran, sinon on ne
-    // voit rien se passer au clic sur « Ajouter une dépense ».
-    scrollToForm();
+  const changerType = (type) => setForm(f => ({
+    ...f, type,
+    // Un transfert va d'une personne à UNE autre : le partage n'a pas de sens.
+    mode: 'egal', valeurs: {},
+    participantIds: type === 'transfert'
+      ? f.participantIds.slice(0, 1)
+      : travelers.map(t => t.id),
+  }));
+
+  // Changer de mode repart des valeurs vides : convertir des parts en
+  // pourcentages produirait des chiffres que personne n'a saisis.
+  const changerMode = (mode) => setForm(f => ({ ...f, mode, valeurs: {} }));
+
+  const reglerValeur = (id, v) => setForm(f => ({ ...f, valeurs: { ...f.valeurs, [id]: v } }));
+
+  const fermerForm = () => {
+    setShowForm(false); setEditingId(null); setEmojisOuverts(false); setError('');
   };
 
-  // « Qui suis-je ? » — le voyageur lié au compte connecté. Chaque participant
-  // voit donc SON propre solde, pas celui du propriétaire du voyage.
-  const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
-
-  // La dépense telle qu'elle sera enregistrée — sert à l'aperçu et aux parts,
-  // pour que les deux disent le même chiffre que la fiche une fois validée.
-  const depenseEnCours = useMemo(() => {
+  // Le total en euros, tel qu'il sera enregistré.
+  const totalEuros = useMemo(() => {
     const amt = parseFloat(form.amount);
-    const eur = !amt || amt <= 0 ? 0
-      : (form.currency === 'EUR' ? amt : convertToEur(amt, form.currency));
-    return { participantIds: form.participantIds, parts: form.parts, eurAmount: eur };
-  }, [form.amount, form.currency, form.participantIds, form.parts, convertToEur]);
+    if (!amt || amt <= 0) return 0;
+    return form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
+  }, [form.amount, form.currency, convertToEur]);
 
-  const partsFormulaire = partsDeDepense(depenseEnCours);
-  const inegalEnCours = partageInegal(depenseEnCours);
-
-  // Aperçu du partage pendant la saisie : « 60 € ÷ 2 = 30 € par personne »
-  const splitPreview = (() => {
-    const eur = depenseEnCours.eurAmount;
-    const n = form.participantIds.length;
-    if (!eur || n === 0) return null;
-    if (n === 1) {
-      const only = travelers.find(t => t.id === form.participantIds[0]);
-      return `${formatPrice(eur)} pour ${only ? only.name : '1 personne'} seul·e`;
-    }
-    // À parts inégales, « par personne » serait faux : on donne la valeur de
-    // LA PART, et le détail par personne se lit juste à côté, dans les parts.
-    const total = totalDesParts(depenseEnCours);
-    if (partageInegal(depenseEnCours)) {
-      return `${formatPrice(eur)} ÷ ${total} parts = ${formatPrice(eur / total)} la part`;
-    }
-    return `${formatPrice(eur)} ÷ ${n} = ${formatPrice(eur / n)} par personne`;
-  })();
-
-  // Ce que le pli « Détails » contient, écrit sur sa propre ligne : replier
-  // n'a le droit de faire gagner de la place que si on continue à voir ce
-  // qu'on est en train d'enregistrer.
-  const resumeDetails = (() => {
-    const cat = EXPENSE_CATEGORIES.find(c => c.id === form.expenseCategory) || CAT_DEFAUT;
-    const n = form.participantIds.length;
-    const inegal = partageInegal(depenseEnCours);
-    const partage = !hasTravelers ? null
-      : n === 0 ? 'partagé avec personne'
-      : inegal ? `partagé entre ${n}, à parts inégales`
-      : n === travelers.length ? 'partagé avec tout le monde'
-      : n === 1 ? `pour ${getName(form.participantIds[0])} seul·e`
-      : `partagé entre ${n}`;
-    const liee = form.activityId
-      ? allActivities.find(a => a.id === form.activityId)?.title
-      : null;
-    return [`${cat.emoji} ${cat.label}`, partage, liee && `🔗 ${liee}`]
-      .filter(Boolean).join(' · ');
-  })();
+  // LA RÉPARTITION EN DIRECT — le point de tout cet écran. Chacun voit ce
+  // qu'il doit pendant qu'on tape, au lieu de le découvrir après coup.
+  const { part: repartition, ecart: ecartRepartition } = useMemo(
+    () => repartir(form.mode, form.participantIds, form.valeurs, totalEuros),
+    [form.mode, form.participantIds, form.valeurs, totalEuros]);
 
   const handleAdd = () => {
-    if (!form.description.trim()) { setError('Décris la dépense.'); return; }
+    if (!form.description.trim()) { setError('Donne un titre.'); return; }
     const amount = parseFloat(form.amount);
     if (!amount || amount <= 0) { setError('Montant invalide.'); return; }
     if (hasTravelers) {
-      if (!form.payerId) { setError('Qui a payé ?'); return; }
-      if (!form.participantIds.length) { setError('Qui participe ?'); return; }
+      if (!form.payerId) { setError(form.type === 'transfert' ? 'De qui ?' : 'Qui a payé ?'); return; }
+      if (!form.participantIds.length) {
+        setError(form.type === 'transfert' ? 'Pour qui ?' : 'Qui participe ?'); return;
+      }
+      // Un partage qui ne tombe pas juste fabrique des dettes fausses, et on
+      // ne s'en aperçoit qu'à la fin du voyage. On refuse d'enregistrer.
+      if (ecartRepartition) { setError(ecartRepartition); return; }
     }
-    const eurAmount = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
+    const eur = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
+    const signe = TYPES.find(t => t.id === form.type)?.signe ?? 1;
+
+    // Les parts enregistrées sont TOUJOURS des parts, quel que soit le mode de
+    // saisie : `partEnEuros` — la seule règle de partage du dépôt — ne connaît
+    // que ça. Un montant ou un pourcentage se convertit donc ici, une fois,
+    // au lieu d'apprendre trois unités à tout le reste de l'app.
+    const parts = {};
+    if (form.mode !== 'egal' && form.type !== 'transfert' && eur > 0) {
+      form.participantIds.forEach(id => {
+        // Une part est un ratio : les euros de chacun rapportés au total.
+        parts[id] = (repartition[id] || 0) / eur;
+      });
+    }
+
     const payload = {
-      ...form,
-      amount,
-      eurAmount: Math.round(eurAmount * 100) / 100,
       description: form.description.trim(),
+      amount: signe * amount,
+      eurAmount: signe * Math.round(eur * 100) / 100,
+      currency: form.currency,
+      expenseCategory: form.expenseCategory,
+      payerId: form.payerId,
+      participantIds: form.participantIds,
+      parts,
+      activityId: form.type === 'transfert' ? '' : form.activityId,
+      date: form.date || undefined,
+      // Un transfert est un remboursement : c'est le même objet qu'avant, et
+      // le panneau des dettes continue de le reconnaître.
+      ...(form.type === 'transfert' ? { isSettlement: true } : {}),
     };
-    // Un partage égal ne garde pas d'objet `parts` : c'est le cas courant, et
-    // la fiche doit rester lisible telle qu'une version antérieure l'écrirait.
-    // `{}` plutôt que la suppression du champ : sur une dépense qu'on MODIFIE
-    // pour revenir à parts égales, omettre la clé laisserait l'ancienne valeur.
-    if (!partageInegal({ participantIds: form.participantIds, parts: form.parts })) {
-      payload.parts = {};
-    }
     if (editingId) onUpdateExpense?.(editingId, payload);
     else onAddExpense(payload);
-    setEditingId(null);
-    setShowForm(false);
+    fermerForm();
   };
 
   const handleSettleDebt = (d) => {
@@ -501,6 +576,232 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
           onClose={() => setShowSpinWheel(false)}
         />
       )}
+
+      {/* ── Formulaire, disposé comme Tricount ────────────────────────────
+          Demandé explicitement, capture à l'appui. Trois écarts assumés avec
+          ce que Provo faisait :
+           · le TITRE passe avant le montant. #34 avait choisi l'inverse (le
+             montant est écrit sur le ticket qu'on tient). Tricount fait le
+             contraire et c'est ce qui est demandé ;
+           · la DATE devient saisissable. Le champ existait dans les données
+             depuis toujours, aucun écran ne le proposait ;
+           · « Transfert » sort du panneau des dettes : on peut noter un
+             remboursement au moment où on le fait, pas seulement en soldant. */}
+      {showForm ? (
+        <div className="expense-form ef" ref={formRef}>
+          <div className="ef__entete">
+            <button type="button" className="ef__annuler" onClick={fermerForm}>Annuler</button>
+            <span className="ef__titre-ecran">
+              {editingId ? 'Modifier' : TYPES.find(t => t.id === form.type)?.titre}
+            </span>
+          </div>
+
+          {/* Dépense · Revenu · Transfert. Un revenu est enregistré en montant
+              NÉGATIF, pas avec un drapeau : sept endroits somment de l'argent
+              dans ce dépôt, et un drapeau obligerait chacun à s'en souvenir.
+              Le signe vit dans la valeur, tout le reste suit sans le savoir. */}
+          {!editingId && (
+            <div className="ef__segments" role="tablist" aria-label="Nature de l'opération">
+              {TYPES.map(t => (
+                <button key={t.id} type="button" role="tab"
+                  aria-selected={form.type === t.id}
+                  className={`ef__segment${form.type === t.id ? ' ef__segment--on' : ''}`}
+                  onClick={() => changerType(t.id)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Titre</label>
+            <div className="ef__ligne-titre">
+              {/* Le champ ne fait plus que 240 px : deux icônes lui prennent
+                  le reste de la ligne. « Par exemple : boissons » y était
+                  coupé au milieu du mot. */}
+              <input className="form-input" placeholder="Boissons, taxi…"
+                value={form.description} onChange={e => set('description', e.target.value)} />
+              <button type="button" className="ef__icone" aria-label="Choisir une icône"
+                aria-expanded={emojisOuverts} onClick={() => setEmojisOuverts(o => !o)}>
+                {EXPENSE_CATEGORIES.find(c => c.id === form.expenseCategory)?.emoji || '🙂'}
+              </button>
+              {!editingId && (
+                <label className="ef__icone" aria-label="Photographier le ticket">
+                  {lectureRecu ? '⏳' : '📷'}
+                  <input type="file" accept="image/*" capture="environment"
+                    onChange={lireLeRecu} disabled={lectureRecu} hidden />
+                </label>
+              )}
+              {/* La catégorie EST le choix d'icône : deux réglages pour une
+                  seule décision, c'était un de trop. La palette s'ancre sur
+                  cette ligne et se pose par-dessus la suite du formulaire. */}
+              {emojisOuverts && (
+                <>
+                  <button type="button" className="ef__voile"
+                    aria-label="Fermer le choix d'icône"
+                    onClick={() => setEmojisOuverts(false)} />
+                  <div className="ef__emojis">
+                    {EXPENSE_CATEGORIES.map(cat => (
+                      <button key={cat.id} type="button"
+                        className={`ef__emoji${form.expenseCategory === cat.id ? ' ef__emoji--on' : ''}`}
+                        onClick={() => { set('expenseCategory', cat.id); setEmojisOuverts(false); }}>
+                        <span className="ef__emoji-signe">{cat.emoji}</span>
+                        <span className="ef__emoji-nom">{cat.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {recuMsg && <p className="recu__msg">{recuMsg}</p>}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Montant</label>
+            <div className="ef__ligne">
+              <input className="form-input ef__montant" type="number" inputMode="decimal"
+                min="0" step="0.5" placeholder="0,00" autoFocus
+                value={form.amount} onChange={e => set('amount', e.target.value)} />
+              <select className="form-select ef__devise" value={form.currency}
+                aria-label="Devise" onChange={e => set('currency', e.target.value)}>
+                {SUPPORTED_CURRENCIES.map(c => (
+                  <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
+                ))}
+              </select>
+            </div>
+            {form.currency !== 'EUR' && form.amount && (
+              <div className="currency-hint">
+                ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
+              </div>
+            )}
+          </div>
+
+          <div className="ef__deux">
+            {hasTravelers && (
+              <div className="form-group">
+                <label className="form-label">
+                  {form.type === 'transfert' ? 'De'
+                    : form.type === 'revenu' ? 'Reçu par' : 'Payé par'}
+                </label>
+                <select className="form-select" value={form.payerId}
+                  onChange={e => set('payerId', e.target.value)}>
+                  {travelers.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.emoji} {t.name}{me && t.id === me.id ? ' (Moi)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Quand</label>
+              <input className="form-input" type="date" value={form.date}
+                onChange={e => set('date', e.target.value)} />
+            </div>
+          </div>
+
+          {hasTravelers && (
+            <div className="form-group">
+              <div className="ef__diviser-entete">
+                <label className="form-label">
+                  {form.type === 'transfert' ? 'Pour' : 'Diviser'}
+                </label>
+                {form.type !== 'transfert' && (
+                  <select className="ef__mode" value={form.mode} aria-label="Mode de partage"
+                    onChange={e => changerMode(e.target.value)}>
+                    {MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </select>
+                )}
+              </div>
+
+              <div className="ef__personnes">
+                {travelers.map(t => {
+                  const dedans = form.participantIds.includes(t.id);
+                  return (
+                    <div key={t.id} className={`ef__personne${dedans ? '' : ' ef__personne--off'}`}>
+                      <button type="button" className="ef__coche"
+                        aria-pressed={dedans}
+                        aria-label={`${dedans ? 'Retirer' : 'Ajouter'} ${t.name}`}
+                        onClick={() => toggleParticipant(t.id)}>
+                        <span className={`ef__coche-rond${dedans ? ' ef__coche-rond--on' : ''}`}>
+                          {dedans ? '✓' : ''}
+                        </span>
+                      </button>
+                      <span className="ef__nom">
+                        {t.emoji} {t.name}{me && t.id === me.id ? ' (Moi)' : ''}
+                      </span>
+                      {/* En parts, en montants ou en pourcentages, la valeur se
+                          saisit ; à parts égales elle se lit seulement. Dans
+                          tous les cas, les euros de chacun s'affichent PENDANT
+                          la saisie — c'est le point de tout cet écran. */}
+                      {dedans && form.mode !== 'egal' && form.type !== 'transfert' && (
+                        <input className="ef__valeur" type="number" inputMode="decimal"
+                          min="0" step={form.mode === 'parts' ? '1' : '0.01'}
+                          aria-label={`${MODES.find(m => m.id === form.mode)?.unite} pour ${t.name}`}
+                          value={form.valeurs[t.id] ?? ''}
+                          placeholder={form.mode === 'parts' ? '1' : '0'}
+                          onChange={e => reglerValeur(t.id, e.target.value)} />
+                      )}
+                      <span className="ef__euros">
+                        {dedans ? formatPrice(repartition[t.id] || 0) : '—'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Ce qui ne tombe pas juste doit se voir avant d'enregistrer,
+                  pas se découvrir dans les dettes à la fin du voyage. */}
+              {ecartRepartition && (
+                <p className="ef__ecart">{ecartRepartition}</p>
+              )}
+            </div>
+          )}
+
+          {(activitiesByDay.length > 0 || (trip.reserve || []).length > 0) && form.type !== 'transfert' && (
+            /* Le libellé vit dans la liste elle-même : c'est le dernier champ
+               du formulaire, et le bouton collant venait se poser dessus en
+               laissant un intitulé seul, sans rien dessous. Un champ
+               facultatif dont l'option par défaut se lit « aucune activité
+               liée » n'a besoin de personne pour l'annoncer. */
+            <div className="form-group">
+              <select className="form-select" value={form.activityId}
+                aria-label="Lier à une activité"
+                onChange={e => set('activityId', e.target.value)}>
+                <option value="">🔗 Aucune activité liée — optionnel</option>
+                {activitiesByDay.map(({ day, dayIdx }) => (
+                  <optgroup key={day.id} label={`Jour ${dayIdx + 1} · ${formatDateShort(day.date)}`}>
+                    {day.activities.map(a => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </optgroup>
+                ))}
+                {(trip.reserve || []).length > 0 && (
+                  <optgroup label="📦 Réserve">
+                    {trip.reserve.map(a => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          )}
+
+          {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
+          <button className="btn btn--primary btn--full ef__valider" onClick={handleAdd}>
+            {editingId ? 'Enregistrer' : 'Ajouter'}
+          </button>
+          {/* La corbeille a quitté chaque ligne de la liste — sept fois moins
+              d'icônes à l'écran. Supprimer reste possible de deux façons : le
+              glissement, et ici, dans la fiche qu'on a justement ouverte. */}
+          {editingId && (
+            <button type="button" className="expense-form__supprimer"
+              onClick={() => { onDeleteExpense(editingId); setEditingId(null); setShowForm(false); }}>
+              Supprimer cette dépense
+            </button>
+          )}
+        </div>
+      ) : null}
       {/* Budget alert */}
       {budgetOver && (
         <div className="budget-alert">
@@ -770,234 +1071,6 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         </div>
       )}
 
-      {/* Add form */}
-      {showForm ? (
-        <div className="expense-form" ref={formRef}>
-          {/* Le montant est déjà écrit sur le ticket qu'on tient : le retaper
-              est un calcul de plus que l'app devrait éviter. Rien n'est
-              enregistré sans relecture — un montant faux dans un partage se
-              découvre à la fin du voyage, trop tard pour le corriger. */}
-          {!editingId && (
-            <div className="recu">
-              <label className="recu__btn">
-                {lectureRecu ? '⏳ Lecture du ticket…' : '📷 Photographier le ticket'}
-                <input type="file" accept="image/*" capture="environment"
-                  onChange={lireLeRecu} disabled={lectureRecu} hidden />
-              </label>
-              {recuMsg && <p className="recu__msg">{recuMsg}</p>}
-            </div>
-          )}
-          {/* Le montant d'abord : on l'a sous les yeux, écrit sur le ticket
-              qu'on tient. Le curseur y arrive directement, clavier numérique
-              ouvert — on tape 24, on valide, c'est fini. La description
-              venait avant et coûtait deux champs de traversée pour un texte
-              qu'on écrit rarement. */}
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 2 }}>
-              <label className="form-label">Montant</label>
-              <input className="form-input" type="number" inputMode="decimal" min="0" step="0.5"
-                placeholder="0.00" autoFocus
-                value={form.amount} onChange={e => set('amount', e.target.value)} />
-            </div>
-            <div className="form-group" style={{ flex: 1 }}>
-              <label className="form-label">Devise</label>
-              <select className="form-select" value={form.currency} onChange={e => set('currency', e.target.value)}>
-                {SUPPORTED_CURRENCIES.map(c => (
-                  <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {form.currency !== 'EUR' && form.amount && (
-            <div className="currency-hint">
-              ≈ {formatPrice(convertToEur(parseFloat(form.amount) || 0, form.currency))}
-            </div>
-          )}
-          {/* Le partage se lit sous le montant, là où on vient de taper — même
-              quand le détail du partage est replié. */}
-          {splitPreview && <p className="expense-form__preview">{splitPreview}</p>}
-
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <input className="form-input" placeholder="Ex: Resto du soir" value={form.description}
-              onChange={e => set('description', e.target.value)} />
-          </div>
-
-          {hasTravelers && (
-            <div className="form-group">
-              <label className="form-label">Qui a payé ?</label>
-              <div className="traveler-assign-row">
-                {travelers.map(t => (
-                  <button key={t.id} type="button"
-                    className={`traveler-assign-chip${form.payerId === t.id ? ' traveler-assign-chip--on' : ''}`}
-                    onClick={() => set('payerId', t.id)}>
-                    {t.emoji} {t.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Même pli que la fiche d'activité, même intention : la catégorie
-              par défaut convient presque toujours, le partage est déjà « tout
-              le monde », et lier une activité est explicitement optionnel.
-              Le résumé dit ce qu'il y a dessous — rien n'est caché, c'est
-              seulement rangé. */}
-          <button
-            type="button"
-            className="details-pli"
-            onClick={() => setDetailsOuverts(o => !o)}
-            aria-expanded={detailsOuverts}
-          >
-            <span>{detailsOuverts ? '▴' : '▾'} Détails</span>
-            <small>{resumeDetails}</small>
-          </button>
-          {detailsOuverts && (<>
-          <div className="form-group">
-            <label className="form-label">Catégorie</label>
-            <div className="traveler-assign-row" style={{ flexWrap: 'wrap' }}>
-              {EXPENSE_CATEGORIES.map(cat => (
-                <button key={cat.id} type="button"
-                  className={`traveler-assign-chip${form.expenseCategory === cat.id ? ' traveler-assign-chip--on' : ''}`}
-                  onClick={() => set('expenseCategory', cat.id)}>
-                  {cat.emoji} {cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {hasTravelers && (
-            <div className="form-group">
-              <label className="form-label">
-                Partagé entre
-                <button
-                  type="button"
-                  className="expense-form__all-btn"
-                  onClick={() => setForm(f => ({
-                    ...f,
-                    participantIds: f.participantIds.length === travelers.length
-                      ? [] : travelers.map(t => t.id),
-                    parts: {},
-                  }))}
-                >
-                  {form.participantIds.length === travelers.length ? 'Tout décocher' : 'Tout le monde'}
-                </button>
-              </label>
-              <div className="traveler-assign-row">
-                {travelers.map(t => {
-                  const dedans = form.participantIds.includes(t.id);
-                  const n = partsFormulaire[t.id] || 1;
-                  return (
-                    <button key={t.id} type="button"
-                      className={`traveler-assign-chip${dedans ? ' traveler-assign-chip--on' : ''}`}
-                      onClick={() => toggleParticipant(t.id)}>
-                      {t.emoji} {t.name}
-                      {/* La part se lit sur la pastille de la personne — il n'y
-                          a pas d'autre endroit où l'on cherche « combien compte
-                          Léa ». Rien ne s'affiche à parts égales. */}
-                      {dedans && n > 1 && <span className="chip-part"> ×{n}</span>}
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Le réglage des parts n'apparaît qu'à partir de deux personnes,
-                  et reste replié : à parts égales — le cas courant — il n'y a
-                  rien à régler, et l'afficher ferait payer à tout le monde une
-                  exception que peu utilisent. */}
-              {form.participantIds.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    className="expense-parts__toggle"
-                    onClick={() => setPartsOuvertes(o => !o)}
-                    aria-expanded={partsOuvertes}
-                  >
-                    {partsOuvertes ? '▴' : '▾'} Parts inégales
-                    {!partsOuvertes && inegalEnCours && ' · en cours'}
-                  </button>
-                  {partsOuvertes && (
-                    <div className="expense-parts">
-                      <p className="expense-parts__aide">
-                        Une part chacun par défaut. Deux parts pour qui compte
-                        double — une chambre partagée, un menu en plus.
-                      </p>
-                      {form.participantIds.map(id => (
-                        <div key={id} className="expense-parts__row">
-                          <span className="expense-parts__who">
-                            {getEmoji(id)} {getName(id)}
-                          </span>
-                          <div className="expense-parts__stepper">
-                            <button type="button" className="expense-parts__btn"
-                              onClick={() => reglerPart(id, -1)}
-                              disabled={(partsFormulaire[id] || 1) <= 1}
-                              aria-label={`Moins de parts pour ${getName(id)}`}>−</button>
-                            <span className="expense-parts__n">{partsFormulaire[id] || 1}</span>
-                            <button type="button" className="expense-parts__btn"
-                              onClick={() => reglerPart(id, +1)}
-                              disabled={(partsFormulaire[id] || 1) >= 9}
-                              aria-label={`Plus de parts pour ${getName(id)}`}>+</button>
-                          </div>
-                          {/* Le résultat en euros, à côté du réglage : c'est lui
-                              qu'on vérifie, pas le nombre de parts. */}
-                          <span className="expense-parts__euros">
-                            {depenseEnCours.eurAmount
-                              ? formatPrice(partEnEuros(depenseEnCours, id))
-                              : '—'}
-                          </span>
-                        </div>
-                      ))}
-                      {inegalEnCours && (
-                        <button type="button" className="expense-parts__reset"
-                          onClick={() => set('parts', {})}>
-                          Revenir à parts égales
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-          {(activitiesByDay.length > 0 || (trip.reserve || []).length > 0) && (
-            <div className="form-group">
-              <label className="form-label">Lier à une activité <span style={{ fontWeight: 400, color: 'var(--text-light)' }}>— optionnel</span></label>
-              <select className="form-select" value={form.activityId} onChange={e => set('activityId', e.target.value)}>
-                <option value="">— aucune —</option>
-                {activitiesByDay.map(({ day, dayIdx }) => (
-                  <optgroup key={day.id} label={`Jour ${dayIdx + 1} · ${formatDateShort(day.date)}`}>
-                    {day.activities.map(a => (
-                      <option key={a.id} value={a.id}>{a.title}</option>
-                    ))}
-                  </optgroup>
-                ))}
-                {(trip.reserve || []).length > 0 && (
-                  <optgroup label="📦 Réserve">
-                    {trip.reserve.map(a => (
-                      <option key={a.id} value={a.id}>{a.title}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-          )}
-          </>)}
-          {error && <p style={{ color: 'var(--red)', fontSize: 13 }}>{error}</p>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="btn btn--secondary btn--full" onClick={() => { setShowForm(false); setEditingId(null); }}>Annuler</button>
-            <button className="btn btn--primary btn--full" onClick={handleAdd}>
-              {editingId ? '✅ Enregistrer' : '✅ Ajouter'}
-            </button>
-          </div>
-          {/* La corbeille a quitté chaque ligne de la liste — sept fois moins
-              d'icônes à l'écran. Supprimer reste possible de deux façons : le
-              glissement, et ici, dans la fiche qu'on a justement ouverte. */}
-          {editingId && (
-            <button type="button" className="expense-form__supprimer"
-              onClick={() => { onDeleteExpense(editingId); setEditingId(null); setShowForm(false); }}>
-              Supprimer cette dépense
-            </button>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 }

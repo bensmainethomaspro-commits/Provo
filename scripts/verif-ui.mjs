@@ -386,17 +386,28 @@ const ECRANS = [
     },
   },
   {
-    // Le formulaire DÉPLIÉ, parts comprises. Replié, la moitié de ses contrôles
-    // échappait à la mesure — dont le réglage des parts, arrivé en août 2026.
-    // Un écran qu'on n'ouvre pas est un écran qu'on ne mesure pas.
+    // Le formulaire dans son état le plus chargé : mode « en parts », donc un
+    // champ de saisie ET une somme en euros par personne sur la même ligne.
+    // À parts égales la moitié de ces contrôles n'est pas dessinée — un écran
+    // qu'on n'ouvre pas est un écran qu'on ne mesure pas.
     nom: 'Dépense (parts)',
     aller: async (p) => {
       await ouvrirVoyage(p); await onglet(p, /Dépenses/i);
       await p.locator('.expenses-add-top').click().catch(() => {});
       await p.waitForTimeout(600);
-      await p.locator('button', { hasText: /Détails/i }).first().click().catch(() => {});
-      await p.waitForTimeout(400);
-      await p.locator('button', { hasText: /Parts inégales/i }).first().click().catch(() => {});
+      await p.locator('.ef__mode').first().selectOption('parts').catch(() => {});
+      await p.waitForTimeout(500);
+    },
+  },
+  {
+    // La palette d'icônes : douze cibles de 44 px serrées dans une grille, le
+    // genre d'endroit où la taille se perd sans qu'on le voie.
+    nom: 'Dépense (icônes)',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Dépenses/i);
+      await p.locator('.expenses-add-top').click().catch(() => {});
+      await p.waitForTimeout(600);
+      await p.locator('button[aria-label="Choisir une icône"]').first().click().catch(() => {});
       await p.waitForTimeout(500);
     },
   },

@@ -105,8 +105,63 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
-- **Parts inégales, à la manière de Provo** (août 2026). Demandé : « inspire-toi
-  de Tricount ». Provo avait déjà le règlement minimal, les soldes, le
+- **Le formulaire de dépense EST celui de Tricount** (17 août 2026). Demandé
+  mot pour mot, capture à l'appui : « fais exactement la même interface que
+  Tricount pour l'ajout des dépenses, avec toutes les fonctionnalités que cela
+  implique comme par exemple les calculs dès l'ajout de la dépense ». Ce qui
+  renverse le « écarté » de l'entrée suivante : le sélecteur à quatre modes,
+  jugé trop lourd deux jours plus tôt, est maintenant explicitement demandé.
+  Une préférence produit énoncée par moi ne survit pas à une demande directe.
+
+  Ce que le formulaire fait désormais :
+  · en-tête `Annuler · titre`, et trois segments `Dépense · Revenu · Transfert` ;
+  · titre AVANT montant (la tâche #34 avait choisi l'inverse — assumé, c'est ce
+    que fait Tricount et c'est ce qui est demandé) ;
+  · le choix d'icône EST le choix de catégorie : une seule décision, une seule
+    commande ;
+  · la date devient saisissable — le champ existait dans les données depuis
+    toujours, aucun écran ne le proposait ;
+  · `Payé par` (`Reçu par` pour un revenu, `De` pour un transfert) et `Quand`
+    côte à côte ;
+  · quatre modes de partage, et **les euros de chacun s'affichent PENDANT la
+    saisie** — c'est le « calcul dès l'ajout » demandé ;
+  · ce qui ne tombe pas juste se dit avant d'enregistrer (« Il reste 20 € à
+    répartir ») et refuse la validation, au lieu de se découvrir dans les
+    dettes à la fin du voyage.
+
+  Trois choix de structure, pris pour que le tout tienne à l'écran :
+  1. **Le bouton de validation est collant** (`position: sticky`), pas
+     simplement suivi de creux. C'est la troisième fois que ce bouton repasse
+     sous la barre d'onglets (#33, puis les parts inégales, puis ici) : chaque
+     correctif par le creux ne tenait que jusqu'au champ suivant. Collant, la
+     question ne se repose plus. `bottom: 4px` et non 108 : les décalages d'un
+     élément collant se comptent depuis la boîte de CONTENU du conteneur
+     défilant, et `.tab-content` réserve déjà 104 px.
+  2. **La palette d'icônes se pose par-dessus le formulaire**, elle ne l'écarte
+     pas. Dépliée dans le flux elle ajoutait 250 px, et le bouton collant se
+     retrouvait au milieu de la liste des personnes. Un choix d'icône ne doit
+     pas déplacer le montant qu'on vient de taper.
+  3. **Le formulaire ouvert passe en TÊTE de l'onglet.** Il était rendu après
+     la liste : en remontant, on voyait le bouton collant flotter au-dessus de
+     l'en-tête du formulaire, borné par sa boîte. Un élément collant ne peut
+     pas sortir de son parent — si le parent commence sous l'écran, le bouton
+     se colle en haut de ce parent, pas en bas de l'écran.
+
+  Le formulaire a maigri de 69 px (interlignes, intitulés, rembourrage des
+  champs, intitulé du dernier champ fondu dans sa liste) : le cas courant —
+  deux voyageurs, parts égales — tient entièrement à l'écran, bouton compris,
+  sans avoir à défiler pour valider. Mesuré : 627 px de formulaire pour 639 px
+  disponibles. `/verif-ui` est vert sur les trois écrans du formulaire, dans
+  les deux thèmes, y compris les trois cibles sous 44 px signalées « non
+  traitées » l'avant-veille : les pastilles de catégorie ont disparu avec le
+  pli « Détails ».
+
+- **Parts inégales, à la manière de Provo** (août 2026) — ⚠️ **en partie
+  dépassé par l'entrée ci-dessus** : le pli « Détails » et les pastilles
+  `Thomas ×2` n'existent plus, remplacés par le sélecteur de mode et les
+  colonnes de valeurs. Ce qui reste vrai et ne doit pas être défait : la règle
+  de partage vit dans `helpers.js` seule, et une dépense n'est stockée qu'en
+  PARTS. Demandé : « inspire-toi de Tricount ». Provo avait déjà le règlement minimal, les soldes, le
   multi-devise, la lecture de ticket et les catégories ; ce qui manquait, c'est
   que le partage était TOUJOURS égal. Une chambre partagée, un menu que
   quelqu'un n'a pas pris, un billet gratuit : le seul contournement était de

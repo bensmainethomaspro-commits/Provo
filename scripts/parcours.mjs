@@ -821,42 +821,49 @@ const PARCOURS = [
     } },
 
   { groupe: 'Dépenses', nom: 'Une chambre partagée compte double', depart: 'voyage',
-    intention: "Payer 60 € à trois dont un couple, et que l'app fasse la répartition "
-      + "au lieu de m'obliger à couper la dépense en deux.",
+    intention: "Payer 60 € à deux dont l'un compte double, et voir la répartition "
+      + "se faire PENDANT la saisie au lieu de la découvrir après.",
     async faire(t) {
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
-      await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
-      await t.saisir('input.form-input:not([type="number"])', 'Chambre');
-      const montant = t.p.locator('input[type="number"]').first();
+      await t.clic('.expenses-add-top', { delai: 800 });
+      await t.saisir('.ef__ligne-titre input.form-input', 'Chambre');
+      const montant = t.p.locator('.ef__montant');
       if (!(await montant.count())) t.injouable('pas de champ montant');
       await montant.fill('60');
-      await t.clic('button', { texte: /Détails/i, delai: 400 });
-      const parts = t.p.locator('button', { hasText: /Parts inégales/i }).first();
-      if (!(await parts.count())) t.injouable('pas de réglage des parts');
-      await parts.click();
+      await t.p.waitForTimeout(400);
+
+      // À parts égales, chacun voit sa part sans rien régler.
+      const euros = t.p.locator('.ef__euros');
+      t.verifier('la part de chacun s\'affiche pendant la saisie',
+        /\d/.test((await euros.first().innerText()) || ''),
+        await euros.first().innerText());
+
+      const mode = t.p.locator('.ef__mode');
+      if (!(await mode.count())) t.injouable('pas de sélecteur de mode');
+      await mode.selectOption('parts');
       await t.p.waitForTimeout(300);
-      const plus = t.p.locator('.expense-parts__btn', { hasText: '+' }).first();
-      if (!(await plus.count())) t.injouable('pas de bouton +');
-      await plus.click();
-      await t.p.waitForTimeout(300);
-      const apres = await t.texte();
-      t.verifier('la part se compte en parts, pas en personnes',
-        /parts?\s*=/.test(apres) || /la part/.test(apres));
-      await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1000 });
+      const champs = t.p.locator('.ef__valeur');
+      if (!(await champs.count())) t.injouable('pas de champ de parts');
+      await champs.first().fill('2');
+      await t.p.waitForTimeout(400);
+
+      const lus = await euros.allInnerTexts();
+      t.verifier('la répartition se met à jour tout de suite',
+        lus[0] !== lus[1], lus.join(' · '));
+
+      await t.clic('.ef__valider', { delai: 1000 });
       const v = await t.voyage();
       const dep = (v.expenses || []).find(e => e.description === 'Chambre');
       t.verifier('la dépense est enregistrée', !!dep);
       if (!dep) return;
-      const parts2 = dep.parts || {};
-      const total = (dep.participantIds || []).reduce((s, id) => s + (parts2[id] || 1), 0);
-      const premier = (dep.participantIds || [])[0];
-      t.verifier('la part inégale est bien retenue', (parts2[premier] || 1) === 2,
-        JSON.stringify(parts2));
+      const parts = dep.parts || {};
+      const ids = dep.participantIds || [];
       // Le point qui compte : la somme des parts retombe sur le montant. Une
       // répartition qui ne boucle pas fabrique de l'argent dans le carnet.
-      const somme = (dep.participantIds || [])
-        .reduce((s, id) => s + (dep.eurAmount ?? dep.amount) * (parts2[id] || 1) / total, 0);
+      const total = ids.reduce((s2, id) => s2 + (parts[id] || 1), 0);
+      const somme = ids.reduce(
+        (s2, id) => s2 + (dep.eurAmount ?? dep.amount) * (parts[id] || 1) / total, 0);
       t.verifier('la somme des parts fait le montant',
         Math.abs(somme - (dep.eurAmount ?? dep.amount)) < 0.01,
         `${somme.toFixed(2)} vs ${dep.eurAmount ?? dep.amount}`);
@@ -868,12 +875,14 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
-      // Les catégories vivent derrière le pli « Détails » : le formulaire
-      // s'ouvre sur montant + description, et rien d'autre. Le pli annonce
-      // ce qu'il contient, donc on vérifie les deux — l'annonce et le contenu.
-      t.verifier('la catégorie retenue est annoncée sans déplier',
-        /Autre|Transport|Repas/.test(await t.p.locator('.details-pli small').innerText()));
-      await t.clic('.details-pli', { delai: 500 });
+      // Depuis la disposition Tricount, la catégorie EST le choix d'icône :
+      // c'était deux réglages pour une seule décision. L'icône retenue se lit
+      // donc sur le bouton, sans rien ouvrir.
+      const icone = t.p.locator('.ef__icone').first();
+      t.verifier("l'icône retenue se voit sans rien ouvrir",
+        (await icone.innerText()).trim().length > 0);
+      await icone.click();
+      await t.p.waitForTimeout(400);
       t.verifier('« Verre » est proposée',
         (await t.texte()).match(/Verre/i) !== null);
     } },
@@ -1862,10 +1871,14 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top', { delai: 800 });
-      t.verifier('la photo du ticket est proposée', await t.visible('.recu__btn'));
+      // Le libellé « Photographier le ticket » est devenu une icône 📷, comme
+      // sur Tricount. Ce qui compte n'est pas le mot mais l'affordance : un
+      // appareil photo atteignable, et décrit pour les lecteurs d'écran.
+      t.verifier('la photo du ticket est proposée',
+        await t.p.locator('label[aria-label*="ticket" i]').count() > 0);
 
       // Une photo quelconque : c'est le service qui lit, pas le parcours.
-      await t.p.setInputFiles('.recu input[type="file"]', {
+      await t.p.setInputFiles('label[aria-label*="ticket" i] input[type="file"]', {
         name: 'ticket.jpg', mimeType: 'image/jpeg',
         buffer: Buffer.from(
           '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
@@ -1879,7 +1892,7 @@ const PARCOURS = [
       const champs = await t.p.evaluate(() => {
         // Le champ fichier du ticket est désormais le premier `input` du
         // formulaire : viser par position mènerait à lui.
-        const desc = document.querySelector('.expense-form input.form-input[placeholder*="Resto"]');
+        const desc = document.querySelector('.ef__ligne-titre input.form-input');
         const num = [...document.querySelectorAll('.expense-form input')].find(i => i.type === 'number');
         return { description: desc?.value || '', montant: num?.value || '',
           message: document.querySelector('.recu__msg')?.innerText || '' };
@@ -1902,7 +1915,7 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top', { delai: 800 });
-      await t.p.setInputFiles('.recu input[type="file"]', {
+      await t.p.setInputFiles('label[aria-label*="ticket" i] input[type="file"]', {
         name: 'flou.jpg', mimeType: 'image/jpeg',
         buffer: Buffer.from(
           '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'

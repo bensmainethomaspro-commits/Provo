@@ -2410,6 +2410,171 @@ body {
   color: var(--accent-texte);
 }
 
+/* ─── FORMULAIRE DE DÉPENSE, DISPOSITION TRICOUNT ─────────── */
+/* Demandé capture à l'appui. Toutes les cibles à 44 px, chiffres tabulaires
+   partout où un montant change pendant la saisie : sinon la colonne danse à
+   chaque frappe et on ne peut plus lire ce qu'on est en train de faire. */
+/* Onze champs dans un écran de 844 px dont l'en-tête du voyage prend déjà 131,
+   et la barre d'onglets 74 : il reste 639 px. Le formulaire en faisait 696, et
+   le bouton collant se posait donc sur le dernier champ. Ces réglages —
+   interlignes, intitulés, rembourrage des champs — en retirent 69 : le cas
+   courant tient d'un coup d'œil, sans avoir à défiler pour valider. Aucune
+   cible ne descend sous 48 px, mesuré. */
+.ef .form-group { margin-bottom: 8px; }
+.ef .form-label { margin-bottom: 3px; }
+.ef .form-input, .ef .form-select { padding: 10px 14px; }
+
+.ef__entete {
+  display: flex; align-items: center; justify-content: center;
+  position: relative; min-height: 44px; margin-bottom: 2px;
+}
+.ef__annuler {
+  position: absolute; left: 0; min-height: 44px; padding: 0 4px;
+  background: none; border: none; cursor: pointer;
+  font-size: var(--t-md); font-weight: 600; color: var(--accent-texte);
+}
+.ef__titre-ecran { font-size: var(--t-md); font-weight: 800; color: var(--text); }
+
+.ef__segments {
+  display: flex; gap: 2px; padding: 3px; margin-bottom: 10px;
+  background: var(--surface-sunken); border-radius: var(--radius-sm);
+}
+.ef__segment {
+  flex: 1; min-height: 44px; border: none; border-radius: var(--radius-xs);
+  background: none; cursor: pointer;
+  font-size: var(--t-sm); font-weight: 600; color: var(--text-muted);
+}
+.ef__segment--on {
+  background: var(--surface-raised); color: var(--text); font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+.ef__ligne, .ef__ligne-titre { display: flex; gap: 8px; align-items: stretch; }
+.ef__ligne-titre { position: relative; }  /* ancre de la palette d'icônes */
+.ef__ligne-titre .form-input { flex: 1; min-width: 0; }
+.ef__icone {
+  display: flex; align-items: center; justify-content: center;
+  width: 52px; min-height: 44px; flex-shrink: 0; cursor: pointer;
+  background: var(--surface-sunken); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: var(--t-lg);
+}
+.ef__montant { flex: 2; min-width: 0; }
+.ef__devise { flex: 1; min-width: 84px; }
+
+/* La palette se pose PAR-DESSUS le formulaire, elle ne l'écarte pas. Dépliée
+   dans le flux, elle ajoutait 250 px : le bouton collant se retrouvait au
+   milieu de la liste des personnes, coupant une ligne en deux. Un choix
+   d'icône ne doit pas déplacer le montant qu'on vient de taper. */
+.ef__emojis {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 10px; background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(20, 55, 80, 0.22);
+}
+[data-theme="dark"] .ef__emojis { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); }
+/* Un voile transparent : toucher à côté referme, sans piéger l'écran. */
+.ef__voile {
+  position: fixed; inset: 0; z-index: 4;
+  background: none; border: none; padding: 0; cursor: default;
+}
+.ef__emoji {
+  display: flex; align-items: center; gap: 5px;
+  min-height: 44px; padding: 4px 10px; cursor: pointer;
+  background: var(--surface-sunken); border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--t-sm); font-weight: 600; color: var(--text-muted);
+}
+.ef__emoji--on {
+  border-color: var(--accent); color: var(--accent-texte);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ef__emoji-signe { font-size: var(--t-md); }
+
+/* « Payé par » et « Quand » côte à côte, comme sur la capture. */
+.ef__deux { display: flex; gap: 8px; }
+.ef__deux > .form-group { flex: 1; min-width: 0; }
+
+.ef__diviser-entete {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.ef__mode {
+  min-height: 44px; padding: 0 8px; cursor: pointer;
+  background: none; border: none;
+  font-size: var(--t-sm); font-weight: 700; color: var(--accent-texte);
+}
+
+.ef__personnes {
+  margin-top: 6px; border-radius: var(--radius-md);
+  background: var(--surface-sunken); overflow: hidden;
+}
+.ef__personne {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 4px 10px;
+}
+.ef__personne + .ef__personne { border-top: 1px solid var(--border); }
+.ef__personne--off .ef__nom { color: var(--text-light); }
+
+.ef__coche {
+  width: 44px; height: 44px; flex-shrink: 0; padding: 0; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none;
+}
+.ef__coche-rond {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--border); background: var(--surface);
+  font-size: var(--t-sm); font-weight: 800; color: transparent;
+}
+.ef__coche-rond--on {
+  background: var(--accent-deep); border-color: var(--accent-deep); color: #fff;
+}
+
+.ef__nom {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: var(--t-sm); font-weight: 600; color: var(--text);
+}
+.ef__valeur {
+  width: 74px; flex-shrink: 0; min-height: 44px; padding: 0 8px;
+  text-align: right; font-variant-numeric: tabular-nums;
+  background: var(--surface); color: var(--text);
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: var(--t-sm); font-weight: 700;
+}
+.ef__euros {
+  min-width: 74px; flex-shrink: 0; text-align: right;
+  font-size: var(--t-sm); font-weight: 700; color: var(--green-texte);
+  font-variant-numeric: tabular-nums;
+}
+.ef__personne--off .ef__euros { color: var(--text-light); }
+
+/* Un partage qui ne tombe pas juste se voit AVANT d'enregistrer. */
+.ef__ecart {
+  margin: 8px 0 0; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--text); font-size: var(--t-sm); font-weight: 600;
+}
+/* Le bouton de validation reste collé au bas du formulaire, au-dessus de la
+   barre d'onglets. Task #33 avait déjà sorti ce bouton de dessous la barre en
+   creusant sous la liste ; le formulaire vient de doubler de hauteur et le
+   creux ne suffisait plus — mesuré à 827 px de bas pour un écran de 844, la
+   barre commençant à 770. Du creux, il en faudrait davantage à chaque champ
+   ajouté ; collant, la question est réglée quelle que soit la longueur.
+   `bottom: 4px` et non 108 : les décalages d'un élément collant se comptent
+   depuis la boîte de contenu du conteneur défilant, et `.tab-content` réserve
+   déjà 104 px sous la barre. L'anneau de 8 px reprend le fond de la fiche
+   pour que le texte qui défile dessous ne se lise pas à moitié.
+   Le bouton reste borné par `.expense-form` : il s'en va avec le formulaire
+   quand on continue vers la liste, au lieu de flotter sur tout l'onglet. */
+.ef__valider {
+  position: sticky; z-index: 3; bottom: 4px;
+  margin-top: 14px; min-height: 52px; font-size: var(--t-md);
+  box-shadow: 0 0 0 8px var(--surface-raised), 0 8px 22px rgba(20, 55, 80, 0.20);
+}
+[data-theme="dark"] .ef__valider {
+  box-shadow: 0 0 0 8px var(--surface-raised), 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+
 /* ─── PARTS INÉGALES ─────────────────────────────────────── */
 /* Une dépense se partage à parts égales par défaut. Ce bloc n'existe que pour
    l'exception — une chambre partagée, un menu en plus — et reste replié tant
