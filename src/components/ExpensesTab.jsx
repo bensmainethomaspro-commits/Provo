@@ -686,7 +686,13 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <div className="expenses-list__empty">Aucune dépense enregistrée.</div>
           )}
           {expenses.map(exp => {
-            const n = exp.participantIds.length;
+            // Même garde que dans `calcDebts` et `calcBalances`, pour la même
+            // raison : une dépense arrivée à moitié par la synchro n'a pas
+            // forcément ce champ. La garde posée dans les calculs ne protège
+            // pas le rendu — sans elle ici, un seul objet mal formé fait
+            // toujours tomber toute la vue voyage, barre d'onglets comprise.
+            const participants = exp.participantIds || [];
+            const n = participants.length;
             const eurAmt = exp.eurAmount ?? exp.amount;
             const share = n > 0 ? eurAmt / n : eurAmt;
             const catMeta = exp.isSettlement
@@ -713,7 +719,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                       <div className="expense-item__desc">{exp.description}</div>
                       <div className="expense-item__meta">
                         {exp.isSettlement
-                          ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {exp.participantIds.map(getName).join(', ')}</>
+                          ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {participants.map(getName).join(', ')}</>
                           : <>
                               {exp.payerId && `${getName(exp.payerId)} a payé `}
                               <strong>
@@ -732,7 +738,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                       </div>
                       {n > 0 && (
                         <div className="expense-item__participants">
-                          {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
+                          {participants.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
                         </div>
                       )}
                     </div>
