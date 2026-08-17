@@ -65,6 +65,13 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   `provo_dest_coords` — troisième clé du projet avec `provo_trips` et
   `provo_settings`.
 - `src/utils/enrich.js` : complétion automatique des fiches.
+- `src/utils/helpers.js`, fin de fichier : `partsDeDepense`, `totalDesParts`,
+  `partEnEuros`, `partageInegal`. Depuis le 2026-08-10, **la règle de partage
+  d'une dépense vit là et nulle part ailleurs**. Une dépense sans `parts`, ou
+  dont toutes les parts valent 1, se divise exactement comme avant : les fiches
+  déjà enregistrées restent justes. Toute lecture d'une part passe par
+  `partEnEuros` — une division locale `montant / participantIds.length` est un
+  constat, pas un raccourci (c'est A-024).
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
   liens courts et extrait les métadonnées d'une page tierce. Utilise
@@ -103,6 +110,15 @@ comme une fermeture complète.
 
 `diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app`,
 le diagnostic n'a donc pas été cassé par cet ajout.
+
+**Le garde-fou SSRF, lui, n'est PAS partagé** (relevé le 2026-08-17).
+`urlSure` et la table `PRIVE` vivent uniquement dans
+`supabase/functions/enrich-place/index.ts:49`. `extract-place` télécharge
+pourtant une URL fournie par le corps de la requête — c'est son métier — sans
+aucun filtre d'hôte : `fetchOnce` (`index.ts:264`) joint ce qu'on lui donne.
+Deux fonctions qui font la même chose, une seule protégée. C'est le constat
+A-023 ; tant qu'il est ouvert, ne pas le redécouvrir, et ne pas croire que
+`_shared/` couvre autre chose que l'origine.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
