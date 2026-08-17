@@ -27,8 +27,10 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
   const owed = debts.filter(d => d.to === traveler.id);
 
   // Expenses paid by or involving this traveler
+  // `|| []` comme deux lignes plus haut : sans lui, une dépense sans
+  // `participantIds` faisait tomber la feuille entière à l'ouverture.
   const myExpenses = expenses.filter(
-    e => e.payerId === traveler.id || e.participantIds.includes(traveler.id)
+    e => e.payerId === traveler.id || (e.participantIds || []).includes(traveler.id)
   );
 
   // Même raison que la roue : rendu dans document.body pour échapper aux

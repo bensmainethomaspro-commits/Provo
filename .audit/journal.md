@@ -50,6 +50,10 @@ Produit et UX, puis retour au début.
 | A-017 | 2026-08-10 | Sécurité | **Faux positif.** `with_check: null` n'est pas l'absence de contrôle : PostgreSQL précise que pour une politique `UPDATE` sans `WITH CHECK`, l'expression `USING` sert AUSSI de contrôle sur la nouvelle ligne. `using (auth.uid() = user_id)` fait donc échouer la réaffectation à l'`user_id` d'un autre. La lecture de `pg_policies` était juste, son interprétation non — et l'attaque n'avait pas été exercée, ce qui était précisément le cas où ça comptait. Raison inscrite dans `supabase/migrations/20260806_push_subscriptions.sql`, avec sa condition de réfutation | Sans objet | REFUSÉ |
 | A-018 | 2026-08-10 | Sécurité | `origineAutorisee` posé sur `read-booking`, `read-receipt` et `enrich-place`. Il vit désormais dans `supabase/functions/_shared/origine.ts`, importé par les quatre fonctions au lieu d'être recopié — c'est la recopie qui l'avait laissé derrière. Le fichier dit aussi ce que le contrôle NE couvre pas : `Origin` n'est imposé que par les navigateurs, un appel forgé peut l'omettre | Majeur | CORRIGÉ |
 | A-019 | 2026-08-10 | Sécurité | Redirections suivies à la main, chaque saut repassant par `urlSure`, cinq au plus. `scripts/verif-redirections.mjs` (7 cas) vérifie que l'adresse interne n'est **jamais jointe**, pas seulement que la réponse est nulle. Limite annoncée dans le code : un nom d'hôte public qui *résout* vers une adresse interne n'est pas couvert | Majeur | CORRIGÉ |
+| A-023 | 2026-08-17 | Sécurité | `extract-place` n'a **aucun** garde-fou SSRF, là où `enrich-place` en a un depuis A-019. Le corps de requête donne l'URL, seul `/^https?:\/\//` la filtre, puis `fetchOnce` la joint en `redirect: "follow"` (`index.ts:264`). `urlSure`/`PRIVE` ne vivent que dans `enrich-place`, ils n'ont pas été partagés comme l'a été `origineAutorisee` | Majeur | PROPOSÉ |
+| A-024 | 2026-08-17 | Fiabilité | La liste des dépenses divise encore à parts égales (`eurAmt / n`, `ExpensesTab.jsx:696`) alors que soldes, dettes et feuille voyageur passent par `partEnEuros` depuis c17be9e. Le calcul était écrit **quatre** fois, pas trois : l'écran le plus lu contredit les trois autres sur une dépense à parts inégales | Majeur | PROPOSÉ |
+| A-025 | 2026-08-17 | Fiabilité | Retirer un voyageur ne le retire que de `tripTravelers` (`TripSettingsSheet.jsx:98`) : son id reste dans `participantIds`, sa part reste comptée, et `calcDebts` crée une entrée hors liste. Le panneau des dettes affiche alors une ligne au nom d'un identifiant technique (`getName` retombe sur l'id brut) | Majeur | PROPOSÉ |
+| A-026 | 2026-08-17 | Fiabilité | Quatre accès non gardés à `exp.participantIds` dans le **rendu** (liste des dépenses, feuille par voyageur), alors que `calcDebts`/`calcBalances` se gardent depuis longtemps avec un commentaire qui dit pourquoi. La garde des calculs ne protège pas le rendu | Mineur | CORRIGÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -57,6 +61,17 @@ Exemple de ligne, à supprimer :
 -->
 
 ## Dernier audit effectif
+
+Date : 2026-08-17
+Type : LÉGER (7 jours écoulés, 3 commits significatifs : les deux correctifs de
+sécurité de l'audit précédent, jamais relus par personne d'autre, et `#70`
+« Parts inégales », qui touche le calcul de l'argent)
+Axes : Sécurité, Fiabilité. Pas d'axe rotatif en audit LÉGER.
+Prochain axe rotatif : Performance et coûts (toujours pas consommé)
+Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** —
+inchangé depuis le 2026-08-10, dette non aggravée. `npm run build` passe.
+
+### Audit précédent
 
 Date : 2026-08-10
 Type : PROFOND (7 jours écoulés seulement, mais **89 commits** sur `main` depuis
@@ -76,3 +91,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-07-29 | PROFOND | Tous + roadmap | A-001 à A-010 |
 | 2026-08-03 | LÉGER | Sécurité, Fiabilité | A-011 à A-016 |
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
+| 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |

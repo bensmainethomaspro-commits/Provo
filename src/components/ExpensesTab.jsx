@@ -693,11 +693,15 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <div className="expenses-list__empty">Aucune dépense enregistrée.</div>
           )}
           {expenses.map(exp => {
-            // `|| []` : une dépense arrivée à moitié par la synchro n'a pas
-            // forcément ce champ, et la garde posée dans `calcDebts` ne protège
-            // pas le rendu — un seul objet mal formé faisait tomber toute la
-            // vue voyage, barre d'onglets comprise.
-            const n = (exp.participantIds || []).length;
+            // Même garde que dans `calcDebts` et `calcBalances`, pour la même
+            // raison : une dépense arrivée à moitié par la synchro n'a pas
+            // forcément ce champ. La garde posée dans les calculs ne protège
+            // pas le rendu — sans elle ici, un seul objet mal formé fait
+            // toujours tomber toute la vue voyage, barre d'onglets comprise.
+            // La liaison `participants` sert aussi deux fois plus bas, où les
+            // accès étaient restés nus : c'est la version de l'audit, gardée.
+            const participants = exp.participantIds || [];
+            const n = participants.length;
             const eurAmt = exp.eurAmount ?? exp.amount;
             // « X €/pers. » n'a de sens QUE si le partage est égal. À parts
             // inégales il n'existe aucun montant « par personne » — et cette
@@ -731,7 +735,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                       <div className="expense-item__desc">{exp.description}</div>
                       <div className="expense-item__meta">
                         {exp.isSettlement
-                          ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {exp.participantIds.map(getName).join(', ')}</>
+                          ? <>{getName(exp.payerId)} a remboursé <strong>{formatPrice(eurAmt)}</strong> à {participants.map(getName).join(', ')}</>
                           : <>
                               {exp.payerId && `${getName(exp.payerId)} a payé `}
                               <strong>
@@ -754,7 +758,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                       </div>
                       {n > 0 && (
                         <div className="expense-item__participants">
-                          {exp.participantIds.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
+                          {participants.map(id => <span key={id} className="expense-participant">{getEmoji(id)}</span>)}
                         </div>
                       )}
                     </div>
