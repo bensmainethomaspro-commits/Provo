@@ -690,8 +690,19 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <div className="expenses-list__empty">Aucune dépense enregistrée.</div>
           )}
           {expenses.map(exp => {
-            const n = exp.participantIds.length;
+            // `|| []` : une dépense arrivée à moitié par la synchro n'a pas
+            // forcément ce champ, et la garde posée dans `calcDebts` ne protège
+            // pas le rendu — un seul objet mal formé faisait tomber toute la
+            // vue voyage, barre d'onglets comprise.
+            const n = (exp.participantIds || []).length;
             const eurAmt = exp.eurAmount ?? exp.amount;
+            // « X €/pers. » n'a de sens QUE si le partage est égal. À parts
+            // inégales il n'existe aucun montant « par personne » — et cette
+            // ligne, la plus lue de l'app, annonçait la division simple pendant
+            // que les dettes et la feuille par voyageur disaient autre chose.
+            // Sur 90 € partagés 1:2 : 45 ici, 30 et 60 ailleurs.
+            const inegal = partageInegal(exp);
+            const maPart = me ? partEnEuros(exp, me.id) : 0;
             const share = n > 0 ? eurAmt / n : eurAmt;
             const catMeta = exp.isSettlement
               ? { emoji: '🤝', label: 'Remboursement' }
@@ -726,7 +737,11 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                                   : formatPrice(eurAmt)
                                 }
                               </strong>
-                              {n > 0 && ` · ${formatPrice(share)}/pers.`}
+                              {n > 0 && (inegal
+                                ? (maPart > 0
+                                  ? ` · ta part : ${formatPrice(maPart)}`
+                                  : ' · à parts inégales')
+                                : ` · ${formatPrice(share)}/pers.`)}
                             </>
                         }
                         {exp.activityId && (() => {
