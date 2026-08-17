@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { fusionnerVoyages } from '../utils/helpers';
 
 const STORAGE_KEY = 'provo_trips';
 
@@ -81,6 +82,10 @@ export function useTrips() {
   // React qu'au moment où elle change vraiment.
   const pleinRef = useRef(false);
   const syncedHashRef = useRef({});
+  // La dernière version réellement synchronisée, en entier. L'empreinte seule
+  // dit QUE ça a changé, jamais CE QU'IL Y AVAIT — et sans ça une fusion ne
+  // peut pas distinguer « ajouté ici » de « supprimé là-bas ».
+  const baseFusionRef = useRef({});
   const syncTimeouts = useRef({});
   const remoteIdsRef = useRef(new Set());
   const tripsRef = useRef(trips);
@@ -98,6 +103,7 @@ export function useTrips() {
     cloudTrips.forEach(t => {
       remoteIdsRef.current.add(t.id);
       syncedHashRef.current[t.id] = JSON.stringify(t);
+      baseFusionRef.current[t.id] = JSON.parse(JSON.stringify(t));
     });
 
     setTrips(prev => {
@@ -146,6 +152,7 @@ export function useTrips() {
         setTrips([]);
         remoteIdsRef.current = new Set();
         syncedHashRef.current = {};
+        baseFusionRef.current = {};
       }
     });
     return () => subscription.unsubscribe();
@@ -197,6 +204,9 @@ export function useTrips() {
           if (error) {
             delete syncedHashRef.current[trip.id];
             console.error('[Provo] Écriture du voyage refusée :', error.message);
+          } else {
+            // Écriture acceptée : c'est désormais ce que les deux côtés savent.
+            baseFusionRef.current[trip.id] = JSON.parse(hash);
           }
         } else {
           const { error } = await supabase.from('trips').insert({
@@ -208,6 +218,7 @@ export function useTrips() {
             console.error('[Provo] Création du voyage refusée :', error.message);
           } else {
             remoteIdsRef.current.add(trip.id);
+            baseFusionRef.current[trip.id] = JSON.parse(hash);
           }
         }
       }, 700);
@@ -228,8 +239,22 @@ export function useTrips() {
           const existing = prev.find(t => t.id === tripId);
           if (!existing) return [...prev, remoteTrip];
           if (JSON.stringify(existing) === remoteHash) return prev;
-          syncedHashRef.current[tripId] = remoteHash;
-          return prev.map(t => t.id === tripId ? remoteTrip : t);
+          // FUSIONNER, ne pas remplacer. Le remplacement effaçait la dépense
+          // qu'on venait de saisir et que le débounce n'avait pas encore
+          // envoyée : deux appareils sur le même compte se volaient leurs
+          // ajouts. `base` est la dernière version que les deux côtés
+          // connaissaient — c'est elle qui distingue un ajout d'ici d'une
+          // suppression de là-bas.
+          const fusionne = fusionnerVoyages(baseFusionRef.current[tripId], existing, remoteTrip);
+          const fusionneHash = JSON.stringify(fusionne);
+          // La base avance jusqu'au distant : c'est ce que le serveur porte.
+          baseFusionRef.current[tripId] = JSON.parse(remoteHash);
+          // Si la fusion a gardé quelque chose que le serveur n'a pas, il ne
+          // faut PAS marquer le voyage comme synchronisé : l'effet d'écriture
+          // doit repartir pour y renvoyer ce qui manque.
+          if (fusionneHash === remoteHash) syncedHashRef.current[tripId] = remoteHash;
+          else delete syncedHashRef.current[tripId];
+          return prev.map(t => t.id === tripId ? fusionne : t);
         });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trips' }, (payload) => {
@@ -238,6 +263,7 @@ export function useTrips() {
         if (!newTrip || !tripId) return;
         remoteIdsRef.current.add(tripId);
         syncedHashRef.current[tripId] = JSON.stringify(newTrip);
+        baseFusionRef.current[tripId] = JSON.parse(JSON.stringify(newTrip));
         setTrips(prev => prev.find(t => t.id === tripId) ? prev : [newTrip, ...prev]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trips' }, (payload) => {
@@ -301,6 +327,7 @@ export function useTrips() {
     if (tripData) {
       remoteIdsRef.current.add(data.trip_id);
       syncedHashRef.current[data.trip_id] = JSON.stringify(tripData);
+      baseFusionRef.current[data.trip_id] = JSON.parse(JSON.stringify(tripData));
       setTrips(prev => prev.find(t => t.id === data.trip_id) ? prev : [tripData, ...prev]);
     }
     return { tripId: data?.trip_id };

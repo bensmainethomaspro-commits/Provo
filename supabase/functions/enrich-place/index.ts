@@ -15,6 +15,7 @@
 // d'où vient l'information.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { PRIVE, urlSure } from "../_shared/reseau.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
 
 const CORS = {
@@ -40,25 +41,8 @@ function withTimeout(ms: number) {
   return { signal: ctrl.signal, clear: () => clearTimeout(id) };
 }
 
-// ── Garde-fou SSRF ───────────────────────────────────────────────────────────
-// Cette fonction télécharge une URL qu'elle n'a pas choisie. Sans contrôle,
-// elle deviendrait un relais pour atteindre le réseau interne de l'hébergeur.
-const PRIVE =
-  /^(localhost$|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?$|172\.(1[6-9]|2\d|3[01])\.)/i;
-
-function urlSure(brut: string): URL | null {
-  let u: URL;
-  try {
-    u = new URL(brut);
-  } catch {
-    return null;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  if (PRIVE.test(u.hostname)) return null;
-  // Un nom sans point est forcément une machine du réseau local.
-  if (!u.hostname.includes(".")) return null;
-  return u;
-}
+// Le filtre d'hôte vit dans `_shared/reseau.ts` : écrit ici seul, il n'avait
+// pas suivi `extract-place`, qui récupère aussi des URL fournies.
 
 // ── Le site officiel, via OpenStreetMap ──────────────────────────────────────
 async function siteDepuisOsm(nom: string, lat: number, lon: number) {

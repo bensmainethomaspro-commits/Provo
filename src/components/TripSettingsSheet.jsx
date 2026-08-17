@@ -1,3 +1,4 @@
+import { voyageSansVoyageur } from '../utils/helpers';
 import { useState, useCallback } from 'react';
 import { localiserHebergement } from '../utils/geocodeLodging';
 
@@ -95,7 +96,9 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
   };
 
   const handleRemoveTraveler = (id) => {
-    onUpdateTrip(trip.id, { tripTravelers: travelers.filter(t => t.id !== id) });
+    // Retirer le voyageur PARTOUT : filtrer la seule liste laissait son id dans
+    // les dépenses, donc sa part dans les soldes et les dettes.
+    onUpdateTrip(trip.id, voyageSansVoyageur(trip, id));
   };
 
   const handleColor = (color) => onUpdateTrip(trip.id, { color });

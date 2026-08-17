@@ -1377,3 +1377,117 @@ export function partageInegal(exp) {
   const v = Object.values(partsDeDepense(exp));
   return v.length > 1 && v.some(x => x !== v[0]);
 }
+
+// ── Fusion de deux versions d'un voyage ──────────────────────────────────────
+// Un voyage entier tient dans un seul bloc JSON, et il est réécrit EN ENTIER à
+// chaque synchronisation. Deux appareils sur le même compte se battaient donc
+// pour le dernier mot :
+//
+//   A ajoute une dépense X  →  écrit { …, X }
+//   B ajoute une dépense Y  →  écrit { …, Y }     ← X effacée du serveur
+//   Le temps réel renvoie { …, Y } à A            ← X disparaît de son écran
+//
+// Et à la réception, la version distante REMPLAÇAIT la locale : une saisie pas
+// encore synchronisée était écrasée sans trace. C'est de la perte de données,
+// pas un défaut d'affichage.
+//
+// La réponse est une fusion à TROIS voies. On garde la dernière version
+// réellement synchronisée (`base`) : elle dit ce que les deux côtés savaient au
+// même moment, donc elle distingue « ajouté ici » de « supprimé là-bas » — ce
+// qu'une comparaison à deux ne peut pas faire. Sans elle, une fusion
+// ressusciterait tout ce que l'autre vient de supprimer.
+
+const AVEC_ID = (v) => Array.isArray(v) && v.every(x => x && typeof x === 'object' && 'id' in x);
+
+/** Une valeur simple : le local ne gagne que s'il a bougé et pas le distant. */
+function fusionValeur(base, local, distant) {
+  const b = JSON.stringify(base), l = JSON.stringify(local), d = JSON.stringify(distant);
+  if (l === d) return distant;
+  if (l === b) return distant;   // seul le distant a bougé
+  if (d === b) return local;     // seul le local a bougé
+  return distant;                // les deux ont bougé : le serveur tranche
+}
+
+/** Une liste d'objets identifiés. L'ordre distant d'abord, les ajouts locaux ensuite. */
+function fusionListe(base, local, distant) {
+  const carte = (l) => new Map((l || []).map(x => [x.id, x]));
+  const B = carte(base), L = carte(local), D = carte(distant);
+  const sortie = [];
+  const vus = new Set();
+
+  const retenir = (id) => {
+    if (vus.has(id)) return;
+    vus.add(id);
+    const b = B.get(id), l = L.get(id), d = D.get(id);
+    // Présent des deux côtés : on fusionne champ par champ (une activité
+    // renommée ici et déplacée là-bas doit garder les deux changements).
+    if (l && d) { sortie.push(fusionObjet(b || {}, l, d)); return; }
+    // Absent d'un côté : ajout, ou suppression ? C'est `base` qui tranche.
+    if (l && !d) { if (!b) sortie.push(l); return; }   // ajouté ici
+    if (d && !l) { if (!b) sortie.push(d); return; }   // ajouté là-bas
+  };
+
+  (distant || []).forEach(x => retenir(x.id));
+  (local || []).forEach(x => retenir(x.id));
+  return sortie;
+}
+
+function fusionObjet(base, local, distant) {
+  const sortie = {};
+  for (const cle of new Set([...Object.keys(local || {}), ...Object.keys(distant || {})])) {
+    const b = base?.[cle], l = local?.[cle], d = distant?.[cle];
+    if (AVEC_ID(l) && AVEC_ID(d)) sortie[cle] = fusionListe(b, l, d);
+    else sortie[cle] = fusionValeur(b, l, d);
+  }
+  return sortie;
+}
+
+/**
+ * Le voyage tel qu'il doit être après avoir reçu la version distante.
+ * `base` = la dernière version réellement synchronisée. Sans elle, on ne peut
+ * pas distinguer un ajout d'une suppression : on se rabat sur le distant, ce
+ * qui est l'ancien comportement — pas de régression, pas de miracle non plus.
+ */
+export function fusionnerVoyages(base, local, distant) {
+  if (!local) return distant;
+  if (!distant) return local;
+  if (!base) return distant;
+  return fusionObjet(base, local, distant);
+}
+
+/**
+ * Retirer un voyageur du voyage — partout, pas seulement de la liste.
+ *
+ * Les deux chemins de suppression ne filtraient que `tripTravelers`. L'id
+ * survivait dans le `participantIds` de chaque dépense, donc sa part
+ * continuait d'être comptée dans les soldes et les dettes — et depuis les
+ * parts inégales, il pouvait même garder une part double. Le panneau des
+ * dettes affichait alors son identifiant technique, faute de nom à mettre.
+ *
+ * La règle vit ICI et les deux appelants l'utilisent : écrite deux fois, elle
+ * finirait par ne plus dire la même chose — c'est déjà arrivé au garde-fou
+ * d'origine, puis au filtre d'hôte.
+ *
+ * Ce qu'on NE fait pas : réattribuer une dépense qu'il a payée. L'argent est
+ * sorti de sa poche, et le réécrire silencieusement fabriquerait une dette
+ * fausse. La dépense reste à son nom ; c'est l'affichage qui doit savoir dire
+ * « voyageur retiré » plutôt qu'un identifiant.
+ */
+export function voyageSansVoyageur(trip, id) {
+  const expenses = (trip?.expenses || []).map(e => {
+    const avant = e.participantIds || [];
+    if (!avant.includes(id)) return e;
+    const restants = avant.filter(x => x !== id);
+    const parts = { ...(e.parts || {}) };
+    delete parts[id];
+    // Plus aucun participant : la dépense retombe sur qui l'a payée — sinon
+    // son montant ne serait plus porté par personne et les totaux mentiraient.
+    const finaux = restants.length ? restants
+      : (e.payerId && e.payerId !== id ? [e.payerId] : []);
+    return { ...e, participantIds: finaux, parts };
+  });
+  return {
+    tripTravelers: (trip?.tripTravelers || []).filter(t => t.id !== id),
+    expenses,
+  };
+}
