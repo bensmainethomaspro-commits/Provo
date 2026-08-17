@@ -218,7 +218,10 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const getName = (id) => travelers.find(t => t.id === id)?.name || id;
+  // Un id technique ne se lit pas. Une dépense payée par quelqu'un qui a
+  // quitté le voyage garde son `payerId` — l'argent est bien sorti de sa
+  // poche — mais l'écran doit le dire en mots, pas en identifiant.
+  const getName = (id) => travelers.find(t => t.id === id)?.name || 'Voyageur retiré';
   const getEmoji = (id) => travelers.find(t => t.id === id)?.emoji || '👤';
 
   const toggleParticipant = (id) => {

@@ -1454,3 +1454,40 @@ export function fusionnerVoyages(base, local, distant) {
   if (!base) return distant;
   return fusionObjet(base, local, distant);
 }
+
+/**
+ * Retirer un voyageur du voyage — partout, pas seulement de la liste.
+ *
+ * Les deux chemins de suppression ne filtraient que `tripTravelers`. L'id
+ * survivait dans le `participantIds` de chaque dépense, donc sa part
+ * continuait d'être comptée dans les soldes et les dettes — et depuis les
+ * parts inégales, il pouvait même garder une part double. Le panneau des
+ * dettes affichait alors son identifiant technique, faute de nom à mettre.
+ *
+ * La règle vit ICI et les deux appelants l'utilisent : écrite deux fois, elle
+ * finirait par ne plus dire la même chose — c'est déjà arrivé au garde-fou
+ * d'origine, puis au filtre d'hôte.
+ *
+ * Ce qu'on NE fait pas : réattribuer une dépense qu'il a payée. L'argent est
+ * sorti de sa poche, et le réécrire silencieusement fabriquerait une dette
+ * fausse. La dépense reste à son nom ; c'est l'affichage qui doit savoir dire
+ * « voyageur retiré » plutôt qu'un identifiant.
+ */
+export function voyageSansVoyageur(trip, id) {
+  const expenses = (trip?.expenses || []).map(e => {
+    const avant = e.participantIds || [];
+    if (!avant.includes(id)) return e;
+    const restants = avant.filter(x => x !== id);
+    const parts = { ...(e.parts || {}) };
+    delete parts[id];
+    // Plus aucun participant : la dépense retombe sur qui l'a payée — sinon
+    // son montant ne serait plus porté par personne et les totaux mentiraient.
+    const finaux = restants.length ? restants
+      : (e.payerId && e.payerId !== id ? [e.payerId] : []);
+    return { ...e, participantIds: finaux, parts };
+  });
+  return {
+    tripTravelers: (trip?.tripTravelers || []).filter(t => t.id !== id),
+    expenses,
+  };
+}

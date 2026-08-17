@@ -15,6 +15,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
+import { urlSure } from "../_shared/reseau.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -288,6 +289,11 @@ async function fetchOnce(url: string): Promise<{ finalUrl: string; html: string 
 }
 
 async function resolve(url: string): Promise<{ finalUrl: string; html: string }> {
+  // L'URL vient de l'utilisateur : sans ce filtre, cette fonction est un relais
+  // pour atteindre le réseau interne de l'hébergeur. Il ne porte QUE sur cette
+  // entrée — les adresses codées en dur plus bas (oembed, lecteur tiers) sont
+  // les nôtres, et les passer au filtre casserait la chaîne d'extraction.
+  if (!urlSure(url)) return { finalUrl: url, html: "" };
   let res = await fetchOnce(url);
   // Si on a quand même atterri sur consent.google.com, suivre le paramètre
   // `continue` vers la vraie page Maps.
