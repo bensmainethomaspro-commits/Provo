@@ -2484,6 +2484,21 @@ body {
   border-radius: var(--radius-sm); font-size: var(--t-lg);
 }
 .ef__montant { flex: 2; min-width: 0; }
+/* Les quatre signes de calcul, sous le champ du montant. Quatre colonnes
+   égales : c'est une rangée de touches, elle se vise sans regarder. */
+.ef__calc { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
+.ef__calc-touche {
+  min-height: 44px; border-radius: var(--radius-sm);
+  background: var(--surface-sunken); border: 1px solid var(--border);
+  color: var(--text); font-size: var(--t-lg); font-weight: 600;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, transform 0.08s;
+}
+.ef__calc-touche:active { transform: scale(0.94); background: var(--surface-raised); }
+/* Le résultat du calcul se lit juste sous les touches : un peu d'air, sinon il
+   se colle au « + » et on le prend pour son libellé. */
+.ef__calc + .currency-hint { margin-top: 5px; }
+.currency-hint strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .ef__devise { flex: 1; min-width: 84px; }
 
 /* La palette se pose PAR-DESSUS le formulaire, elle ne l'écarte pas. Dépliée

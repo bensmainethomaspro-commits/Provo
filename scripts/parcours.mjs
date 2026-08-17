@@ -811,8 +811,11 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
-      await t.saisir('input.form-input:not([type="number"])', 'Café Central');
-      const montant = t.p.locator('input[type="number"]').first();
+      // Le montant se vise par sa CLASSE, pas par son type : le champ accepte
+      // désormais une opération (« 3×4,50 »), donc `type="text"`. Un parcours
+      // qui vise un détail d'implémentation casse au premier changement.
+      await t.saisir('.ef__ligne-titre input.form-input', 'Café Central');
+      const montant = t.p.locator('.ef__montant').first();
       if (!(await montant.count())) t.injouable('pas de champ montant');
       await montant.fill('24');
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1000 });
@@ -822,6 +825,57 @@ const PARCOURS = [
       const txt = await t.texte();
       t.verifier('elle apparaît dans la liste', txt.includes('Café Central'));
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
+    } },
+
+  { groupe: 'Dépenses', nom: 'Le montant se calcule dans le champ', depart: 'voyage',
+    intention: "Trois cafés à 4,50 € et un dessert à 6 € : taper l'opération au lieu "
+      + "de sortir la calculatrice du téléphone puis revenir saisir le total.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 800 });
+      await t.saisir('.ef__ligne-titre input.form-input', 'Cafés');
+      const montant = t.p.locator('.ef__montant');
+      if (!(await montant.count())) t.injouable('pas de champ montant');
+
+      // Un champ `type="number"` refuse ce texte : s'il revient, tout ce
+      // parcours devient muet et la calculatrice ne marche plus.
+      await montant.click();
+      await montant.fill('3×4,50');
+      await t.p.waitForTimeout(400);
+      t.verifier("le champ accepte une opération",
+        (await montant.inputValue()) === '3×4,50', await montant.inputValue());
+
+      // Les quatre signes ne sont sur aucun clavier décimal : ils sont sous
+      // le champ, et ils doivent insérer sans faire perdre le focus.
+      const touches = t.p.locator('.ef__calc-touche');
+      t.verifier('les signes de calcul sont proposés', (await touches.count()) === 4,
+        `${await touches.count()} touche(s)`);
+      await touches.filter({ hasText: '+' }).first().click();
+      await t.p.waitForTimeout(200);
+      await t.p.keyboard.type('6');
+      await t.p.waitForTimeout(400);
+
+      const apercu = t.p.locator('.currency-hint');
+      t.verifier("l'aperçu annonce le résultat avant d'enregistrer",
+        /19[,.]50|19,5/.test((await apercu.first().innerText().catch(() => '')) || ''),
+        await apercu.first().innerText().catch(() => '(absent)'));
+
+      // La part de chacun suit le calcul, pas le texte tapé.
+      const euros = t.p.locator('.ef__euros');
+      t.verifier('la répartition suit le résultat du calcul',
+        /9[,.]75/.test((await euros.first().innerText()) || ''),
+        await euros.first().innerText());
+
+      await t.clic('.ef__valider', { delai: 1000 });
+      const v = await t.voyage();
+      const dep = (v.expenses || []).find(e => e.description === 'Cafés');
+      t.verifier('la dépense est enregistrée', !!dep);
+      if (!dep) return;
+      // Le point qui compte : c'est le RÉSULTAT qui part dans les comptes,
+      // 3 × 4,50 + 6 = 19,50 — pas 3, pas 4,5, pas le texte.
+      t.verifier("c'est le résultat du calcul qui est enregistré",
+        Math.abs(dep.amount - 19.5) < 0.005, `${dep.amount} €`);
     } },
 
   { groupe: 'Dépenses', nom: 'Une chambre partagée compte double', depart: 'voyage',
@@ -1038,7 +1092,7 @@ const PARCOURS = [
       // bouton, et supprimer vit dans la fiche qu'on vient d'ouvrir.
       if (!(await t.clic('.expense-item--ouvrable', { delai: 700, obligatoire: false })))
         t.injouable('aucune dépense modifiable');
-      const montant = t.p.locator('input[type="number"]').first();
+      const montant = t.p.locator('.ef__montant').first();
       await montant.fill('99');
       await t.clic('button', { texte: /Enregistrer|Ajouter|✅/, delai: 900 });
       const modifiee = (await t.voyage()).expenses.some(e => Number(e.amount) === 99);
@@ -1629,8 +1683,8 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top', { delai: 900 });
-      await t.saisir('input.form-input:not([type="number"])', 'Taxi');
-      await t.p.locator('input[type="number"]').first().fill('18');
+      await t.saisir('.ef__ligne-titre input.form-input', 'Taxi');
+      await t.p.locator('.ef__montant').first().fill('18');
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1200 });
       t.verifier('la dépense est enregistrée malgré tout',
         (await t.voyage()).expenses.some(e => e.description === 'Taxi'));
@@ -1897,7 +1951,7 @@ const PARCOURS = [
         // Le champ fichier du ticket est désormais le premier `input` du
         // formulaire : viser par position mènerait à lui.
         const desc = document.querySelector('.ef__ligne-titre input.form-input');
-        const num = [...document.querySelectorAll('.expense-form input')].find(i => i.type === 'number');
+        const num = document.querySelector('.ef__montant');
         return { description: desc?.value || '', montant: num?.value || '',
           message: document.querySelector('.recu__msg')?.innerText || '' };
       });
@@ -1928,14 +1982,14 @@ const PARCOURS = [
       });
       await t.p.waitForTimeout(2600);
       const champs = await t.p.evaluate(() => {
-        const num = [...document.querySelectorAll('.expense-form input')].find(i => i.type === 'number');
+        const num = document.querySelector('.ef__montant');
         return { montant: num?.value || '', message: document.querySelector('.recu__msg')?.innerText || '' };
       });
       t.verifier('aucun montant inventé', champs.montant === '', champs.montant || '(vide, correct)');
       t.verifier('on le dit franchement', champs.message.length > 10, champs.message.slice(0, 70));
       // Et la saisie manuelle doit rester possible juste après.
-      await t.saisir('.expense-form input.form-input:not([type="number"])', 'Taxi');
-      await t.p.locator('.expense-form input[type="number"]').first().fill('22');
+      await t.saisir('.ef__ligne-titre input.form-input', 'Taxi');
+      await t.p.locator('.ef__montant').first().fill('22');
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1300 });
       t.verifier('la saisie à la main reste possible',
         (await t.voyage()).expenses.some(e => e.description === 'Taxi'));
