@@ -818,10 +818,29 @@ const PARCOURS = [
       const montant = t.p.locator('.ef__montant').first();
       if (!(await montant.count())) t.injouable('pas de champ montant');
       await montant.fill('24');
+
+      // La date « Quand » est saisissable depuis la refonte du formulaire —
+      // mais la fonction d'enregistrement l'écrasait par la date du jour :
+      // le champ existait à l'écran et ne servait à rien. Une dépense notée le
+      // lendemain se rangeait au mauvais jour, sans que rien ne le signale.
+      const quand = t.p.locator('.ef__deux input[type="date"]');
+      let choisie = '';
+      if (await quand.count()) {
+        const aujourdhui = new Date();
+        aujourdhui.setDate(aujourdhui.getDate() - 1);
+        choisie = aujourdhui.toISOString().slice(0, 10);
+        await quand.fill(choisie);
+        await t.p.waitForTimeout(200);
+      }
+
       await t.clic('button', { texte: /Ajouter|Enregistrer|✅/, delai: 1000 });
       const v = await t.voyage();
       const dep = (v.expenses || []).find(e => e.description === 'Café Central');
       t.verifier('la dépense est enregistrée', !!dep, dep && `${dep.amount} €`);
+      if (choisie) {
+        t.verifier('la date choisie est celle qui est enregistrée',
+          dep?.date === choisie, `${dep?.date} au lieu de ${choisie}`);
+      }
       const txt = await t.texte();
       t.verifier('elle apparaît dans la liste', txt.includes('Café Central'));
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));

@@ -156,6 +156,49 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   traitées » l'avant-veille : les pastilles de catégorie ont disparu avec le
   pli « Détails ».
 
+- **Une dépense commune prévient les autres voyageurs** (17 août 2026).
+  Demandé : « quand on ajoute une dépense commune, la personne participant au
+  voyage doit être notifiée du montant et du titre si elle a accepté les
+  notifications ». Nouvelle fonction Edge `notifier-depense`, appelée par le
+  téléphone qui saisit, juste après l'ajout.
+
+  **La règle qui tient tout : ce qui est envoyé ne vient pas de l'appel.** La
+  requête ne porte que deux identifiants — le voyage et la dépense. Le texte est
+  reconstruit côté serveur à partir de la base. Sans ça, n'importe quel membre
+  pourrait faire afficher n'importe quoi sur le téléphone des autres.
+  Trois conditions avant d'envoyer : l'appelant est authentifié (son jeton,
+  vérifié par `auth.getUser(jeton)` — pas une clé publiable), il est membre du
+  voyage, et la dépense concerne plusieurs personnes. Jamais à l'auteur.
+
+  Le téléphone n'envoie rien lui-même, et ce n'est pas un détour : la table des
+  abonnements n'expose que les siens (RLS), et les clés VAPID ne sont pas dans
+  le paquet du navigateur.
+
+  · Une dépense pour soi seul ne notifie personne — une notification qui n'aide
+    pas est une notification qu'on désactive, en emportant celles qui
+    servaient. Un remboursement, lui, prévient toujours : il change ce que
+    l'autre doit.
+  · Le verbe suit le signe : un revenu est stocké en négatif, et « a ajouté
+    −40 € » ne se lit pas. Ça donne « a noté une rentrée de 40 € ».
+  · `tag: depense:<id>` — une seule bulle par dépense, même sur deux appareils.
+  · Le client synchronise avec 700 ms de retard : la fonction relit une fois,
+    1,5 s plus tard, si la dépense n'est pas encore en base. Deux lectures au
+    maximum.
+  · `scripts/verif-notif-depense.mjs` fige les 13 cas — qui on dérange, et ce
+    qu'on écrit — en découpant les deux fonctions dans la fonction Edge.
+
+  **Non fait, assumé** : la notification ouvre l'app sur l'accueil, comme les
+  rappels existants. Ouvrir directement l'onglet Dépenses du bon voyage
+  demanderait une route (`?voyage=…&onglet=…`) qui n'existe pas.
+
+  **Un bug trouvé en chemin, sans rapport avec la demande** : `addExpense`
+  écrasait la date de la dépense par celle du jour. Le champ « Quand », ajouté
+  avec le formulaire Tricount deux livraisons plus tôt, existait donc à l'écran
+  et ne servait à rien — une dépense notée le lendemain se rangeait au mauvais
+  jour, en silence. Corrigé, et le parcours d'ajout choisit désormais une date
+  et vérifie qu'elle est bien celle qui est enregistrée (vérifié : sans le
+  correctif, il tombe en rouge).
+
 - **Le montant d'une dépense peut être un CALCUL** (17 août 2026). Retour :
   « on ne peut toujours pas faire de calcul directement en ajoutant le montant,
   sur Tricount on peut le faire ». Le champ accepte désormais « 12,50+8 »,

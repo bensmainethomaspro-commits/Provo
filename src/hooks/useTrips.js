@@ -748,14 +748,48 @@ export function useTrips() {
     return remoteTrip.id;
   }, []);
 
+  /**
+   * Prévenir les autres voyageurs qu'une dépense commune vient d'être notée.
+   *
+   * Rien n'est envoyé d'ici : le téléphone ne voit pas les abonnements des
+   * autres (la table n'expose que les siens) et ne détient pas les clés. On
+   * passe donc deux identifiants à la fonction Edge, qui relit la dépense en
+   * base et écrit elle-même le texte — sinon n'importe quel membre pourrait
+   * faire afficher n'importe quoi sur le téléphone des autres.
+   *
+   * Silencieux par construction : une notification qui ne part pas ne doit
+   * jamais gêner celui qui est en train de noter une dépense.
+   */
+  const notifierDepense = useCallback((tripId, expenseId) => {
+    if (!userId || !remoteIdsRef.current.has(tripId)) return;
+    supabase.functions
+      .invoke('notifier-depense', { body: { tripId, expenseId } })
+      .catch(() => {});
+  }, [userId]);
+
   const addExpense = useCallback((tripId, expense) => {
+    // L'identifiant est tiré ICI, pas dans la mise à jour : celle-ci peut être
+    // rejouée par React, et il faut de toute façon savoir de quelle dépense on
+    // parle pour la signaler aux autres.
+    const id = genId();
     setTrips(p => p.map(t => t.id !== tripId ? t : {
       ...t, expenses: [...(t.expenses || []), {
-        ...expense, id: genId(),
-        date: localDateStr(new Date()),
+        ...expense, id,
+        // La date vient du formulaire quand on l'a choisie. Elle était écrasée
+        // par celle du jour : le champ « Quand » existait à l'écran et ne
+        // servait à rien, et une dépense notée le lendemain se rangeait au
+        // mauvais jour sans que rien ne le signale.
+        date: expense.date || localDateStr(new Date()),
       }]
     }));
-  }, []);
+    // Seulement ce qui concerne plusieurs personnes. Une dépense pour soi seul
+    // n'a rien à annoncer, et ce filtre évite un appel inutile à chaque saisie
+    // sur un voyage sans collaborateur.
+    if ((expense.participantIds || []).length >= 2 || expense.isSettlement) {
+      notifierDepense(tripId, id);
+    }
+    return id;
+  }, [notifierDepense]);
 
   const updateExpense = useCallback((tripId, expenseId, patch) => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {
