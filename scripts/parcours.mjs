@@ -846,6 +846,28 @@ const PARCOURS = [
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
     } },
 
+  { groupe: 'Dépenses', nom: 'La notification ouvre les dépenses du bon voyage', depart: 'voyage',
+    intention: "Recevoir « Léa a ajouté « Dîner » — 52 € » et arriver directement "
+      + "sur les dépenses, sans chercher le voyage puis l'onglet.",
+    async faire(t) {
+      // Exactement l'adresse que la fonction Edge met dans la notification.
+      await t.p.goto(`${URL_BASE}/?voyage=${encodeURIComponent(TRIP.id)}&onglet=depenses`,
+        { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(1600);
+
+      t.verifier('le voyage est ouvert', (await t.combien('.trip-view')) > 0);
+      const actif = await t.p.locator('.tab-btn--active').first().innerText().catch(() => '');
+      t.verifier("c'est l'onglet Dépenses qui est ouvert", /Dépenses/i.test(actif), actif);
+      t.verifier('les dépenses sont bien à l\'écran',
+        (await t.combien('.expenses-tab')) > 0);
+
+      // L'adresse est nettoyée : un rechargement ne doit pas rouvrir l'onglet
+      // de force, et le lien ne doit pas rester dans l'historique.
+      t.verifier("l'adresse est remise à plat",
+        !(await t.p.evaluate(() => window.location.search)).includes('voyage'),
+        await t.p.evaluate(() => window.location.search) || '(vide)');
+    } },
+
   { groupe: 'Dépenses', nom: 'Le montant se calcule dans le champ', depart: 'voyage',
     intention: "Trois cafés à 4,50 € et un dessert à 6 € : taper l'opération au lieu "
       + "de sortir la calculatrice du téléphone puis revenir saisir le total.",

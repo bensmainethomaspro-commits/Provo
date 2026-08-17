@@ -45,7 +45,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme, ongletInitial }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -102,7 +102,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const { news: localNews } = useLocalNews(trip?.destination, !!trip?.destination);
   const [showTripSettings, setShowTripSettings] = useState(false);
   const [swUpdateReady, setSwUpdateReady] = useState(false);
-  const [tab, setTab] = useState('planning');
+  // Un lien de notification peut demander un onglet précis. Lu au montage
+  // seulement : ensuite, c'est la barre du bas qui commande.
+  const [tab, setTab] = useState(() => ongletInitial || 'planning');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDefaultDayId, setSheetDefaultDayId] = useState(null);
   const [editingActivity, setEditingActivity] = useState(null);

@@ -8,6 +8,10 @@ import { useSettings } from './hooks/useSettings';
 import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
 
+// Les onglets d'un voyage, dans l'ordre de la barre du bas. Un lien ne peut
+// viser que ceux-là.
+const ONGLETS = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
+
 function AppInner() {
   const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
   const { settings, setSetting } = useSettings();
@@ -53,6 +57,20 @@ function AppInner() {
     const inv = p.get('invite');
     if (inv) { window.history.replaceState(null, '', window.location.pathname); return inv; }
     return null;
+  });
+
+  // Une notification ouvre l'écran dont elle parle. Sans ça, « Léa a ajouté
+  // « Dîner » — 52 € » ramenait à l'accueil, et il fallait retrouver soi-même
+  // le voyage puis l'onglet : trois gestes pour lire une phrase de six mots.
+  const [pendingVoyage] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const id = p.get('voyage');
+    if (!id) return null;
+    // L'onglet est vérifié contre la liste réelle : un paramètre venu de
+    // l'extérieur ne doit pas pouvoir poser l'app dans un état qui n'existe pas.
+    const onglet = ONGLETS.includes(p.get('onglet')) ? p.get('onglet') : null;
+    window.history.replaceState(null, '', window.location.pathname);
+    return { id, onglet };
   });
   const [inviteError, setInviteError] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
@@ -122,6 +140,22 @@ function AppInner() {
   }, [pendingInvite, userId, authLoading]);
 
   const navigate = (page, tripId = null) => setRoute({ page, tripId });
+
+  // On attend que le voyage SOIT LÀ avant d'y aller. Il vient du stockage local
+  // dès le premier rendu quand on l'a déjà ouvert, et de la synchro sinon —
+  // naviguer trop tôt afficherait « Ce voyage n'existe plus » à quelqu'un qui
+  // vient d'être prévenu d'une dépense. S'il n'arrive jamais, on reste
+  // simplement sur l'accueil.
+  useEffect(() => {
+    if (!pendingVoyage || route.page === 'trip' || authLoading) return;
+    if (!(currentTrips || []).some(t => t.id === pendingVoyage.id)) return;
+    navigate('trip', pendingVoyage.id);
+  }, [pendingVoyage, currentTrips, authLoading, route.page]);
+
+  // Déduit, pas mémorisé : un second état posé depuis l'effet ferait un rendu
+  // en cascade pour une information qui se lit déjà dans la route.
+  const ongletInitial = route.tripId && route.tripId === pendingVoyage?.id
+    ? pendingVoyage.onglet : null;
 
   const voyagesOuverts = (currentTrips || []);
 
@@ -193,7 +227,8 @@ function AppInner() {
       {route.page === 'dashboard'
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
         : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
-            lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)} />
+            lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)}
+            ongletInitial={ongletInitial} />
       }
     </div>
   );

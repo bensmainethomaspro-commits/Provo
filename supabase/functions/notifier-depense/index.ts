@@ -179,7 +179,10 @@ Deno.serve(async (req: Request) => {
         // Une seule bulle par dépense, même sur deux appareils : deux fois la
         // même annonce, c'est une notification qu'on finit par couper.
         tag: `depense:${expenseId}`,
-        url: "/",
+        // La notification ouvre l'écran dont elle parle : sans ça, il fallait
+        // retrouver soi-même le voyage puis l'onglet — trois gestes pour lire
+        // une phrase de six mots.
+        url: `/?voyage=${encodeURIComponent(tripId)}&onglet=depenses`,
       }), {});
       envoyes++;
     } catch (e) {

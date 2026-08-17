@@ -187,9 +187,16 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   · `scripts/verif-notif-depense.mjs` fige les 13 cas — qui on dérange, et ce
     qu'on écrit — en découpant les deux fonctions dans la fonction Edge.
 
-  **Non fait, assumé** : la notification ouvre l'app sur l'accueil, comme les
-  rappels existants. Ouvrir directement l'onglet Dépenses du bon voyage
-  demanderait une route (`?voyage=…&onglet=…`) qui n'existe pas.
+  **La notification ouvre l'écran dont elle parle** (`?voyage=…&onglet=…`,
+  ajouté juste après, sur demande). Trois précautions :
+  · l'onglet demandé est vérifié contre la liste réelle — un paramètre venu de
+    l'extérieur ne pose pas l'app dans un état qui n'existe pas ;
+  · on attend que le voyage SOIT LÀ avant d'y aller. Il vient du stockage local
+    au premier rendu quand on l'a déjà ouvert, et de la synchro sinon ; naviguer
+    trop tôt afficherait « Ce voyage n'existe plus » à quelqu'un qui vient
+    d'être prévenu d'une dépense. S'il n'arrive jamais, on reste sur l'accueil ;
+  · l'onglet initial est DÉDUIT de la route, pas rangé dans un second état :
+    poser un état depuis un effet fait un rendu en cascade, et eslint le dit.
 
   **Un bug trouvé en chemin, sans rapport avec la demande** : `addExpense`
   écrasait la date de la dépense par celle du jour. Le champ « Quand », ajouté
