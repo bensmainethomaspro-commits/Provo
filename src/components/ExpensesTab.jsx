@@ -197,10 +197,15 @@ function repartir(mode, participants, valeurs, total) {
     let somme = 0;
     participants.forEach(id => { const v = lu(id) ?? 0; part[id] = total * v / 100; somme += v; });
     const reste = Math.round((100 - somme) * 100) / 100;
+    // Écrit à la française. `${reste}` donnait « Il reste 0.01 % à répartir »
+    // — un point décimal dans une app où tout le reste, montants compris,
+    // s'écrit à la virgule. Le cas n'est pas rare : trois parts égales en
+    // pourcentages (33,33 chacune) laissent justement 0,01 à répartir.
+    const pc = (v) => v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
     return {
       part,
       ecart: Math.abs(reste) < 0.005 ? null
-        : reste > 0 ? `Il reste ${reste} % à répartir` : `${-reste} % de trop`,
+        : reste > 0 ? `Il reste ${pc(reste)} % à répartir` : `${pc(-reste)} % de trop`,
     };
   }
 
