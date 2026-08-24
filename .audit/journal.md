@@ -54,6 +54,17 @@ Produit et UX, puis retour au début.
 | A-024 | 2026-08-17 | Fiabilité | La liste des dépenses divise encore à parts égales (`eurAmt / n`, `ExpensesTab.jsx:696`) alors que soldes, dettes et feuille voyageur passent par `partEnEuros` depuis c17be9e. Le calcul était écrit **quatre** fois, pas trois : l'écran le plus lu contredit les trois autres sur une dépense à parts inégales | Majeur | PROPOSÉ |
 | A-025 | 2026-08-17 | Fiabilité | Retirer un voyageur ne le retire que de `tripTravelers` (`TripSettingsSheet.jsx:98`) : son id reste dans `participantIds`, sa part reste comptée, et `calcDebts` crée une entrée hors liste. Le panneau des dettes affiche alors une ligne au nom d'un identifiant technique (`getName` retombe sur l'id brut) | Majeur | PROPOSÉ |
 | A-026 | 2026-08-17 | Fiabilité | Quatre accès non gardés à `exp.participantIds` dans le **rendu** (liste des dépenses, feuille par voyageur), alors que `calcDebts`/`calcBalances` se gardent depuis longtemps avec un commentaire qui dit pourquoi. La garde des calculs ne protège pas le rendu | Mineur | CORRIGÉ |
+| A-023 | 2026-08-24 | Sécurité | Clos. `urlSure` vit maintenant dans `supabase/functions/_shared/reseau.ts` et `extract-place` l'importe (deux occurrences dans `index.ts`). Le garde-fou SSRF est partagé comme l'est l'origine — livré par `2187348` (#73) | Majeur | CORRIGÉ |
+| A-024 | 2026-08-24 | Fiabilité | Clos. `ExpensesTab.jsx:1113` calcule encore `eurAmt / n`, mais ne l'affiche plus que sur un partage ÉGAL ; à parts inégales la ligne montre `partEnEuros(exp, me.id)`. Livré par `118b1cc` (#71), jamais consigné ici | Majeur | CORRIGÉ |
+| A-025 | 2026-08-24 | Fiabilité | Clos. `voyageSansVoyageur` (`helpers.js:1477`) retire l'id des `participantIds` et des `parts` en plus de `tripTravelers` — livré par `2187348` (#73) | Majeur | CORRIGÉ |
+| A-027 | 2026-08-24 | Fiabilité | Ouverte par une notification (`?voyage=…`), l'app ne rend plus la main : l'effet de `App.jsx:148-153` re-navigue vers le voyage à chaque fois que `route.page` repasse à `dashboard`, et `pendingVoyage` n'est jamais consommé. « Retour » est inopérant jusqu'au rechargement | Majeur | PROPOSÉ |
+| A-028 | 2026-08-24 | Fiabilité | Aucun contrôle automatique nulle part : ni `eslint`, ni `vite build`, ni `verif-calcul.mjs` (45 cas) ni `verif-notif-depense.mjs` (13 cas) ne tournent sur push ou sur PR. Les huit workflows sont des déploiements ou des diagnostics. `deploy-edge-functions.yml` pousse `supabase/functions/**` en production à chaque push sur `main` | Majeur | PROPOSÉ |
+| A-029 | 2026-08-24 | Fiabilité | Le champ « Quand » s'écrit et ne se lit nulle part : aucun écran n'affiche `expense.date`, la liste rend `trip.expenses` dans l'ordre d'insertion (`ExpensesTab.jsx:285`). Et `date: form.date \|\| undefined` (`:559`) traverse le patch `{...e, ...patch}` de `updateExpense` : vider le champ efface la date au lieu de la conserver | Mineur | PROPOSÉ |
+| A-030 | 2026-08-24 | Fiabilité | Rouvrir une dépense à parts inégales déplace des centimes : `openEditForm` normalise les parts et les arrondit au centième (`:365`), `handleAdd` les recalcule (`:543`). 100 € partagés 70/30 rouverts puis réenregistrés sans rien changer donnent 69,97 / 30,03 | Mineur | PROPOSÉ |
+| A-031 | 2026-08-24 | Sécurité | Supabase Auth : la vérification des mots de passe compromis (HaveIBeenPwned) est désactivée — relevé par l'advisor `auth_leaked_password_protection`. L'e-mail/mot de passe est la seule authentification du projet | Mineur | PROPOSÉ |
+| A-032 | 2026-08-24 | Dette technique | Trois champs du formulaire de dépense (Titre, Montant, Quand) portaient un `<label>` associé à rien : sans nom accessible sur l'écran de saisie d'argent | Mineur | CORRIGÉ |
+| A-033 | 2026-08-24 | Dette technique | Le sélecteur Dépense/Revenu/Transfert annonçait `role="tablist"`/`role="tab"` sans aucun `tabpanel` associé | Mineur | CORRIGÉ |
+| A-034 | 2026-08-24 | Dette technique | « Il reste 0.01 % à répartir » : point décimal dans un message bloquant, en français | Mineur | CORRIGÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -61,6 +72,23 @@ Exemple de ligne, à supprimer :
 -->
 
 ## Dernier audit effectif
+
+Date : 2026-08-24
+Type : LÉGER (7 jours écoulés, 6 commits significatifs, +2 045 lignes — sous les
+deux seuils : moins de 3 semaines, moins de 40 commits)
+Axes : Sécurité, Fiabilité. Pas d'axe rotatif en audit LÉGER.
+Prochain axe rotatif : Performance et coûts (toujours pas consommé, quatrième
+audit d'affilée — le calendrier n'a jamais atteint le seuil STANDARD)
+Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** —
+inchangé depuis le 2026-08-10, dette non aggravée malgré +2 045 lignes.
+`npm run build` passe. `verif-calcul.mjs` (45 cas) et `verif-notif-depense.mjs`
+(13 cas) passent.
+Note de méthode : trois constats ouverts depuis le 2026-08-17 (A-023, A-024,
+A-025) étaient en fait corrigés dans le code sans avoir été consignés ici. Le
+journal ne se met pas à jour tout seul quand un correctif part dans une PR qui
+ne le mentionne pas.
+
+### Audit précédent
 
 Date : 2026-08-17
 Type : LÉGER (7 jours écoulés, 3 commits significatifs : les deux correctifs de
@@ -92,3 +120,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-03 | LÉGER | Sécurité, Fiabilité | A-011 à A-016 |
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
+| 2026-08-24 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 (+ A-032 à A-034 corrigés) |
