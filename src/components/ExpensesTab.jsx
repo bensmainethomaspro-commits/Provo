@@ -683,6 +683,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                   le reste de la ligne. « Par exemple : boissons » y était
                   coupé au milieu du mot. */}
               <input className="form-input" placeholder="Boissons, taxi…"
+                aria-label="Titre"
                 value={form.description} onChange={e => set('description', e.target.value)} />
               <button type="button" className="ef__icone" aria-label="Choisir une icône"
                 aria-expanded={emojisOuverts} onClick={() => setEmojisOuverts(o => !o)}>
@@ -729,6 +730,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                   clavier système ne les propose sur un pavé décimal. */}
               <input className="form-input ef__montant" type="text" inputMode="decimal"
                 placeholder="0,00" autoFocus ref={montantRef}
+                aria-label="Montant"
                 value={form.amount}
                 onChange={e => set('amount', e.target.value)}
                 onFocus={() => { clearTimeout(fermetureCalc.current); setCalculOuvert(true); }}
@@ -792,6 +794,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <div className="form-group">
               <label className="form-label">Quand</label>
               <input className="form-input" type="date" value={form.date}
+                aria-label="Quand"
                 onChange={e => set('date', e.target.value)} />
             </div>
           </div>
