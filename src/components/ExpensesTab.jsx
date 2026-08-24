@@ -662,12 +662,19 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
           {/* Dépense · Revenu · Transfert. Un revenu est enregistré en montant
               NÉGATIF, pas avec un drapeau : sept endroits somment de l'argent
               dans ce dépôt, et un drapeau obligerait chacun à s'en souvenir.
-              Le signe vit dans la valeur, tout le reste suit sans le savoir. */}
+              Le signe vit dans la valeur, tout le reste suit sans le savoir.
+
+              `radiogroup` et non `tablist` : un onglet promet un panneau, et un
+              lecteur d'écran annonce « onglet 1 sur 3 » puis cherche le
+              `tabpanel` correspondant — il n'y en a aucun, la suite du
+              formulaire est la même quel que soit le segment. Trois choix
+              exclusifs sur une même ligne, c'est un groupe de boutons radio, et
+              `aria-checked` est l'état qui va avec. */}
           {!editingId && (
-            <div className="ef__segments" role="tablist" aria-label="Nature de l'opération">
+            <div className="ef__segments" role="radiogroup" aria-label="Nature de l'opération">
               {TYPES.map(t => (
-                <button key={t.id} type="button" role="tab"
-                  aria-selected={form.type === t.id}
+                <button key={t.id} type="button" role="radio"
+                  aria-checked={form.type === t.id}
                   className={`ef__segment${form.type === t.id ? ' ef__segment--on' : ''}`}
                   onClick={() => changerType(t.id)}>
                   {t.label}
