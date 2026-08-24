@@ -71,7 +71,17 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   dont toutes les parts valent 1, se divise exactement comme avant : les fiches
   déjà enregistrées restent justes. Toute lecture d'une part passe par
   `partEnEuros` — une division locale `montant / participantIds.length` est un
-  constat, pas un raccourci (c'est A-024).
+  constat, pas un raccourci (c'était A-024, clos le 2026-08-24 : la division
+  subsiste à `ExpensesTab.jsx:1113` mais n'alimente plus que l'affichage
+  « X €/pers. » d'un partage ÉGAL, où elle est juste).
+  Depuis le 17 août, le même fichier héberge aussi `evaluerMontant` — un
+  évaluateur d'opérations écrit à la main, **jamais `eval` ni `new Function`**,
+  parce que ce champ reçoit du texte tapé et synchronisé entre appareils. Ne
+  pas proposer de le remplacer par un évaluateur générique.
+- **`expense.date` s'écrit et ne se lit nulle part** (relevé le 2026-08-24).
+  Le champ « Quand » du formulaire l'enregistre depuis `efa0014`, mais aucun
+  écran ne l'affiche, n'y trie ni n'y groupe : `ExpensesTab.jsx:285` rend
+  `trip.expenses` dans l'ordre d'insertion. C'est A-029.
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
   liens courts et extrait les métadonnées d'une page tierce. Utilise
@@ -79,8 +89,14 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
 - `.github/workflows/deploy-edge-functions.yml` : déploie automatiquement sur push
   vers main dès que `supabase/functions/**` change. Il **parcourt le dossier**
   depuis le 2026-08-04 : ajouter une fonction suffit à la déployer.
+- **Aucun workflow ne vérifie quoi que ce soit** (relevé le 2026-08-24). Les huit
+  fichiers de `.github/workflows/` sont trois déploiements (`deploy-edge-functions`,
+  `build-android`, `setup-push`), un planificateur (`push-tick`) et quatre
+  diagnostics manuels (`canari-extraction`, `diagnose-*`). Ni `eslint`, ni
+  `vite build`, ni les deux scripts `verif-*` ne tournent sur push ou sur PR.
+  Ne pas le redécouvrir : c'est A-028.
 
-### Les cinq fonctions Edge — relevé le 2026-08-10
+### Les six fonctions Edge — relevé le 2026-08-10, complété le 2026-08-24
 
 | Fonction | Rôle | Clé Anthropic | Contrôle d'origine |
 |---|---|---|---|
@@ -89,6 +105,7 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
 | `read-booking` | confirmation collée | oui | **oui** (depuis A-018) |
 | `read-receipt` | photo de ticket (vision) | oui | **oui** (depuis A-018) |
 | `push-tick` | rappels planifiés | non | non (assumé, voir project-notes) |
+| `notifier-depense` | dépense commune (depuis le 2026-08-17) | non | **oui**, plus jeton utilisateur obligatoire |
 
 Aucun `supabase/config.toml` : les fonctions sont déployées avec la vérification
 de jeton par défaut. **La clé publiable suffit à la satisfaire**, et elle est
@@ -111,14 +128,32 @@ comme une fermeture complète.
 `diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app`,
 le diagnostic n'a donc pas été cassé par cet ajout.
 
-**Le garde-fou SSRF, lui, n'est PAS partagé** (relevé le 2026-08-17).
-`urlSure` et la table `PRIVE` vivent uniquement dans
-`supabase/functions/enrich-place/index.ts:49`. `extract-place` télécharge
-pourtant une URL fournie par le corps de la requête — c'est son métier — sans
-aucun filtre d'hôte : `fetchOnce` (`index.ts:264`) joint ce qu'on lui donne.
-Deux fonctions qui font la même chose, une seule protégée. C'est le constat
-A-023 ; tant qu'il est ouvert, ne pas le redécouvrir, et ne pas croire que
-`_shared/` couvre autre chose que l'origine.
+**Le garde-fou SSRF est partagé depuis le 2026-08-17** (A-023, clos).
+`urlSure` et la table `PRIVE` ont quitté `enrich-place` pour
+`supabase/functions/_shared/reseau.ts` ; `extract-place` l'importe. `_shared/`
+contient donc **deux** modules, `origine.ts` et `reseau.ts`, et aucun
+`index.ts` — la boucle de déploiement l'ignore comme fonction. Toute fonction
+qui joint une URL venue du corps de la requête importe `reseau.ts`.
+
+### Sixième fonction Edge : `notifier-depense` (17 août 2026)
+
+Prévient les autres voyageurs d'une dépense commune. Relevée conforme le
+2026-08-24, ACTIVE sur le projet, `verify_jwt: true` comme les cinq autres.
+Trois propriétés à ne pas défaire, et à ne pas redécouvrir :
+
+- **Le texte n'est jamais dans l'appel.** La requête ne porte que `tripId` et
+  `expenseId` ; `messageDepense` reconstruit le titre et le corps depuis la
+  colonne `data` relue en base. C'est ce qui empêche un membre de faire
+  afficher n'importe quoi sur le téléphone des autres.
+- Elle utilise `SUPABASE_SERVICE_ROLE_KEY` — donc RLS contournée — et compense
+  par un contrôle explicite : `auth.getUser(jeton)` puis appartenance vérifiée
+  dans `trip_members` **plus** `trips.owner_id` (un voyage sans collaboration
+  ouverte n'a aucune ligne dans `trip_members`).
+- `VAPID_KEYS` absent ⇒ elle rend `{ok:true, envoyes:0}`, elle ne casse pas.
+
+Elle n'est appelée que depuis `addExpense` (`useTrips.js`). `updateExpense` et
+`deleteExpense` sont muets : c'est un manque connu, pas un oubli à resignaler
+tel quel.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
@@ -174,6 +209,12 @@ Ce dépôt possède déjà une mémoire d'amélioration continue. Elle prime sur
   `npm run build`, `vite preview` et des scripts Playwright ponctuels en 390 × 844.
   Ne recommande la mise en place d'une suite de tests que si un bug de régression
   réel est identifiable dans l'historique git.
+  **Nuance depuis le 17 août 2026** : deux vérificateurs déterministes existent
+  désormais et ne dépendent d'aucun navigateur — `scripts/verif-calcul.mjs`
+  (45 cas sur `evaluerMontant`) et `scripts/verif-notif-depense.mjs` (13 cas,
+  découpés dans la fonction Edge). Ils passent en moins d'une seconde. Ce ne
+  sont pas « des tests à mettre en place » : ils sont écrits. Ce qui manque,
+  c'est que quelque chose les exécute (A-028).
 - Un seul fichier CSS de près de 6 000 lignes. C'est assumé. Ne propose ni
   découpage, ni CSS Modules, ni framework de style.
 - Aucun routeur. L'état de route vit dans App.jsx. Assumé.
