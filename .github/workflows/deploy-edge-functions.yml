@@ -47,6 +47,14 @@ jobs:
           # Le nom des fonctions était écrit en dur : ajouter « enrich-place »
           # ne déployait donc rien, et l'app appelait une fonction inexistante
           # sans que rien ne le signale. On parcourt le dossier.
+          #
+          # ATTENTION, CETTE BOUCLE NE SUPPRIME RIEN. Retirer un dossier du
+          # dépôt ne retire pas la fonction de chez Supabase : elle y reste
+          # déployée, appelable, et hors de vue. C'est arrivé avec
+          # « read-receipt », partie le 31 août 2026 quand la lecture du ticket
+          # est passée dans le navigateur. Une fonction supprimée ici se
+          # supprime AUSSI à la main, dans le tableau de bord Supabase
+          # (Edge Functions › la fonction › Delete).
           echo "Fonctions trouvées :"
           ls -1 supabase/functions
           for d in supabase/functions/*/; do

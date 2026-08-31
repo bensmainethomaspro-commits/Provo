@@ -208,6 +208,15 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     venir, ce serait une faute de lecture (2062 pour 2026) et une dépense datée
     du futur disparaît du bilan.
 
+  **À FAIRE À LA MAIN, une seule fois.** Deux choses vivent hors du dépôt et
+  n'ont pas pu partir avec le code :
+  · **supprimer la fonction `read-receipt` chez Supabase** (Edge Functions › la
+    fonction › Delete). La boucle de déploiement parcourt le dossier et déploie
+    ce qu'elle y trouve — elle ne supprime jamais. Retirée du dépôt, la fonction
+    reste déployée, appelable, et hors de vue.
+  · **retirer le secret `ANTHROPIC_API_KEY`** (Edge Functions › Secrets) : plus
+    aucune fonction ne le lit. Un secret qui traîne finit par être réutilisé.
+
   **Le découpeur de types**, dans `scripts/ts-sans-types.mjs` — partagé, parce
   qu'il a été réécrit trois fois de suite avec les mêmes pièges (règle E13). `scripts/verif-fiche.mjs` doit exécuter du
   TypeScript Deno sous Node. Retirer les annotations au motif dévorait les
