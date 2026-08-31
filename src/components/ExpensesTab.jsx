@@ -413,28 +413,41 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     setLectureRecu(true);
     setRecuMsg('');
     try {
-      // Réduite avant l'envoi : une photo d'iPhone fait 4 Mo, un ticket se lit
-      // très bien à 1000 px de large, et c'est du réseau en itinérance.
-      const image = await reduireImage(fichier, 1000);
-      const lu = await lireRecu(image);
+      // La photo ne part plus nulle part : la lecture se fait sur le téléphone.
+      // On réduit quand même — le moteur travaille mieux sur des glyphes de
+      // taille raisonnable qu'en agrandissant une image de 4000 px.
+      const image = await reduireImage(fichier, 1400);
+      const lu = await lireRecu(image, (avance) => {
+        // Trois à dix secondes sur un téléphone : sans compteur, on croit que
+        // rien ne se passe et on relance.
+        setRecuMsg(`Lecture du ticket… ${Math.round(avance * 100)} %`);
+      });
       if (!lu || lu.error) {
-        setRecuMsg(lu?.error === 'cle_absente'
-          ? "La lecture de ticket n'est pas configurée — saisis le montant à la main."
-          : "Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
+        setRecuMsg("Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
         return;
       }
+      // Le champ s'écrit comme on l'y taperait : virgule, et les deux centimes.
+      // `String(48.4)` rendait « 48.4 » — un point dans un formulaire dont le
+      // repère est « 0,00 », et un ticket de 48,40 qui a l'air d'en valoir 48,4.
+      const ecrit = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(2)).replace('.', ',');
       setForm(f => ({
         ...f,
         description: lu.commerce || f.description,
-        amount: lu.montant != null ? String(lu.montant) : f.amount,
+        amount: lu.montant != null ? ecrit(lu.montant) : f.amount,
         currency: lu.devise || f.currency,
         expenseCategory: lu.categorie || f.expenseCategory,
+        // Le ticket porte sa date : un ticket photographié le lendemain doit
+        // compter au jour où on a payé, pas au jour où on l'a noté. Jamais une
+        // date à venir — ce serait une faute de lecture (2062 pour 2026), et
+        // une dépense datée du futur disparaît du bilan.
+        date: lu.date && lu.date <= aujourdhui() ? lu.date : f.date,
       }));
+      const somme = formatMontantExact(lu.montant, lu.devise || form.currency);
       setRecuMsg(lu.montant == null
         ? "Montant illisible sur la photo — complète-le toi-même."
         : lu.confiance === 'basse'
-          ? `${lu.montant} ${lu.devise || ''} — photo peu nette, vérifie avant d'enregistrer.`
-          : `Lu sur le ticket : ${lu.montant} ${lu.devise || ''}. Vérifie et enregistre.`);
+          ? `${somme} — photo peu nette, vérifie avant d'enregistrer.`
+          : `Lu sur le ticket : ${somme}. Vérifie et enregistre.`);
     } catch {
       // `reduireImage` rejette sur un fichier que le navigateur ne sait pas
       // décoder — un HEIC transmis tel quel, une image tronquée. Sans ce

@@ -88,16 +88,22 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   vers main dès que `supabase/functions/**` change. Il **parcourt le dossier**
   depuis le 2026-08-04 : ajouter une fonction suffit à la déployer.
 
-### Les six fonctions Edge — relevé le 2026-08-31
+### Les cinq fonctions Edge — relevé le 2026-08-31
 
-| Fonction | Rôle | Clé Anthropic | Contrôle d'origine |
+**Aucune n'appelle plus de service payant** depuis « tout gratuit » (voir
+project-notes). La colonne existait pour suivre la dépense ; elle reste ici
+comme constat, pas comme état de fait à re-vérifier à chaque audit.
+
+| Fonction | Rôle | Appel payant | Contrôle d'origine |
 |---|---|---|---|
-| `extract-place` | liens et légendes | oui | **oui** |
-| `enrich-place` | site du lieu | oui | **oui** (depuis A-018) |
-| `read-booking` | confirmation collée | oui | **oui** (depuis A-018) |
-| `read-receipt` | photo de ticket (vision) | oui | **oui** (depuis A-018) |
-| `push-tick` | rappels planifiés | non | non (assumé, voir project-notes) |
-| `notifier-depense` | prévient les autres voyageurs | non | **oui**, plus jeton utilisateur et appartenance au voyage |
+| `extract-place` | liens et légendes | aucun | **oui** |
+| `enrich-place` | site du lieu | aucun | **oui** (depuis A-018) |
+| `read-booking` | confirmation collée | aucun | **oui** (depuis A-018) |
+| `push-tick` | rappels planifiés | aucun | non (assumé, voir project-notes) |
+| `notifier-depense` | prévient les autres voyageurs | aucun | **oui**, plus jeton utilisateur et appartenance au voyage |
+
+`read-receipt` a été **supprimée** : la photo de ticket se lit désormais sur le
+téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte plus l'appareil.
 
 `notifier-depense` (ajoutée le 2026-08-17) est la seule fonction qui tourne en
 `SUPABASE_SERVICE_ROLE_KEY`, donc au-dessus de RLS. Trois contrôles la bordent,

@@ -78,15 +78,9 @@ export const REPONSES = {
   enrichVide: { horaires: null, prixMin: null, description: null, site: null, photo: null,
     source: 'aucune', confiance: 'basse' },
 
-  // Edge Function `read-receipt` : ce qu'un ticket photographié donne.
-  recu: { ok: true, montant: 47.8, devise: 'EUR', commerce: 'Figlmüller',
-    date: '2026-08-05', categorie: 'repas', confiance: 'haute' },
-  // Photo floue : le montant est là, mais il faut le relire.
-  recuDouteux: { ok: true, montant: 47.8, devise: 'EUR', commerce: 'Figlmüller',
-    date: '', categorie: 'repas', confiance: 'basse' },
-  // Ce n'était pas un ticket.
-  recuIllisible: { ok: true, montant: null, devise: '', commerce: '', date: '',
-    categorie: 'autre', confiance: 'basse' },
+  // Rien pour le ticket de caisse : depuis que l'OCR tourne dans le navigateur,
+  // il n'y a plus de service à simuler. Le moteur est servi par l'app elle-même
+  // et le parcours le lit pour de vrai — voir « Photographier le ticket ».
 
   // Edge Function `read-booking` : ce qu'une confirmation collée donne.
   reservation: { ok: true, titre: 'Hôtel Sacher', lieu: 'Hotel Sacher Wien',
@@ -141,8 +135,6 @@ export const VARIANTES = {
   // Le modèle a lu le texte, mais n'y a trouvé aucun lieu nommé.
   legende: { aucun: { ok: false } },
   nominatim: { aucun: [] },
-  recu: { douteux: REPONSES.recuDouteux, illisible: REPONSES.recuIllisible,
-    sansCle: { error: 'cle_absente' } },
   reservation: { douteux: REPONSES.reservationDouteuse,
     aucun: REPONSES.pasUneReservation, sansCle: { error: 'cle_absente' } },
   overpass: { aucun: { elements: [] } },
@@ -267,7 +259,6 @@ export async function brancherReseau(page, base, plan = {}) {
       return servir(route, 'extractPlace', REPONSES.extractPlace);
     }
     if (url.includes('enrich-place')) return servir(route, 'enrichPlace', REPONSES.enrichPlace);
-    if (url.includes('read-receipt')) return servir(route, 'recu', REPONSES.recu);
     if (url.includes('read-booking')) return servir(route, 'reservation', REPONSES.reservation);
     return route.fulfill(json({ ok: false }));
   });

@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Moteur OCR recopié depuis node_modules par `npm run build` (prebuild).
+# Douze mégaoctets de binaires qui se reconstruisent en une seconde : ils n'ont
+# rien à faire dans l'historique. Voir scripts/vendor-tesseract.mjs.
+public/tesseract/
+
 # Android build artifacts (garder le projet android/, exclure les builds)
 android/app/build/
 android/.gradle/

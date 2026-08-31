@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'android', 'supabase/functions']),
+  // `public/tesseract` est recopié depuis node_modules par `npm run build` :
+  // du code minifié qui n'est pas le nôtre, et qu'on ne corrigera jamais.
+  globalIgnores(['dist', 'android', 'supabase/functions', 'public/tesseract']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

@@ -23,8 +23,15 @@
  */
 import { chromium } from 'playwright';
 import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { trip as TRIP, settings as SETTINGS } from './ui-fixture.mjs';
 import { brancherReseau } from './reseau-stubs.mjs';
+
+// Un ticket de restaurant lisible, avec les pièges d'un vrai : un sous-total et
+// une TVA du même ordre que le total, et le total annoncé (« TOTAL TTC 48,40 »)
+// qui doit l'emporter sur les deux. Image fixe et non photo réelle, pour que le
+// parcours dise la même chose sur toutes les machines.
+const TICKET_EXEMPLE = fileURLToPath(new URL('./fixtures/ticket.jpg', import.meta.url));
 
 const trouverChromium = () => {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
@@ -1964,7 +1971,6 @@ const PARCOURS = [
     } },
 
   { groupe: 'Dépenses', nom: 'Photographier le ticket remplit la dépense', depart: 'voyage',
-    reseau: { recu: 'ok' },
     intention: "Le montant est écrit sur le papier qu'on tient : le retaper est un calcul de trop.",
     async faire(t) {
       await t.ouvrirVoyage();
@@ -1976,28 +1982,41 @@ const PARCOURS = [
       t.verifier('la photo du ticket est proposée',
         await t.p.locator('label[aria-label*="ticket" i]').count() > 0);
 
-      // Une photo quelconque : c'est le service qui lit, pas le parcours.
-      await t.p.setInputFiles('label[aria-label*="ticket" i] input[type="file"]', {
-        name: 'ticket.jpg', mimeType: 'image/jpeg',
-        buffer: Buffer.from(
-          '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a'
-          + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
-          + 'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'),
-      });
-      await t.p.waitForTimeout(2600);
+      // Un VRAI ticket, et une VRAIE lecture. Depuis que l'OCR tourne dans le
+      // navigateur, plus rien n'est simulé ici : le moteur est servi par l'app
+      // elle-même (public/tesseract/), donc il traverse la coupure réseau du
+      // parcours comme n'importe quel fichier de l'app. C'est justement ce qui
+      // doit être vérifié — un chemin faux dans `vendor-tesseract.mjs` ne se
+      // verrait nulle part ailleurs qu'ici.
+      await t.p.setInputFiles('label[aria-label*="ticket" i] input[type="file"]',
+        TICKET_EXEMPLE);
 
-      t.verifier('le service de lecture a été appelé', (t.appels().recu || 0) > 0,
-        `${t.appels().recu || 0} appels`);
+      // Chargement du moteur puis lecture : quelques secondes la première fois.
+      // On attend un RÉSULTAT, pas une durée — un délai fixe transformerait une
+      // machine lente en test rouge.
+      const lu = await t.p.waitForFunction(() => {
+        const m = document.querySelector('.recu__msg')?.innerText || '';
+        return /Lu sur le ticket|pas pu être|illisible|vérifie/i.test(m) ? m : null;
+      }, null, { timeout: 90000 }).then(h => h.jsonValue()).catch(() => '');
+      t.verifier('la lecture aboutit', !!lu, lu || '(rien après 90 s)');
+
       const champs = await t.p.evaluate(() => {
         // Le champ fichier du ticket est désormais le premier `input` du
         // formulaire : viser par position mènerait à lui.
         const desc = document.querySelector('.ef__ligne-titre input.form-input');
         const num = document.querySelector('.ef__montant');
         return { description: desc?.value || '', montant: num?.value || '',
+          date: document.querySelector('.ef__date input[type="date"]')?.value
+            || document.querySelector('input[type="date"]')?.value || '',
           message: document.querySelector('.recu__msg')?.innerText || '' };
       });
-      t.verifier('le montant est repris du ticket', champs.montant === '47.8', champs.montant || '(vide)');
+      // Le ticket porte « Sous-total 48,40 », « TVA 10% 4,84 » et
+      // « TOTAL TTC 48,40 » : c'est le total annoncé qu'on doit lire, jamais la
+      // TVA ni le sous-total.
+      // « 48,40 » et non « 48.4 » : le champ s'écrit comme on l'y taperait.
+      t.verifier('le montant est repris du ticket', champs.montant === '48,40', champs.montant || '(vide)');
       t.verifier('le commerce devient la description', /Figlm/i.test(champs.description), champs.description);
+      t.verifier('la date du ticket est reprise', champs.date === '2026-08-05', champs.date || '(vide)');
       // Le voyage de référence contient déjà « Dîner Figlmüller » : c'est le
       // NOMBRE de dépenses qui doit être inchangé, pas l'absence d'un nom.
       t.verifier('rien n\'est enregistré sans relecture',
@@ -2008,12 +2027,14 @@ const PARCOURS = [
     } },
 
   { groupe: 'Dépenses', nom: 'Un ticket illisible le dit et ne bloque pas', depart: 'voyage',
-    reseau: { recu: 'illisible' },
     intention: "Une photo floue ne doit ni inventer un montant ni empêcher la saisie.",
     async faire(t) {
       await t.ouvrirVoyage();
       await t.onglet(/Dépenses/i);
       await t.clic('.expenses-add-top', { delai: 800 });
+      // Un carré uni : le moteur tourne pour de bon et ne trouve rien. C'est le
+      // cas fréquent — photo bougée, ticket dans l'ombre — et le seul endroit
+      // où l'app doit résister à un OCR qui rend du vide.
       await t.p.setInputFiles('label[aria-label*="ticket" i] input[type="file"]', {
         name: 'flou.jpg', mimeType: 'image/jpeg',
         buffer: Buffer.from(
@@ -2021,13 +2042,16 @@ const PARCOURS = [
           + 'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA'
           + 'AAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==', 'base64'),
       });
-      await t.p.waitForTimeout(2600);
-      const champs = await t.p.evaluate(() => {
-        const num = document.querySelector('.ef__montant');
-        return { montant: num?.value || '', message: document.querySelector('.recu__msg')?.innerText || '' };
-      });
+      const dit = await t.p.waitForFunction(() => {
+        const m = document.querySelector('.recu__msg')?.innerText || '';
+        return /pas pu être|illisible|complète/i.test(m) ? m : null;
+      }, null, { timeout: 90000 }).then(h => h.jsonValue()).catch(() => '');
+      const champs = await t.p.evaluate(() => ({
+        montant: document.querySelector('.ef__montant')?.value || '',
+        message: document.querySelector('.recu__msg')?.innerText || '',
+      }));
       t.verifier('aucun montant inventé', champs.montant === '', champs.montant || '(vide, correct)');
-      t.verifier('on le dit franchement', champs.message.length > 10, champs.message.slice(0, 70));
+      t.verifier('on le dit franchement', dit.length > 10, (dit || champs.message).slice(0, 70));
       // Et la saisie manuelle doit rester possible juste après.
       await t.saisir('.ef__ligne-titre input.form-input', 'Taxi');
       await t.p.locator('.ef__montant').first().fill('22');
