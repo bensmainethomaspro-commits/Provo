@@ -71,7 +71,15 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   dont toutes les parts valent 1, se divise exactement comme avant : les fiches
   déjà enregistrées restent justes. Toute lecture d'une part passe par
   `partEnEuros` — une division locale `montant / participantIds.length` est un
-  constat, pas un raccourci (c'est A-024).
+  constat, pas un raccourci. Vérifié le 2026-08-31 : il n'en reste aucune dans
+  `src/` (A-024 clos). Le même fichier porte `voyageSansVoyageur` (`:1476`),
+  qui retire un voyageur des dépenses — il nettoie `participantIds` et `parts`,
+  **pas `payerId`** (A-029, ouvert).
+- **Dates.** La date du jour s'écrit avec `localDateStr` (`useTrips.js:11`),
+  jamais avec `toISOString().slice(0,10)` : la seconde est en UTC et décale la
+  journée d'un cran pendant la nuit en Europe, et toute la matinée en Asie.
+  C'est une app de voyage : les fuseaux ne sont pas un cas limite. Un seul
+  endroit y déroge encore, `ExpensesTab.jsx:335` (A-028).
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
   liens courts et extrait les métadonnées d'une page tierce. Utilise
@@ -80,7 +88,7 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   vers main dès que `supabase/functions/**` change. Il **parcourt le dossier**
   depuis le 2026-08-04 : ajouter une fonction suffit à la déployer.
 
-### Les cinq fonctions Edge — relevé le 2026-08-10
+### Les six fonctions Edge — relevé le 2026-08-31
 
 | Fonction | Rôle | Clé Anthropic | Contrôle d'origine |
 |---|---|---|---|
@@ -89,6 +97,14 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
 | `read-booking` | confirmation collée | oui | **oui** (depuis A-018) |
 | `read-receipt` | photo de ticket (vision) | oui | **oui** (depuis A-018) |
 | `push-tick` | rappels planifiés | non | non (assumé, voir project-notes) |
+| `notifier-depense` | prévient les autres voyageurs | non | **oui**, plus jeton utilisateur et appartenance au voyage |
+
+`notifier-depense` (ajoutée le 2026-08-17) est la seule fonction qui tourne en
+`SUPABASE_SERVICE_ROLE_KEY`, donc au-dessus de RLS. Trois contrôles la bordent,
+lus et jugés corrects le 2026-08-31 : jeton vérifié par `getUser(jeton)` et non
+décodé sur parole, appartenance au voyage via `trip_members` + `owner_id`, et
+**le texte de la notification est reconstruit depuis la base** — la requête ne
+porte que deux identifiants. Ne pas re-auditer ces trois points sans raison.
 
 Aucun `supabase/config.toml` : les fonctions sont déployées avec la vérification
 de jeton par défaut. **La clé publiable suffit à la satisfaire**, et elle est
@@ -111,14 +127,31 @@ comme une fermeture complète.
 `diagnose-enrich.yml` envoie déjà un en-tête `Origin: https://provo-tbens.vercel.app`,
 le diagnostic n'a donc pas été cassé par cet ajout.
 
-**Le garde-fou SSRF, lui, n'est PAS partagé** (relevé le 2026-08-17).
-`urlSure` et la table `PRIVE` vivent uniquement dans
-`supabase/functions/enrich-place/index.ts:49`. `extract-place` télécharge
-pourtant une URL fournie par le corps de la requête — c'est son métier — sans
-aucun filtre d'hôte : `fetchOnce` (`index.ts:264`) joint ce qu'on lui donne.
-Deux fonctions qui font la même chose, une seule protégée. C'est le constat
-A-023 ; tant qu'il est ouvert, ne pas le redécouvrir, et ne pas croire que
-`_shared/` couvre autre chose que l'origine.
+**Le garde-fou SSRF est partagé depuis le 2026-08-17** (A-023, clos par
+`2187348`) : `urlSure` et la table `PRIVE` vivent dans
+`supabase/functions/_shared/reseau.ts`, importé par `enrich-place` et
+`extract-place`. Le dossier `_shared` porte donc deux règles, `origine.ts` et
+`reseau.ts`.
+
+**Mais les deux fonctions ne l'appliquent pas de la même façon** (relevé le
+2026-08-31, constat A-027).
+
+- `enrich-place` suit les redirections **à la main**, chaque saut repassant par
+  `urlSure` (`index.ts:130-165`). C'était le correctif d'A-019.
+- `extract-place` n'appelle `urlSure` qu'une fois, à l'entrée de `resolve()`
+  (`index.ts:296`), et laisse `fetchOnce` suivre les redirections tout seul en
+  `redirect: "follow"` (`:266`). Surtout, `resolve()` n'est pas le seul chemin
+  qui joint l'URL de l'appelant : `pageRobotSocial` (`:661`),
+  `tiktokDonneesPage` (`:731`) et la branche `continue=` du consentement Google
+  (`:302`) la joignent sans aucun filtre. `handleTikTok` les appelle sur
+  `canonical`, qui **vaut `rawUrl` quand `resolve` a refusé** — le refus ne
+  ferme donc rien.
+
+Le piège de fond, trois fois de suite dans ce projet : poser la règle à un seul
+point d'appel au lieu de l'entrée de la fonction. Le correctif proposé pour
+A-027 est un `urlSure` dans `Deno.serve` (`index.ts:1488`), là où l'URL entre.
+Ne pas croire qu'un `_shared/` importé prouve une couverture : vérifier les
+points d'appel.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table

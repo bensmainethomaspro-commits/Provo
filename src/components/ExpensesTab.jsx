@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import {
-  formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage,
+  formatPrice, formatDateShort, lireRecu, reduireImage,
   partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
 } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';

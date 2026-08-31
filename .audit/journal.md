@@ -54,6 +54,14 @@ Produit et UX, puis retour au début.
 | A-024 | 2026-08-17 | Fiabilité | La liste des dépenses divise encore à parts égales (`eurAmt / n`, `ExpensesTab.jsx:696`) alors que soldes, dettes et feuille voyageur passent par `partEnEuros` depuis c17be9e. Le calcul était écrit **quatre** fois, pas trois : l'écran le plus lu contredit les trois autres sur une dépense à parts inégales | Majeur | PROPOSÉ |
 | A-025 | 2026-08-17 | Fiabilité | Retirer un voyageur ne le retire que de `tripTravelers` (`TripSettingsSheet.jsx:98`) : son id reste dans `participantIds`, sa part reste comptée, et `calcDebts` crée une entrée hors liste. Le panneau des dettes affiche alors une ligne au nom d'un identifiant technique (`getName` retombe sur l'id brut) | Majeur | PROPOSÉ |
 | A-026 | 2026-08-17 | Fiabilité | Quatre accès non gardés à `exp.participantIds` dans le **rendu** (liste des dépenses, feuille par voyageur), alors que `calcDebts`/`calcBalances` se gardent depuis longtemps avec un commentaire qui dit pourquoi. La garde des calculs ne protège pas le rendu | Mineur | CORRIGÉ |
+| A-023 | 2026-08-31 | Sécurité | Clos par `2187348` : `urlSure`/`PRIVE` vivent désormais dans `supabase/functions/_shared/reseau.ts`, importé par `enrich-place` et `extract-place`. La couverture reste partielle dans `extract-place` — c'est A-027, un constat distinct | Majeur | CORRIGÉ |
+| A-024 | 2026-08-31 | Fiabilité | Clos par `e37feb1` : `calcDebts` et `calcBalances` passent par `partEnEuros` (`ExpensesTab.jsx:87` et `:121`). Plus aucune division locale `montant / participantIds.length` dans `src/` | Majeur | CORRIGÉ |
+| A-025 | 2026-08-31 | Fiabilité | Clos par `2187348` : `voyageSansVoyageur` (`helpers.js:1476`) retire l'id des `participantIds` et des `parts`. Il ne touche pas `payerId` — c'est A-029, un constat distinct | Majeur | CORRIGÉ |
+| A-027 | 2026-08-31 | Sécurité | `extract-place` : `urlSure` n'est appelé que dans `resolve()` (`index.ts:296`). Trois chemins joignent la même URL d'appelant sans lui — `fetchOnce` en `redirect: "follow"` (`:266`), la branche `continue=` du consentement Google (`:302`), et surtout `tiktokDonneesPage`/`pageRobotSocial` (`:731`, `:661`) que `handleTikTok` appelle sur `canonical`, qui vaut `rawUrl` quand `resolve` a refusé. Le routeur teste `/tiktok\.com/i` sur l'URL entière, chemin compris : `http://10.0.0.5/tiktok.com` entre dans la branche TikTok et est joint | Majeur | PROPOSÉ |
+| A-028 | 2026-08-31 | Fiabilité | `ExpensesTab.jsx:335` : `aujourdhui()` rend une date **UTC** (`toISOString().slice(0,10)`), seul endroit de `src/` à ne pas passer par `localDateStr`. Sans effet tant que `addExpense` écrasait la date ; depuis `5f0d633` elle est conservée (`useTrips.js:782`). Une dépense notée après minuit heure locale se range la veille — toute la matinée en UTC+9 | Majeur | PROPOSÉ |
+| A-029 | 2026-08-31 | Fiabilité | `voyageSansVoyageur` (`helpers.js:1476`) ne nettoie pas `payerId`, et sort même en `return e` quand le retiré n'était pas participant. `calcDebts` crédite alors `bal[exp.payerId]` sur un id absent de `travelers` (`ExpensesTab.jsx:81`) : le panneau des dettes réaffiche une ligne au nom d'un identifiant technique — le symptôme exact d'A-025, par l'autre champ | Majeur | PROPOSÉ |
+| A-030 | 2026-08-31 | Fiabilité | Notification de dépense tirée à la saisie (`useTrips.js:790`) alors que l'écriture part 700 ms plus tard (`:224`). `notifier-depense` relit une fois après 1 500 ms puis abandonne (`index.ts:145-151`), et l'`invoke` est un `.catch(() => {})`. Hors ligne ou en réseau lent — le terrain de l'app — la notification est perdue sans trace ni reprise | Mineur | PROPOSÉ |
+| A-031 | 2026-08-31 | Dette technique | Trois liaisons mortes signalées par ESLint dans les fichiers touchés depuis le dernier audit : `CATEGORIES` (`ExpensesTab.jsx:3`), `useEffect` (`ActivityCard.jsx:1`), `signOut` (`App.jsx:16`) | Mineur | CORRIGÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -62,16 +70,28 @@ Exemple de ligne, à supprimer :
 
 ## Dernier audit effectif
 
+Date : 2026-08-31
+Type : LÉGER (14 jours écoulés, 6 commits significatifs : la réécriture du
+formulaire de dépense, le calcul dans le champ montant, une sixième fonction
+Edge `notifier-depense`, et le lien profond de notification)
+Axes : Sécurité, Fiabilité. Pas d'axe rotatif en audit LÉGER.
+Prochain axe rotatif : Performance et coûts (toujours pas consommé — trois
+audits LÉGERS d'affilée l'ont repoussé)
+Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** avant
+correction, **49 erreurs, 4 avertissements** après (A-031). Dette non aggravée
+malgré +2 000 lignes. `npm run build` passe.
+
+### Audit précédent
+
 Date : 2026-08-17
 Type : LÉGER (7 jours écoulés, 3 commits significatifs : les deux correctifs de
 sécurité de l'audit précédent, jamais relus par personne d'autre, et `#70`
 « Parts inégales », qui touche le calcul de l'argent)
 Axes : Sécurité, Fiabilité. Pas d'axe rotatif en audit LÉGER.
-Prochain axe rotatif : Performance et coûts (toujours pas consommé)
 Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** —
 inchangé depuis le 2026-08-10, dette non aggravée. `npm run build` passe.
 
-### Audit précédent
+### Audit 2026-08-10
 
 Date : 2026-08-10
 Type : PROFOND (7 jours écoulés seulement, mais **89 commits** sur `main` depuis
@@ -92,3 +112,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-03 | LÉGER | Sécurité, Fiabilité | A-011 à A-016 |
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
+| 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
