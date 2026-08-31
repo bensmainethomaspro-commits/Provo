@@ -117,7 +117,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   | `enrich-place` | JSON-LD schema.org du site + OpenStreetMap | **fait** |
   | `read-booking` | lecture par règles (dates, heures, adresses) | **fait** |
   | `read-receipt` | OCR dans le navigateur | à faire |
-  | `extract-place` | l'échelle de repli, qui existe déjà | à faire |
+  | `extract-place` | l'échelle de repli + lecture de légende par règles | **fait** |
 
   **`enrich-place`, ce qui a été appris.** Le modèle lisait en langue naturelle
   ce que les sites publient DÉJÀ en JSON-LD pour Google : horaires, fourchette
@@ -149,6 +149,25 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     ligne et colle le mot suivant au nom du lieu ; et le premier motif trouvé
     n'est pas le bon — « Votre billet de train » masquait « Dossier : TR88201 »
     trois lignes plus bas. Il faut parcourir TOUTES les correspondances.
+
+  **`extract-place`, ce qui a été appris.** Trois appels payants vivaient là :
+  lire le nom sur l'image de couverture, envoyer un agent chercher sur le web,
+  classer la légende. Les trois sont partis ; **l'échelle qui VA CHERCHER la
+  légende reste entière** — c'est elle qui fait le travail, et elle n'a jamais
+  rien coûté.
+  · `lireLegende` lit les conventions : une épingle 📍 par lieu, des mots-dièse
+    pour la nature, une liste quand il y en a plusieurs.
+  · **Un titre n'est pas une phrase.** « Le meilleur café de Vienne » est un
+    avis : on rend la main plutôt qu'un faux nom. Une fiche qui porte un faux
+    nom, on ne la vérifie plus.
+  · **Perte assumée** : une vidéo SANS légende ne se laisse plus nommer — c'est
+    la couverture qui la nommait. La fiche porte le nom du compte et on corrige.
+  · Le canari ne surveille plus la clé : elle n'existe plus, et garder l'alerte
+    ferait sonner l'alarme tous les matins sur un état devenu normal.
+  · Un défaut trouvé au passage, le même que dans `read-booking` : le motif de
+    l'épingle utilisait `\s`, qui franchit les retours à la ligne — deux
+    épingles sur deux lignes n'en faisaient qu'une. Corrigé dans les trois
+    motifs concernés.
 
   **Le découpeur de types**, dans `scripts/ts-sans-types.mjs` — partagé, parce
   qu'il a été réécrit trois fois de suite avec les mêmes pièges (règle E13). `scripts/verif-fiche.mjs` doit exécuter du

@@ -387,11 +387,14 @@ function juger(mesures, modele) {
     }
   }
 
-  // La clé du modèle, elle, doit rester posée : les lectures de réservation,
-  // de ticket et de légende collée en dépendent toutes.
-  if (modele?.connu && !modele.ok) {
-    soucis.push("la clé du modèle n'est plus posée — lecture de légende, de "
-      + 'réservation et de ticket à l\'arrêt');
+  // La clé du modèle ne se surveille plus : il n'y en a plus. Depuis le
+  // 31 août 2026, la légende, la fiche de lieu et la confirmation de
+  // réservation se lisent par des règles, gratuitement. Garder cette alerte
+  // ferait sonner l'alarme tous les matins sur un état devenu normal — et une
+  // alarme permanente, on cesse de la lire.
+  if (modele?.connu && modele.ok) {
+    bonnesNouvelles.push('une clé de modèle est encore posée alors que plus '
+      + "rien ne l'utilise — elle peut être retirée");
   }
 
   const morts = mesures.filter(m => m.absent).map(m => m.temoin);

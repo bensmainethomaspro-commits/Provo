@@ -46,7 +46,11 @@ export function sansTypes(source) {
     return nette
       .replace(/:\s*Record<[^>]*>(\[\])?/g, '')
       .replace(/:\s*\[[^\]]*\]\[\]/g, '')
-      .replace(/:\s*(unknown|string|number|boolean|any|Date|URL)(\[\])?/g, '');
+      // Les unions comptent : `raw: string | null` doit partir en ENTIER,
+      // sinon il reste « | null » collé au nom du paramètre.
+      .replace(
+        /:\s*(unknown|string|number|boolean|any|Date|URL|null|undefined)(\[\])?(\s*\|\s*(unknown|string|number|boolean|any|Date|URL|null|undefined)(\[\])?)*/g,
+        '');
   }).join('\n')
     // Les assertions vivent dans les corps, mais leur forme ne ressemble à
     // rien d'autre.
