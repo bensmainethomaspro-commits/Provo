@@ -1,7 +1,8 @@
 import { useState, useRef, useMemo } from 'react';
 import {
-  formatPrice, CATEGORIES, formatDateShort, lireRecu, reduireImage,
+  formatPrice, formatDateShort, lireRecu, reduireImage,
   partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
+  dateLocale,
 } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
@@ -310,6 +311,18 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // Un id technique ne se lit pas. Une dépense payée par quelqu'un qui a
   // quitté le voyage garde son `payerId` — l'argent est bien sorti de sa
   // poche — mais l'écran doit le dire en mots, pas en identifiant.
+  //
+  // A-029 (audit du 2026-08-31) signale « le panneau des dettes réaffiche un
+  // identifiant technique » après le retrait d'un voyageur. NON REPRODUIT :
+  // ce repli est passé par ici en A-025, et TOUT affichage d'un payeur ou d'un
+  // participant traverse `getName` — la ligne de dette, le détail des soldes,
+  // la feuille par voyageur, la liste. Vérifié au grep : aucun `payerId`,
+  // `d.from` ni `d.to` n'atteint le JSX sans lui.
+  // Ce qui reste vrai, et qui n'est pas un défaut : la dépense garde son payeur
+  // parti, donc les dettes affichent « Voyageur retiré ». L'effacer rendrait la
+  // dépense payée par personne et fausserait le solde de tous les autres.
+  // Si l'attaque du constat est un jour exercée et qu'un identifiant sort, ce
+  // commentaire est faux — pas l'inverse.
   const getName = (id) => travelers.find(t => t.id === id)?.name || 'Voyageur retiré';
   const getEmoji = (id) => travelers.find(t => t.id === id)?.emoji || '👤';
 
@@ -332,7 +345,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // marque « (Moi) » dans les listes, et sa part est celle qu'on affiche.
   const me = currentUserId ? travelers.find(t => t.profileId === currentUserId) : null;
 
-  const aujourdhui = () => new Date().toISOString().slice(0, 10);
+  const aujourdhui = () => dateLocale();
 
   const openForm = () => {
     setForm({

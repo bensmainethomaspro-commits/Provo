@@ -1578,3 +1578,20 @@ export function formatMontantExact(valeur, devise = 'EUR') {
     minimumFractionDigits: rond ? 0 : 2, maximumFractionDigits: 2,
   }).format(valeur);
 }
+
+/**
+ * La date d'aujourd'hui telle qu'on la vit, pas telle que Greenwich la voit.
+ *
+ * `new Date().toISOString().slice(0, 10)` donne la date UTC. À Tokyo, entre
+ * minuit et neuf heures du matin, elle annonce la VEILLE : une dépense notée
+ * au petit-déjeuner se rangeait au mauvais jour, et le voyageur n'avait aucun
+ * moyen de comprendre pourquoi. C'est exactement l'endroit où une app de
+ * voyage ne doit pas se tromper — on l'utilise sous d'autres fuseaux par
+ * définition.
+ *
+ * Écrite une fois, ici, et importée partout : la même fonction vivait en privé
+ * dans `useTrips`, hors de portée des écrans qui en avaient aussi besoin.
+ */
+export function dateLocale(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

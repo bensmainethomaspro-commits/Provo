@@ -13,7 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const ONGLETS = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, signOut, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });

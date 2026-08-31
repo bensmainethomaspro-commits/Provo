@@ -8,11 +8,18 @@
 // qu'on veut savoir avant d'y aller. Le site de l'établissement, lui, le dit.
 //
 // Le navigateur ne peut pas le lire (CORS), d'où cette fonction. Elle trouve
-// le site officiel, le télécharge, et confie l'extraction au modèle.
+// le site officiel, le télécharge, et lit ce qu'il DÉCLARE : le JSON-LD de
+// schema.org, que tout établissement publie déjà pour Google. Horaires,
+// fourchette de prix, téléphone, description : c'est du balisage fait pour
+// être lu par une machine.
 //
-// Sans clé Anthropic configurée, elle retombe sur ce qu'OpenStreetMap sait —
-// moins riche, mais jamais une erreur silencieuse : la réponse dit toujours
-// d'où vient l'information.
+// Elle a appelé un modèle payant pendant trois semaines pour lire la même
+// chose en langue naturelle. Sur ces champs-là, les données structurées sont
+// plus sûres — on recopie ce que le lieu affirme au lieu de le déduire — et
+// elles ne coûtent rien.
+//
+// Quand la page ne déclare rien, la réponse retombe sur ce qu'OpenStreetMap
+// sait, et dit toujours d'où vient l'information.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { PRIVE, urlSure } from "../_shared/reseau.ts";
@@ -170,7 +177,7 @@ async function suivreRedirections(
   return null;
 }
 
-async function lirePage(url: URL): Promise<{ texte: string; image: string | null } | null> {
+async function lirePage(url: URL): Promise<{ texte: string; brut: string; image: string | null } | null> {
   const { signal, clear } = withTimeout(12000);
   try {
     const suivi = await suivreRedirections(url, signal);
@@ -188,92 +195,179 @@ async function lirePage(url: URL): Promise<{ texte: string; image: string | null
     // dernière — une image relative s'y résoudrait sur le mauvais domaine.
     const image = imageDeLaPage(brut, urlFinale);
     const texte = texteLisible(brut);
-    return texte.length > 80 ? { texte, image } : (image ? { texte: "", image } : null);
+    // Le HTML brut repart avec : les données structurées (JSON-LD) vivent dans
+    // un `<script>`, que `texteLisible` retire précisément parce qu'il ne
+    // cherche que de la prose.
+    return texte.length > 80 || image ? { texte, brut, image } : null;
   } catch {
     clear();
     return null;
   }
 }
 
-// ── Extraction par le modèle ─────────────────────────────────────────────────
-async function extraire(nom: string, texte: string, categorie: string) {
-  const key = Deno.env.get("ANTHROPIC_API_KEY") ||
-    Deno.env.get("ANTHROPIC_API_KEY_TB");
-  if (!key) return { indisponible: true };
-  const { signal, clear } = withTimeout(20000);
-  try {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal,
-      headers: {
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
-        system:
-          "Tu lis le site d'un lieu et tu en extrais des informations pratiques " +
-          "pour un voyageur. Réponds UNIQUEMENT par du JSON compact :\n" +
-          '{"horaires":string,"prixMin":number|null,"prixMax":number|null,' +
-          '"devise":string,"description":string,"confiance":"haute"|"basse"}\n\n' +
-          "horaires = au format OpenStreetMap quand c'est net " +
-          '(ex. "Mo-Fr 09:00-18:00; Sa 10:00-16:00"), sinon "".\n' +
-          "prixMin / prixMax = fourchette par personne pour une visite ou un " +
-          "repas courant, en nombre. null si le site ne permet pas de le dire. " +
-          "N'invente JAMAIS un prix : une fourchette fausse coûte de l'argent " +
-          "à quelqu'un.\n" +
-          "devise = code ISO (EUR, USD…) ou \"\".\n" +
-          "description = DEUX phrases maximum, en français, factuelles, qui " +
-          "disent ce qu'on y fait et ce qui le distingue. Pas de superlatif " +
-          "publicitaire, pas de « incontournable », pas d'emoji. \"\" si la " +
-          "page ne dit rien d'utile.\n" +
-          "confiance = \"basse\" dès que tu déduis au lieu de lire. Mieux vaut " +
-          "des champs vides qu'une information inventée.",
-        messages: [{
-          role: "user",
-          content: `Lieu : ${nom}${categorie ? ` (catégorie ${categorie})` : ""}\n\n` +
-            `Contenu du site :\n${texte.slice(0, 9000)}`,
-        }],
-      }),
-    });
-    clear();
-    if (!r.ok) return { erreur: `modele_${r.status}` };
-    const d = await r.json();
-    const brut = d?.content?.[0]?.text || "";
-    const m = brut.match(/\{[\s\S]*\}/);
-    if (!m) return { erreur: "modele_illisible" };
-    const p = JSON.parse(m[0]);
-    const sur = p.confiance !== "basse";
-    const nombre = (v: unknown) =>
-      typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
-    return {
-      horaires: typeof p.horaires === "string" ? p.horaires.trim() : "",
-      // Une fourchette devinée est pire que pas de fourchette : elle sera
-      // recopiée dans le budget.
-      prixMin: sur ? nombre(p.prixMin) : null,
-      prixMax: sur ? nombre(p.prixMax) : null,
-      devise: typeof p.devise === "string" ? p.devise.trim().slice(0, 4) : "",
-      description: sur && typeof p.description === "string"
-        ? p.description.trim().slice(0, 400)
-        : "",
-      confiance: sur ? "haute" : "basse",
-    };
-  } catch {
-    clear();
-    return { erreur: "modele_injoignable" };
+// ── Extraction sans modèle, à partir des données structurées ─────────────────
+//
+// Ce bloc remplace un appel au modèle payant. Il ne lit pas la page « comme un
+// humain » : il lit ce que le site DÉCLARE, dans le format que tout le monde
+// publie déjà pour Google — le JSON-LD de schema.org. Un restaurant, un hôtel
+// ou un musée y met ses horaires, sa fourchette de prix, son téléphone et sa
+// description, sous une forme faite pour être lue par une machine.
+//
+// C'est gratuit, c'est instantané, et sur ce qui nous intéresse c'est PLUS SÛR
+// qu'une lecture en langue naturelle : on ne déduit rien, on recopie ce que le
+// lieu affirme de lui-même. Quand la page ne déclare rien, on rend des champs
+// vides — jamais une déduction.
+//
+// Vérifié par `scripts/verif-fiche.mjs`, sur des pages réelles.
+
+const JOURS: Record<string, string> = {
+  monday: "Mo", tuesday: "Tu", wednesday: "We", thursday: "Th",
+  friday: "Fr", saturday: "Sa", sunday: "Su",
+  lundi: "Mo", mardi: "Tu", mercredi: "We", jeudi: "Th",
+  vendredi: "Fr", samedi: "Sa", dimanche: "Su",
+  mo: "Mo", tu: "Tu", we: "We", th: "Th", fr: "Fr", sa: "Sa", su: "Su",
+};
+
+/** « https://schema.org/Monday », « Lundi », « Mo » → « Mo ». */
+function jourOsm(brut: unknown): string {
+  const t = String(brut || "").split("/").pop()!.trim().toLowerCase();
+  return JOURS[t] || "";
+}
+
+const heure = (v: unknown) => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(v || "").trim());
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : "";
+};
+
+/**
+ * `openingHoursSpecification` → le format d'OpenStreetMap.
+ *
+ * On garde celui d'OSM parce que c'est déjà celui que l'app sait lire :
+ * `ouvertMaintenant()` s'en sert pour dire « Ouvert » sur une fiche de la
+ * Réserve. Deux formats d'horaires dans le produit, ce serait deux lecteurs.
+ */
+function horairesDepuisSpec(spec: unknown): string {
+  const liste = Array.isArray(spec) ? spec : [spec];
+  const parJour: string[] = [];
+  for (const s of liste) {
+    if (!s || typeof s !== "object") continue;
+    const o = s as Record<string, unknown>;
+    const ouvre = heure(o.opens), ferme = heure(o.closes);
+    if (!ouvre || !ferme) continue;
+    const jours = (Array.isArray(o.dayOfWeek) ? o.dayOfWeek : [o.dayOfWeek])
+      .map(jourOsm).filter(Boolean);
+    if (!jours.length) continue;
+    parJour.push(`${jours.join(",")} ${ouvre}-${ferme}`);
   }
+  return parJour.join("; ");
+}
+
+/**
+ * Une fourchette de prix, et SEULEMENT quand elle est chiffrée.
+ *
+ * `priceRange` vaut très souvent « €€ » : c'est une catégorie de prix, pas un
+ * prix. La convertir en euros serait l'inventer — et une fourchette inventée
+ * se recopie dans le budget de quelqu'un. On ne rend que ce qui porte des
+ * chiffres.
+ */
+function fourchette(brut: unknown): { prixMin: number | null; prixMax: number | null; devise: string } {
+  const t = String(brut || "");
+  const devise = /€|EUR/i.test(t) ? "EUR" : /\$|USD/i.test(t) ? "USD"
+    : /£|GBP/i.test(t) ? "GBP" : "";
+  const nombres = (t.match(/\d+(?:[.,]\d+)?/g) || [])
+    .map((n) => parseFloat(n.replace(",", ".")))
+    .filter((n) => Number.isFinite(n) && n >= 0 && n < 100000);
+  if (!nombres.length) return { prixMin: null, prixMax: null, devise };
+  return {
+    prixMin: Math.min(...nombres),
+    prixMax: nombres.length > 1 ? Math.max(...nombres) : null,
+    devise,
+  };
+}
+
+/** Tous les objets JSON-LD de la page, à plat — ils s'imbriquent souvent. */
+function objetsJsonLd(html: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const blocs = html.matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  const empiler = (v: unknown, profondeur = 0) => {
+    if (profondeur > 4 || !v) return;
+    if (Array.isArray(v)) { v.forEach((x) => empiler(x, profondeur + 1)); return; }
+    if (typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    out.push(o);
+    // `@graph` est la façon normale d'empaqueter plusieurs entités.
+    empiler(o["@graph"], profondeur + 1);
+  };
+  for (const b of blocs) {
+    try { empiler(JSON.parse(b[1].trim())); } catch { /* un site sur dix écrit du JSON cassé */ }
+    if (out.length > 40) break;
+  }
+  return out;
+}
+
+const texteDe = (v: unknown): string =>
+  typeof v === "string" ? v.trim()
+    : Array.isArray(v) ? v.map(texteDe).filter(Boolean).join("; ")
+    : "";
+
+/**
+ * Ce que le site déclare de lui-même : horaires, prix, description, téléphone.
+ *
+ * Rendu vide plutôt que faux : c'est la règle de tout cet écran. Une fiche
+ * incomplète se complète plus tard ; une fiche fausse se découvre devant une
+ * porte fermée.
+ */
+function lireLesDonnees(html: string) {
+  let horaires = "", description = "", telephone = "";
+  let prix = { prixMin: null as number | null, prixMax: null as number | null, devise: "" };
+
+  for (const o of objetsJsonLd(html)) {
+    if (!horaires) {
+      horaires = horairesDepuisSpec(o.openingHoursSpecification)
+        || texteDe(o.openingHours);
+    }
+    if (prix.prixMin === null && o.priceRange !== undefined) {
+      prix = fourchette(o.priceRange);
+    }
+    if (!description) {
+      const d = texteDe(o.description);
+      // Deux phrases suffisent : au-delà, c'est la page « à propos » entière.
+      if (d.length > 20) description = d.slice(0, 400);
+    }
+    if (!telephone) telephone = texteDe(o.telephone).slice(0, 30);
+  }
+
+  // Rien de structuré : la description sociale reste honnête — c'est le site
+  // qui l'écrit pour se présenter, et elle tient en une phrase.
+  if (!description) {
+    const m = html.match(
+      /<meta[^>]+(?:property=["']og:description["']|name=["']description["'])[^>]+content=["']([^"']{20,400})["']/i);
+    if (m) description = texteLisible(m[1]);
+  }
+
+  const trouve = Boolean(horaires || description || telephone || prix.prixMin !== null);
+  return {
+    horaires: horaires.slice(0, 200),
+    description,
+    telephone,
+    ...prix,
+    // « haute » quand ça vient des données structurées, « basse » quand il n'y
+    // a qu'une description marketing.
+    confiance: horaires || prix.prixMin !== null ? "haute" : "basse",
+    trouve,
+  };
 }
 
 // ── Point d'entrée ───────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ erreur: "methode" }, 405);
-  // Cette fonction appelle le modèle payant : seules les origines de
-  // l'app la déclenchent. Sans ce contrôle, n'importe quel site pouvait
-  // faire dépenser le crédit du compte — la clé publiable est lisible
-  // dans le paquet du navigateur.
+  // Cette fonction ne coûte plus rien depuis qu'elle lit les données
+  // structurées au lieu d'appeler un modèle — mais elle télécharge toujours
+  // une page choisie par l'appelant. Le contrôle d'origine reste : ce n'est
+  // plus le crédit qu'il protège, c'est la bande passante et la réputation de
+  // l'hébergeur, qui joindrait n'importe quel site pour n'importe qui.
   if (!origineAutorisee(req)) return json({ erreur: "origine_refusee" }, 403);
 
   let corps: Record<string, unknown>;
@@ -309,19 +403,11 @@ Deno.serve(async (req) => {
   if (!page) return json({ ...base, source: osm ? "osm" : "aucune", raison: "site_illisible" });
   const photo = page.image || "";
 
-  // Une page sans texte exploitable peut quand même avoir livré sa photo :
-  // c'est déjà mieux que rien, et ça évite un appel au modèle pour rien.
-  if (page.texte.length < 80) {
-    return json({ ...base, photo, source: "site", raison: "texte_illisible" });
-  }
-
-  // 3 · L'extraction.
-  const lu = await extraire(nom, page.texte, categorie);
-  if ("indisponible" in lu) {
-    return json({ ...base, photo, source: "osm", raison: "modele_non_configure" });
-  }
-  if ("erreur" in lu) {
-    return json({ ...base, photo, source: "osm", raison: lu.erreur });
+  // 3 · L'extraction, sur ce que le site DÉCLARE. Rien n'est déduit, donc rien
+  //     n'est facturé : c'est du JSON publié pour Google, on le lit.
+  const lu = lireLesDonnees(page.brut);
+  if (!lu.trouve) {
+    return json({ ...base, photo, source: osm ? "osm" : "site", raison: "site_muet" });
   }
 
   return json({
@@ -329,12 +415,12 @@ Deno.serve(async (req) => {
     photo,
     // Le site prime sur OSM pour les horaires : il est à jour, OSM pas toujours.
     horaires: lu.horaires || base.horaires,
+    telephone: lu.telephone || base.telephone,
     prixMin: lu.prixMin,
     prixMax: lu.prixMax,
     devise: lu.devise,
     description: lu.description,
     confiance: lu.confiance,
     source: "site",
-    modele: true,
   });
 });
