@@ -81,6 +81,21 @@ Référence ESLint à la date de l'audit : **52 erreurs, 4 avertissements** avan
 correction, **49 erreurs, 4 avertissements** après (A-031). Dette non aggravée
 malgré +2 000 lignes. `npm run build` passe.
 
+### Arbitrage de l'audit 2026-08-31
+
+Rendu le jour même, sur la branche de travail.
+
+| Constat | Décision | Ce qui a été fait |
+|---|---|---|
+| A-027 · SSRF | **Retenu** | Le filtre passe à la PORTE (`Deno.serve`), plus à l'intérieur de `resolve()`, et l'aiguillage se décide sur l'HÔTE et non sur l'URL entière. `scripts/verif-aiguillage.mjs` fige 25 cas, dont l'attaque exacte du constat. |
+| A-028 · date UTC | **Retenu** | `dateLocale()` dans `helpers.js`, une seule définition pour tout le dépôt. `scripts/verif-date-locale.mjs` fige 9 cas — Tokyo, New York, Auckland, et Paris en été, qui décale aussi après 22 h. |
+| A-029 · `payerId` | **Non reproduit** | Tout affichage d'un payeur traverse `getName`, qui replie sur « Voyageur retiré » depuis A-025. Vérifié au grep : aucun identifiant n'atteint le JSX. Consigné dans le code, à l'endroit où le prochain audit relira. |
+| A-030 · notification | **Retenu** | Elle part désormais APRÈS une écriture acceptée, depuis une file par voyage. Hors ligne, elle attend la première écriture qui passe. |
+
+Deuxième fois qu'un audit lit une faille là où le correctif est déjà posé
+(A-017 en août, A-029 ici). Les deux fois, la lecture portait sur le chemin de
+données sans dérouler l'affichage.
+
 ### Audit précédent
 
 Date : 2026-08-17

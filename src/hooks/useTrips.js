@@ -1,15 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { fusionnerVoyages } from '../utils/helpers';
+import { fusionnerVoyages, dateLocale } from '../utils/helpers';
 
 const STORAGE_KEY = 'provo_trips';
 
 function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
-function localDateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function buildMealActivities() {
@@ -40,7 +36,7 @@ function buildDays(startDate, endDate) {
   const cursor = new Date(sy, sm - 1, sd);
   const end = new Date(ey, em - 1, ed);
   while (cursor <= end) {
-    days.push({ id: genId(), date: localDateStr(cursor), activities: buildMealActivities(), startTime: '09:00' });
+    days.push({ id: genId(), date: dateLocale(cursor), activities: buildMealActivities(), startTime: '09:00' });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
@@ -87,6 +83,11 @@ export function useTrips() {
   // peut pas distinguer « ajouté ici » de « supprimé là-bas ».
   const baseFusionRef = useRef({});
   const syncTimeouts = useRef({});
+  // Les dépenses dont il reste à prévenir les autres voyageurs. La notification
+  // était tirée AVANT l'écriture qu'elle annonce : hors ligne, l'appel partait
+  // dans le vide, et la fonction Edge — qui relit la dépense en base — n'avait
+  // rien à lire. Elle part maintenant APRÈS une écriture acceptée.
+  const notifsEnAttente = useRef({});
   const remoteIdsRef = useRef(new Set());
   const tripsRef = useRef(trips);
   useEffect(() => { tripsRef.current = trips; }, [trips]);
@@ -182,6 +183,35 @@ export function useTrips() {
     }
   }, [trips]);
 
+  /**
+   * Prévenir les autres voyageurs qu'une dépense commune vient d'être notée.
+   *
+   * Rien n'est envoyé d'ici : le téléphone ne voit pas les abonnements des
+   * autres (la table n'expose que les siens) et ne détient pas les clés. On
+   * passe deux identifiants à la fonction Edge, qui relit la dépense en base et
+   * écrit elle-même le texte — sinon n'importe quel membre pourrait faire
+   * afficher n'importe quoi sur le téléphone des autres.
+   *
+   * Appelé APRÈS une écriture acceptée, jamais avant : la fonction Edge relit
+   * la dépense en base, et une dépense pas encore écrite n'existe pour personne.
+   * Hors ligne, l'identifiant reste en file et repart à la première écriture
+   * qui passe. Il ne survit pas à la fermeture de l'app, et c'est voulu :
+   * « Léa a ajouté une dépense » trois heures plus tard n'aide plus personne.
+   *
+   * Silencieux par construction : une notification qui ne part pas ne doit
+   * jamais gêner celui qui est en train de noter une dépense.
+   */
+  const viderLesNotifs = useCallback((tripId) => {
+    const enAttente = notifsEnAttente.current[tripId];
+    if (!enAttente?.size || !userIdRef.current) return;
+    delete notifsEnAttente.current[tripId];
+    for (const expenseId of enAttente) {
+      supabase.functions
+        .invoke('notifier-depense', { body: { tripId, expenseId } })
+        .catch(() => {});
+    }
+  }, []);
+
   // ── Sync vers Supabase (debounced, 700ms) ────────────────────────────────
   useEffect(() => {
     if (!userId) return;
@@ -207,6 +237,7 @@ export function useTrips() {
           } else {
             // Écriture acceptée : c'est désormais ce que les deux côtés savent.
             baseFusionRef.current[trip.id] = JSON.parse(hash);
+            viderLesNotifs(trip.id);
           }
         } else {
           const { error } = await supabase.from('trips').insert({
@@ -219,11 +250,12 @@ export function useTrips() {
           } else {
             remoteIdsRef.current.add(trip.id);
             baseFusionRef.current[trip.id] = JSON.parse(hash);
+            viderLesNotifs(trip.id);
           }
         }
       }, 700);
     });
-  }, [trips, userId]);
+  }, [trips, userId, viderLesNotifs]);
 
   // ── Realtime : recevoir les changements des collaborateurs ────────────────
   useEffect(() => {
@@ -748,25 +780,6 @@ export function useTrips() {
     return remoteTrip.id;
   }, []);
 
-  /**
-   * Prévenir les autres voyageurs qu'une dépense commune vient d'être notée.
-   *
-   * Rien n'est envoyé d'ici : le téléphone ne voit pas les abonnements des
-   * autres (la table n'expose que les siens) et ne détient pas les clés. On
-   * passe donc deux identifiants à la fonction Edge, qui relit la dépense en
-   * base et écrit elle-même le texte — sinon n'importe quel membre pourrait
-   * faire afficher n'importe quoi sur le téléphone des autres.
-   *
-   * Silencieux par construction : une notification qui ne part pas ne doit
-   * jamais gêner celui qui est en train de noter une dépense.
-   */
-  const notifierDepense = useCallback((tripId, expenseId) => {
-    if (!userId || !remoteIdsRef.current.has(tripId)) return;
-    supabase.functions
-      .invoke('notifier-depense', { body: { tripId, expenseId } })
-      .catch(() => {});
-  }, [userId]);
-
   const addExpense = useCallback((tripId, expense) => {
     // L'identifiant est tiré ICI, pas dans la mise à jour : celle-ci peut être
     // rejouée par React, et il faut de toute façon savoir de quelle dépense on
@@ -779,17 +792,18 @@ export function useTrips() {
         // par celle du jour : le champ « Quand » existait à l'écran et ne
         // servait à rien, et une dépense notée le lendemain se rangeait au
         // mauvais jour sans que rien ne le signale.
-        date: expense.date || localDateStr(new Date()),
+        date: expense.date || dateLocale(new Date()),
       }]
     }));
     // Seulement ce qui concerne plusieurs personnes. Une dépense pour soi seul
     // n'a rien à annoncer, et ce filtre évite un appel inutile à chaque saisie
-    // sur un voyage sans collaborateur.
+    // sur un voyage sans collaborateur. Mise en FILE : c'est la synchro qui
+    // préviendra, une fois la dépense réellement écrite.
     if ((expense.participantIds || []).length >= 2 || expense.isSettlement) {
-      notifierDepense(tripId, id);
+      (notifsEnAttente.current[tripId] ||= new Set()).add(id);
     }
     return id;
-  }, [notifierDepense]);
+  }, []);
 
   const updateExpense = useCallback((tripId, expenseId, patch) => {
     setTrips(p => p.map(t => t.id !== tripId ? t : {

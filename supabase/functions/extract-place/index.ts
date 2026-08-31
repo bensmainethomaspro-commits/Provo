@@ -1421,6 +1421,30 @@ async function classifyWithLLM(text: string, _kind: string) {
 }
 
 // ── Router ────────────────────────────────────────────────────────────────
+/**
+ * Vers quel lecteur envoyer une URL déjà validée.
+ *
+ * Se décide sur l'HÔTE, jamais sur l'URL entière. L'ancien routeur cherchait
+ * « tiktok.com » n'importe où dans la chaîne : `http://10.0.0.5/tiktok.com`
+ * partait donc chez le lecteur TikTok, qui joint l'adresse telle quelle.
+ * Un chemin n'est pas un domaine, et c'est l'attaquant qui écrit le chemin.
+ *
+ * Sorti du gestionnaire pour être vérifiable sans réseau :
+ * `scripts/verif-aiguillage.mjs` le découpe dans ce fichier.
+ */
+function aiguillage(cible: URL): "tiktok" | "maps" | "generique" {
+  const hote = cible.hostname.toLowerCase();
+  if (/(^|\.)tiktok\.com$/.test(hote)) return "tiktok";
+  if (
+    /(^|\.)goo\.gl$/.test(hote)
+    || /(^|\.)share\.google$/.test(hote)
+    || /(^|\.)maps\.google\.[a-z.]+$/.test(hote)
+    // Un google.* ordinaire n'est une carte que si son chemin le dit.
+    || (/(^|\.)google\.[a-z.]+$/.test(hote) && /\/maps/i.test(cible.pathname))
+  ) return "maps";
+  return "generique";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -1489,11 +1513,27 @@ Deno.serve(async (req) => {
     return json({ error: "invalid_url" }, 400);
   }
 
+  // ── L'URL de l'appelant entre ICI, et nulle part ailleurs ──────────────────
+  //
+  // Le filtre `urlSure` avait été partagé dans `_shared/reseau.ts` la semaine
+  // dernière, mais posé à l'intérieur de `resolve()` : trois chemins de cette
+  // fonction joignaient l'URL sans passer par là (l'échelon `robot-social`,
+  // le lecteur de page TikTok, le lecteur tiers). Et le routeur ci-dessous
+  // cherchait « tiktok.com » dans l'URL ENTIÈRE, chemin compris — si bien que
+  //     POST {"url":"http://10.0.0.5/tiktok.com"}
+  // faisait joindre une adresse du réseau interne depuis l'hébergeur.
+  //
+  // Un contrôle par chemin d'appel se périme au premier chemin ajouté. Celui-ci
+  // est à la porte : tout ce qui suit travaille sur une URL déjà validée.
+  const cible = urlSure(url);
+  if (!cible) return json({ error: "invalid_url" }, 400);
+
   try {
     let result = null;
-    if (/tiktok\.com/i.test(url)) {
+    const voie = aiguillage(cible);
+    if (voie === "tiktok") {
       result = await handleTikTok(url, origineAutorisee(req), destination);
-    } else if (/google\.[a-z.]+\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|maps\.google|share\.google/i.test(url)) {
+    } else if (voie === "maps") {
       result = await handleGoogleMaps(url);
     } else {
       result = await handleGeneric(url);
