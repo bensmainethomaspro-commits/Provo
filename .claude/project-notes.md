@@ -115,7 +115,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   | Fonction | Remplacé par | État |
   |---|---|---|
   | `enrich-place` | JSON-LD schema.org du site + OpenStreetMap | **fait** |
-  | `read-booking` | lecture par règles (dates, heures, adresses) | à faire |
+  | `read-booking` | lecture par règles (dates, heures, adresses) | **fait** |
   | `read-receipt` | OCR dans le navigateur | à faire |
   | `extract-place` | l'échelle de repli, qui existe déjà | à faire |
 
@@ -134,7 +134,24 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   · Le contrôle d'origine reste, avec un autre motif : ce n'est plus le crédit
     qu'il protège, c'est la bande passante de l'hébergeur.
 
-  **Le découpeur de types.** `scripts/verif-fiche.mjs` doit exécuter du
+  **`read-booking`, ce qui a été appris.** Une confirmation n'est pas de la
+  prose : c'est un formulaire déguisé, écrit pour être lu vite par quelqu'un de
+  pressé. Des règles le lisent aussi bien.
+  · **La date est le seul champ qui fasse vraiment mal.** « 09/12 » se lit dans
+    les deux sens ; quand rien ne tranche on prend l'ordre français ET on
+    abaisse la confiance. Quand un des deux nombres dépasse 12, l'ambiguïté
+    tombe d'elle-même. Une fausse date se découvre le jour du départ.
+  · Sans année, on prend celle qui vient — et on le signale.
+  · Quatre pièges trouvés par le test, tous du même genre : une alternation
+    prend le PREMIER qui marche (« sept » l'emportait sur « september ») ; une
+    étiquette écrite avec une majuscule en tête de courriel (« Hôtel ») ne
+    correspond pas à un motif en minuscules ; `\s` franchit les retours à la
+    ligne et colle le mot suivant au nom du lieu ; et le premier motif trouvé
+    n'est pas le bon — « Votre billet de train » masquait « Dossier : TR88201 »
+    trois lignes plus bas. Il faut parcourir TOUTES les correspondances.
+
+  **Le découpeur de types**, dans `scripts/ts-sans-types.mjs` — partagé, parce
+  qu'il a été réécrit trois fois de suite avec les mêmes pièges (règle E13). `scripts/verif-fiche.mjs` doit exécuter du
   TypeScript Deno sous Node. Retirer les annotations au motif dévorait les
   expressions régulières du code (`/^(\d{1,2}):(\d{2})/` contient « ) … : … {
   »). Il travaille désormais LIGNE PAR LIGNE, et seulement sur les lignes de

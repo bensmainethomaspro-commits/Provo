@@ -18,6 +18,7 @@
     "verif-aiguillage": "node scripts/verif-aiguillage.mjs",
     "verif-date-locale": "node scripts/verif-date-locale.mjs",
     "verif-fiche": "node scripts/verif-fiche.mjs",
+    "verif-reservation": "node scripts/verif-reservation.mjs",
     "perf": "node scripts/perf.mjs",
     "sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",

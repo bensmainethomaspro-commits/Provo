@@ -21,57 +21,17 @@
  * Usage :  node scripts/verif-fiche.mjs
  */
 import { readFileSync } from 'node:fs';
+import { decouper } from './ts-sans-types.mjs';
 
 const src = readFileSync(
   new URL('../supabase/functions/enrich-place/index.ts', import.meta.url), 'utf8');
-const bloc = src.slice(
-  src.indexOf('const JOURS'),
-  src.indexOf("// ── Point d'entrée"));
-// Le TypeScript tombe, la logique reste.
-//
-// LIGNE PAR LIGNE, et seulement sur les lignes de DÉCLARATION. Un balayage sur
-// tout le bloc dévorait les expressions régulières du code : dans
-// `/^(\\d{1,2}):(\\d{2})/`, le motif « ) … : … { » du type de retour trouvait
-// une correspondance et rendait une expression invalide. Les annotations vivent
-// sur les signatures, les expressions régulières dans les corps : les séparer
-// suffit à ne plus se marcher dessus.
-const DECLARATION = /^\s*(export\s+)?(async\s+)?(function\b|const\s+\w+\s*[:=])/;
-const sansTypes = (t) => t.split('\n').map((ligne) => {
-  if (!DECLARATION.test(ligne)) return ligne;
-  // Le type de RETOUR se retire par découpe, pas par motif : il peut lui-même
-  // contenir des accolades (`): { prixMin: number | null } {`), et aucun motif
-  // simple ne sait où il commence. La parenthèse fermante des paramètres, elle,
-  // est toujours la dernière avant l'accolade d'ouverture.
-  const iAccolade = ligne.lastIndexOf('{');
-  const iParen = iAccolade < 0 ? -1 : ligne.lastIndexOf(')', iAccolade);
-  // Sans parenthèse avant l'accolade, ce n'est pas une signature mais une
-  // constante typée (`const JOURS: Record<…> = {`) : on ne découpe rien.
-  // Une fonction fléchée garde sa flèche : elle vit entre la parenthèse et
-  // l'accolade, exactement là où passe la découpe.
-  const fleche = ligne.slice(iParen + 1, iAccolade).includes('=>') ? ' =>' : '';
-  const nette = ligne.trimEnd().endsWith('{') && iParen > 0
-    ? `${ligne.slice(0, iParen + 1)}${fleche} {`
-    : ligne;
-  return nette
-    .replace(/:\s*Record<[^>]*>(\[\])?/g, '')
-    .replace(/:\s*(unknown|string|number|boolean|any)(\[\])?/g, '');
-}).join('\n')
-  // Les assertions, elles, sont dans les corps — mais elles ont une forme
-  // reconnaissable, qui ne ressemble à rien d'autre.
-  // `null as number | null` : sans avaler l'union, il restait « null | null »
-  // — un OU BINAIRE, qui vaut 0. Le défaut était dans ce découpeur, pas dans
-  // la fonction Edge ; mais il rendait le test vert sur des prix faux, ce qui
-  // est pire qu'un test rouge.
-  .replace(/\s+as\s+[A-Za-z0-9_$]+(<[^>]*>)?(\[\])?(\s*\|\s*[A-Za-z0-9_$]+)*/g, '')
-  .replace(/\)!\./g, ').')
-  .replace(/(\w)!\./g, '$1.');
-
+const bloc = decouper(src, 'const JOURS', "// ── Point d'entrée");
 // `texteLisible` vit plus haut dans le fichier : la lecture des `meta` s'en sert.
-const util = src.slice(src.indexOf('function texteLisible'), src.indexOf('function imageDeLaPage'));
+const util = decouper(src, 'function texteLisible', 'function imageDeLaPage');
 
 const { lireLesDonnees, horairesDepuisSpec, fourchette } = new Function(
-  `${sansTypes(util)}
-   ${sansTypes(bloc)}
+  `${util}
+   ${bloc}
    return { lireLesDonnees, horairesDepuisSpec, fourchette };`)();
 
 const ld = (o) => `<html><head><script type="application/ld+json">${JSON.stringify(o)}</script></head><body>x</body></html>`;
