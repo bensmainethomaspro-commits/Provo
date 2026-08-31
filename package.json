@@ -17,6 +17,7 @@
     "verif-notif-depense": "node scripts/verif-notif-depense.mjs",
     "verif-aiguillage": "node scripts/verif-aiguillage.mjs",
     "verif-date-locale": "node scripts/verif-date-locale.mjs",
+    "verif-fiche": "node scripts/verif-fiche.mjs",
     "perf": "node scripts/perf.mjs",
     "sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",

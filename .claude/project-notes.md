@@ -105,6 +105,46 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Tout gratuit : plus aucun appel payant** (31 août 2026, en cours). Demandé :
+  « je veux que tout soit gratuit, plus d'API ». Quatre fonctions Edge
+  appelaient le modèle payant. Arbitré avec l'utilisateur : **on garde les
+  capacités, on remplace le moyen** — couper net aurait fait tomber trois
+  principes de `CLAUDE.md` d'un coup (« aucune fiche ne doit être incomplète »,
+  les dépenses en un geste, coller une confirmation).
+
+  | Fonction | Remplacé par | État |
+  |---|---|---|
+  | `enrich-place` | JSON-LD schema.org du site + OpenStreetMap | **fait** |
+  | `read-booking` | lecture par règles (dates, heures, adresses) | à faire |
+  | `read-receipt` | OCR dans le navigateur | à faire |
+  | `extract-place` | l'échelle de repli, qui existe déjà | à faire |
+
+  **`enrich-place`, ce qui a été appris.** Le modèle lisait en langue naturelle
+  ce que les sites publient DÉJÀ en JSON-LD pour Google : horaires, fourchette
+  de prix, téléphone, description. Sur ces champs-là, les données structurées
+  sont **plus sûres** que la lecture par un modèle — on recopie ce que le lieu
+  affirme de lui-même au lieu de le déduire — et elles sont instantanées.
+  · Les horaires ressortent au format d'OpenStreetMap, le seul que l'app sache
+    lire (`ouvertMaintenant`) : deux formats auraient voulu dire deux lecteurs.
+  · **`priceRange: "€€"` n'est jamais converti en euros.** C'est une catégorie
+    de prix, pas un prix, et une fourchette inventée se recopie dans le budget
+    de quelqu'un. Seuls les chiffres comptent.
+  · `lirePage` rend maintenant le HTML BRUT en plus du texte : les données
+    structurées vivent dans un `<script>`, que le nettoyeur retirait justement.
+  · Le contrôle d'origine reste, avec un autre motif : ce n'est plus le crédit
+    qu'il protège, c'est la bande passante de l'hébergeur.
+
+  **Le découpeur de types.** `scripts/verif-fiche.mjs` doit exécuter du
+  TypeScript Deno sous Node. Retirer les annotations au motif dévorait les
+  expressions régulières du code (`/^(\d{1,2}):(\d{2})/` contient « ) … : … {
+  »). Il travaille désormais LIGNE PAR LIGNE, et seulement sur les lignes de
+  déclaration : les annotations vivent sur les signatures, les expressions
+  régulières dans les corps. Et `null as number | null` doit être avalé
+  entièrement — sans l'union, il reste « null | null », un OU binaire qui vaut
+  **0**, et le test passait au vert sur des prix faux.
+
+
+
 - **Le formulaire de dépense EST celui de Tricount** (17 août 2026). Demandé
   mot pour mot, capture à l'appui : « fais exactement la même interface que
   Tricount pour l'ajout des dépenses, avec toutes les fonctionnalités que cela

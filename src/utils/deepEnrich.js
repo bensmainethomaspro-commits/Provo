@@ -32,7 +32,10 @@ export function signatureEnrich(a) {
 }
 
 // Trois semaines : assez pour qu'un horaire de saison ait changé, assez long
-// pour ne pas rappeler un service payant sans raison.
+// pour ne pas retélécharger le site d'un lieu à chaque ouverture de l'app.
+// (Le délai avait été posé pour ne pas rappeler un service PAYANT ; la lecture
+// est gratuite depuis qu'elle passe par les données structurées, mais elle
+// coûte toujours une page à quelqu'un d'autre.)
 const PEREMPTION_MS = 21 * 24 * 3600 * 1000;
 
 function aRevoir(a, maintenant) {
