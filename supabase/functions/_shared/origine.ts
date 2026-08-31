@@ -1,11 +1,15 @@
 /**
  * Qui a le droit d'appeler nos fonctions Edge.
  *
- * Ce garde-fou existait, écrit une fois dans `extract-place`, et les trois
- * fonctions ajoutées ensuite ne l'ont pas repris — `read-booking`,
- * `read-receipt` et `enrich-place` appellent pourtant toutes le modèle payant.
- * La clé publiable voyage dans le paquet du navigateur : n'importe qui peut la
- * lire, donc n'importe quel site pouvait faire dépenser le crédit du compte.
+ * Ce garde-fou existait, écrit une fois dans `extract-place`, et les fonctions
+ * ajoutées ensuite ne l'ont pas repris — `read-booking` et `enrich-place`
+ * appelaient pourtant toutes deux le modèle payant. La clé publiable voyage
+ * dans le paquet du navigateur : n'importe qui peut la lire, donc n'importe
+ * quel site pouvait faire dépenser le crédit du compte.
+ *
+ * Plus rien n'est payant ici depuis « tout gratuit », et le motif a changé sans
+ * que la règle bouge : ce n'est plus le crédit qu'on protège, c'est la bande
+ * passante de l'hébergeur — ces fonctions vont chercher des pages entières.
  *
  * D'où ce fichier partagé plutôt qu'une quatrième copie : une règle recopiée
  * finit par ne plus suivre. Le dossier `_shared` n'a pas d'`index.ts`, la

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/vendor-tesseract.mjs",
+    "predev": "node scripts/vendor-tesseract.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -20,6 +22,7 @@
     "verif-fiche": "node scripts/verif-fiche.mjs",
     "verif-reservation": "node scripts/verif-reservation.mjs",
     "verif-legende": "node scripts/verif-legende.mjs",
+    "verif-ticket": "node scripts/verif-ticket.mjs",
     "perf": "node scripts/perf.mjs",
     "sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
@@ -30,9 +33,12 @@
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
     "@supabase/supabase-js": "^2.108.2",
+    "@tesseract.js-data/fra": "^1.0.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "tesseract.js": "^7.0.0",
+    "tesseract.js-core": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

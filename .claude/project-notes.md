@@ -87,10 +87,11 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
 
 1. Seules les origines de l'app déclenchent l'appel (`origineAutorisee`).
    **Ce garde-fou vit dans `supabase/functions/_shared/origine.ts`, importé par
-   les quatre fonctions.** Écrit une seule fois dans `extract-place`, il n'avait
-   pas suivi les trois ajoutées ensuite — `read-booking`, `read-receipt` et
-   `enrich-place` appelaient toutes le modèle payant sans aucun contrôle. Toute
-   nouvelle fonction qui dépense l'importe. Le dossier `_shared` n'a pas
+   les fonctions qui vont chercher des pages.** Écrit une seule fois dans
+   `extract-place`, il n'avait pas suivi celles ajoutées ensuite — `read-booking`
+   et `enrich-place` appelaient le modèle payant sans aucun contrôle. Il protège
+   maintenant la bande passante et non plus le crédit, et toute nouvelle fonction
+   qui va chercher quelque chose au dehors l'importe. Le dossier `_shared` n'a pas
    d'`index.ts` : la boucle de déploiement l'ignore comme fonction, et le CLI
    l'embarque dans chaque paquet qui l'importe.
    Ce que ce contrôle **ne** fait pas : l'en-tête `Origin` n'est imposé que par
@@ -105,7 +106,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
-- **Tout gratuit : plus aucun appel payant** (31 août 2026, en cours). Demandé :
+- **Tout gratuit : plus aucun appel payant** (31 août 2026, terminé). Demandé :
   « je veux que tout soit gratuit, plus d'API ». Quatre fonctions Edge
   appelaient le modèle payant. Arbitré avec l'utilisateur : **on garde les
   capacités, on remplace le moyen** — couper net aurait fait tomber trois
@@ -116,7 +117,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   |---|---|---|
   | `enrich-place` | JSON-LD schema.org du site + OpenStreetMap | **fait** |
   | `read-booking` | lecture par règles (dates, heures, adresses) | **fait** |
-  | `read-receipt` | OCR dans le navigateur | à faire |
+  | `read-receipt` | OCR dans le navigateur (fonction supprimée) | **fait** |
   | `extract-place` | l'échelle de repli + lecture de légende par règles | **fait** |
 
   **`enrich-place`, ce qui a été appris.** Le modèle lisait en langue naturelle
@@ -168,6 +169,44 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     l'épingle utilisait `\s`, qui franchit les retours à la ligne — deux
     épingles sur deux lignes n'en faisaient qu'une. Corrigé dans les trois
     motifs concernés.
+
+  **`read-receipt`, ce qui a été appris.** La fonction n'a pas été remplacée :
+  elle a été **supprimée**. La photo se lit maintenant sur le téléphone, avec
+  Tesseract en WebAssembly (`src/utils/ocrTicket.js`), et l'image ne part plus
+  nulle part — ce qui règle au passage une question qu'on n'avait jamais posée :
+  un ticket de caisse porte le nom de la carte, l'heure et le lieu.
+  · **Le moteur est servi par l'app, pas par un CDN.** `scripts/vendor-tesseract.mjs`
+    le recopie depuis node_modules dans `public/tesseract/` en `prebuild`. Servi
+    depuis notre origine, il passe par le service worker et se garde comme le
+    reste : le deuxième ticket se lit sans réseau, et l'app Android — qui n'a pas
+    d'origine distante — fonctionne tout court. Un CDN aurait été un aller-retour
+    réseau au milieu d'un dîner à l'étranger.
+  · Douze mégaoctets recopiés, **~4,5 Mo par appareil** : trois cœurs WebAssembly
+    (SIMD relâché, SIMD, aucun — impossible de deviner à la compilation lequel le
+    téléphone saura lire), dont un seul est téléchargé. Non versionnés.
+  · **L'interprétation est séparée du moteur.** `src/utils/ticket.js` est pur :
+    quel nombre est le total, c'est là que ça se décide, donc ça se vérifie sans
+    navigateur (`npm run verif-ticket`, 19 cas). Trois règles y sont figées : le
+    total ANNONCÉ l'emporte ; « sous-total », « TVA », « rendu monnaie » ne sont
+    jamais le total ; rien de lisible → rien du tout, jamais un chiffre au hasard.
+  · **Un OCR ne corrige pas les chiffres.** Il confond O/0 et S/5 sur le papier
+    thermique ; deviner à sa place, c'est inventer un montant. On ne normalise
+    que la ponctuation et les espaces, et un montant que le ticket n'a pas
+    désigné lui-même sort en `confiance: 'basse'`.
+  · **Perte assumée** : sur un ticket froissé ou surexposé, c'est franchement
+    moins bon qu'une lecture par un modèle, et il faut trois à dix secondes. Le
+    formulaire le porte — un compteur d'avancement, un montant présenté comme une
+    proposition, et la saisie à la main qui reste possible pendant la lecture.
+  · **Le parcours lit un vrai ticket, pour de vrai** (`scripts/fixtures/ticket.jpg`).
+    C'est possible justement parce que le moteur vient de chez nous : il traverse
+    la coupure réseau du test comme n'importe quel fichier de l'app. Retirer le
+    modèle de langue fait tomber le parcours — vérifié. C'est le seul endroit qui
+    attrape un mauvais chemin dans `vendor-tesseract.mjs`.
+  · Un détail qui n'en est pas un : `String(48.4)` écrivait « 48.4 » dans un champ
+    dont le repère est « 0,00 ». L'app écrit maintenant « 48,40 », comme on l'y
+    taperait. Et la date du ticket remplit le champ `Quand` — jamais une date à
+    venir, ce serait une faute de lecture (2062 pour 2026) et une dépense datée
+    du futur disparaît du bilan.
 
   **Le découpeur de types**, dans `scripts/ts-sans-types.mjs` — partagé, parce
   qu'il a été réécrit trois fois de suite avec les mêmes pièges (règle E13). `scripts/verif-fiche.mjs` doit exécuter du

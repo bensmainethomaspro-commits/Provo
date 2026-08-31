@@ -1321,15 +1321,16 @@ export function ressembleAUneReservation(texte) {
  * Fait lire un ticket de caisse. Rend ce qui a été lu — jamais une dépense
  * enregistrée : c'est l'utilisateur qui valide, après relecture.
  */
-export async function lireRecu(imageDataUrl) {
+export async function lireRecu(imageDataUrl, surAvancement) {
+  // La lecture se fait SUR LE TÉLÉPHONE depuis le passage au tout-gratuit : la
+  // photo ne part plus nulle part, et il n'y a plus rien à payer. Le moteur est
+  // chargé à la demande — d'où l'import dynamique, qui le garde hors du paquet
+  // principal pour tous ceux qui ne photographient jamais de ticket.
   try {
-    const { data, error } = await supabase.functions.invoke('read-receipt', {
-      body: { image: imageDataUrl },
-    });
-    if (error) return { error: 'appel_impossible' };
-    return data || { error: 'reponse_vide' };
+    const { lireTicketImage } = await import('./ocrTicket');
+    return await lireTicketImage(imageDataUrl, surAvancement);
   } catch {
-    return { error: 'hors_ligne' };
+    return { error: 'illisible' };
   }
 }
 
