@@ -62,6 +62,7 @@ Produit et UX, puis retour au début.
 | A-029 | 2026-08-31 | Fiabilité | `voyageSansVoyageur` (`helpers.js:1476`) ne nettoie pas `payerId`, et sort même en `return e` quand le retiré n'était pas participant. `calcDebts` crédite alors `bal[exp.payerId]` sur un id absent de `travelers` (`ExpensesTab.jsx:81`) : le panneau des dettes réaffiche une ligne au nom d'un identifiant technique — le symptôme exact d'A-025, par l'autre champ | Majeur | PROPOSÉ |
 | A-030 | 2026-08-31 | Fiabilité | Notification de dépense tirée à la saisie (`useTrips.js:790`) alors que l'écriture part 700 ms plus tard (`:224`). `notifier-depense` relit une fois après 1 500 ms puis abandonne (`index.ts:145-151`), et l'`invoke` est un `.catch(() => {})`. Hors ligne ou en réseau lent — le terrain de l'app — la notification est perdue sans trace ni reprise | Mineur | PROPOSÉ |
 | A-031 | 2026-08-31 | Dette technique | Trois liaisons mortes signalées par ESLint dans les fichiers touchés depuis le dernier audit : `CATEGORIES` (`ExpensesTab.jsx:3`), `useEffect` (`ActivityCard.jsx:1`), `signOut` (`App.jsx:16`) | Mineur | CORRIGÉ |
+| A-032 | 2026-09-07 | - | Contrôle de pertinence : 2 commits depuis `23700ac`, dont **un seul significatif** (`01e69f7`, lecture de ticket hors ligne par Tesseract ; `ed16f77` ne touche que documentation et workflow). Seuil de 3 non atteint, aucun fichier source ouvert. Dernier audit effectif inchangé : 2026-08-31, prochain axe rotatif inchangé : Performance et coûts | - | PASSÉ |
 
 <!--
 Exemple de ligne, à supprimer :
