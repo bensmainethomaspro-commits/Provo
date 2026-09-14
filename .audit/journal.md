@@ -62,6 +62,8 @@ Produit et UX, puis retour au début.
 | A-029 | 2026-08-31 | Fiabilité | `voyageSansVoyageur` (`helpers.js:1476`) ne nettoie pas `payerId`, et sort même en `return e` quand le retiré n'était pas participant. `calcDebts` crédite alors `bal[exp.payerId]` sur un id absent de `travelers` (`ExpensesTab.jsx:81`) : le panneau des dettes réaffiche une ligne au nom d'un identifiant technique — le symptôme exact d'A-025, par l'autre champ | Majeur | PROPOSÉ |
 | A-030 | 2026-08-31 | Fiabilité | Notification de dépense tirée à la saisie (`useTrips.js:790`) alors que l'écriture part 700 ms plus tard (`:224`). `notifier-depense` relit une fois après 1 500 ms puis abandonne (`index.ts:145-151`), et l'`invoke` est un `.catch(() => {})`. Hors ligne ou en réseau lent — le terrain de l'app — la notification est perdue sans trace ni reprise | Mineur | PROPOSÉ |
 | A-031 | 2026-08-31 | Dette technique | Trois liaisons mortes signalées par ESLint dans les fichiers touchés depuis le dernier audit : `CATEGORIES` (`ExpensesTab.jsx:3`), `useEffect` (`ActivityCard.jsx:1`), `signOut` (`App.jsx:16`) | Mineur | CORRIGÉ |
+| A-033 | 2026-09-14 | - | Contrôle de pertinence : **zéro commit sur `main` depuis le passage du 2026-09-07**. `main` est toujours sur `ed16f77`. Seuil de 3 commits significatifs non atteint pour la deuxième semaine d'affilée, aucun fichier source ouvert. Dernier audit effectif inchangé : 2026-08-31. Prochain axe rotatif inchangé : Performance et coûts. Numéro A-032 volontairement sauté : il est pris par le passage du 2026-09-07, qui vit dans la PR #85 non fusionnée | - | PASSÉ |
+| A-034 | 2026-09-14 | Méthode | Trois PR d'audit ouvertes et jamais fusionnées (#80 du 2026-08-24, #81 du 2026-08-31, #85 du 2026-09-07), et **deux d'entre elles sont devenues dangereuses**. #80 et #81 sont branchées sur `efa0014` : leur diff contre `main` **annule** le passage au tout-gratuit — elles recréent `supabase/functions/read-receipt/index.ts` (153 lignes) et suppriment `src/utils/ocrTicket.js`, `src/utils/ticket.js` et les sept scripts de vérification livrés depuis. Les fusionner remettrait la lecture de ticket sur le serveur. Conséquence sur la mémoire : le journal de `main` ignore deux passages, et #80 porte un constat jamais consigné ici, sous un identifiant **A-027 qui désigne déjà la faille SSRF sur `main`** — deux constats distincts, un seul numéro | Majeur | PROPOSÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -128,3 +130,5 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
+| 2026-09-07 | PASSÉ | - | A-032 (dans la PR #85, non fusionnée) |
+| 2026-09-14 | PASSÉ | - | A-033, A-034 |

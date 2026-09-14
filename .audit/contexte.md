@@ -328,6 +328,17 @@ Ne pas redécouvrir ce calcul : il est la preuve du constat A-012.
 - La branche de travail imposée par l'environnement d'exécution peut différer du
   `claude/audit-AAAA-MM-JJ` attendu. L'invariant à tenir est le préfixe
   `claude/`, jamais un push sur la branche par défaut.
+- **Les PR d'audit ne sont pas fusionnées automatiquement, et elles vieillissent
+  mal.** Relevé le 2026-09-14 : #80, #81 et #85 sont ouvertes depuis trois
+  semaines. Chacune est branchée sur le `main` de son jour, donc son diff contre
+  le `main` actuel **annule** tout ce qui a été livré entre-temps : #80 et #81
+  recréent `read-receipt/index.ts` et suppriment `ocrTicket.js`. Une PR d'audit
+  qui n'est pas fusionnée dans la semaine doit être refaite, pas fusionnée.
+  Conséquence de méthode, à tenir dès la PHASE 0 : **lister les PR `claude/`
+  ouvertes avant de numéroter un constat**, sinon deux passages attribuent le
+  même identifiant à deux constats différents (arrivé avec A-027 et A-032). Le
+  journal de `main` n'est pas la mémoire complète tant que ces PR restent
+  ouvertes.
 
 ## Décisions déjà tranchées
 
