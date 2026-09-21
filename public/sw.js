@@ -95,7 +95,9 @@ self.addEventListener('fetch', (e) => {
 // parce qu'une notification se lit d'un coup d'oeil, sur un écran verrouillé,
 // en marchant.
 self.addEventListener('push', (e) => {
-  let d = {};
+  // Les deux chemins affectent `d` : l'initialiser en plus ne servait à rien
+  // (signalé par ESLint), et laissait croire qu'un troisième cas existait.
+  let d;
   try { d = e.data ? e.data.json() : {}; } catch { d = { corps: e.data && e.data.text() }; }
   const titre = d.titre || 'Provo';
   e.waitUntil(self.registration.showNotification(titre, {
