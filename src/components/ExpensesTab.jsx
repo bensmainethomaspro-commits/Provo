@@ -8,7 +8,7 @@ import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRate
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
 
-function SwipeableExpenseItem({ exp, onDelete, children }) {
+function SwipeableExpenseItem({ onDelete, children }) {
   const [offset, setOffset] = useState(0);
   const swRef = useRef({ startX: null, startY: null, dragging: false });
   // Un glissement se termine par un clic de synthèse. Depuis que la ligne
@@ -1146,7 +1146,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             const modifiable = !exp.isSettlement && !!onUpdateExpense;
             const Ligne = modifiable ? 'button' : 'div';
             return (
-              <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
+              <SwipeableExpenseItem key={exp.id} onDelete={() => onDeleteExpense(exp.id)}>
                 <Ligne
                   className={`expense-item${modifiable ? ' expense-item--ouvrable' : ''}`}
                   {...(modifiable ? {
