@@ -74,12 +74,24 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   constat, pas un raccourci. Vérifié le 2026-08-31 : il n'en reste aucune dans
   `src/` (A-024 clos). Le même fichier porte `voyageSansVoyageur` (`:1476`),
   qui retire un voyageur des dépenses — il nettoie `participantIds` et `parts`,
-  **pas `payerId`** (A-029, ouvert).
-- **Dates.** La date du jour s'écrit avec `localDateStr` (`useTrips.js:11`),
+  **pas `payerId`**, et c'est voulu : effacer le payeur rendrait la dépense payée
+  par personne et fausserait le solde de tous les autres. Tout affichage d'un
+  payeur traverse `getName`, qui replie sur « Voyageur retiré ». C'était A-029,
+  **arbitré « non reproduit » le 2026-08-31** — ne pas le remonter à nouveau sur
+  la seule lecture du chemin de données : dérouler l'affichage d'abord.
+- **Dates.** La date du jour s'écrit avec `dateLocale` (`helpers.js:1596` ; elle
+  s'appelait `localDateStr` et vivait en privé dans `useTrips.js` avant A-028),
   jamais avec `toISOString().slice(0,10)` : la seconde est en UTC et décale la
   journée d'un cran pendant la nuit en Europe, et toute la matinée en Asie.
-  C'est une app de voyage : les fuseaux ne sont pas un cas limite. Un seul
-  endroit y déroge encore, `ExpensesTab.jsx:335` (A-028).
+  C'est une app de voyage : les fuseaux ne sont pas un cas limite.
+  **A-028 est clos** : `dateLocale()` vit dans `helpers.js:1596` et
+  `ExpensesTab.jsx:348` l'appelle. Relevé le 2026-09-21, à savoir avant de
+  crier à la faille : la MÊME expression est encore recopiée en clair à cinq
+  endroits — `NewTripModal.jsx:7`, `TimelineView.jsx:236`, `Dashboard.jsx:14`,
+  `TripView.jsx:391`, `:402` et `:798`. Les six sont **justes** (heure locale) :
+  ce n'est pas un bug, c'est la recopie qui a produit A-028 au départ, et c'est
+  le seul endroit où un futur A-028 peut renaître. Vérifier qu'elles sont encore
+  justes, ne pas les compter comme un constat tant qu'elles le sont.
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
   liens courts et extrait les métadonnées d'une page tierce. Utilise
@@ -102,8 +114,24 @@ comme constat, pas comme état de fait à re-vérifier à chaque audit.
 | `push-tick` | rappels planifiés | aucun | non (assumé, voir project-notes) |
 | `notifier-depense` | prévient les autres voyageurs | aucun | **oui**, plus jeton utilisateur et appartenance au voyage |
 
-`read-receipt` a été **supprimée** : la photo de ticket se lit désormais sur le
-téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte plus l'appareil.
+`read-receipt` a été supprimée **du dépôt** : la photo de ticket se lit désormais
+sur le téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte plus l'appareil.
+
+**Mais elle est toujours déployée**, vérifié par MCP le 2026-09-21 : statut
+ACTIVE, version 5, et son code lu depuis Supabase appelle bien
+`api.anthropic.com` avec `ANTHROPIC_API_KEY`. C'est le constat A-032, et c'est
+surtout un fait de méthode à retenir :
+
+> **Le dépôt n'est pas la source de vérité de ce qui est appelable.** La boucle
+> de `deploy-edge-functions.yml` parcourt le dossier et déploie ce qu'elle y
+> trouve — elle ne supprime jamais. Une fonction retirée du dépôt reste en
+> ligne, appelable, et hors de vue de toute relecture puisque son code n'existe
+> plus nulle part ici.
+
+Conséquence pour l'auditeur : à chaque passage, comparer
+`mcp__Supabase__list_edge_functions` avec `ls supabase/functions`. Un écart est
+un constat, pas un détail. `_shared` n'apparaît pas dans la liste déployée, c'est
+normal — il n'a pas d'`index.ts`.
 
 `notifier-depense` (ajoutée le 2026-08-17) est la seule fonction qui tourne en
 `SUPABASE_SERVICE_ROLE_KEY`, donc au-dessus de RLS. Trois contrôles la bordent,
@@ -159,6 +187,20 @@ A-027 est un `urlSure` dans `Deno.serve` (`index.ts:1488`), là où l'URL entre.
 Ne pas croire qu'un `_shared/` importé prouve une couverture : vérifier les
 points d'appel.
 
+**A-027 a été posé (relevé le 2026-09-21), et il ne ferme pas tout.** La porte
+existe bien dans `Deno.serve` (`extract-place/index.ts:1188`) et l'aiguillage se
+décide sur l'hôte. Ce qui reste ouvert, c'est le SAUT : `extract-place` garde
+`redirect: "follow"` à trois endroits (`:269`, `:720`, `:791`), donc une URL
+publique qui redirige vers une adresse interne est jointe sans repasser par
+`urlSure`. La différence avec `enrich-place` (`:133-176`, `redirect: "manual"`,
+`urlSure` à chaque saut, cinq sauts au plus) est donc toujours là : ce n'est plus
+l'absence de filtre, c'est un filtre qu'une redirection contourne. C'est A-033,
+et c'est A-019 non porté d'une fonction à l'autre.
+
+`scripts/verif-aiguillage.mjs` ne contient **aucun** cas de redirection : ses
+25 cas verts portent sur l'aiguillage et sur `urlSure`, pas sur ce chemin. Ne pas
+lire son vert comme une couverture du saut.
+
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
 `trips`. Il n'y a pas de schéma relationnel côté application. C'est un choix, pas
@@ -206,9 +248,12 @@ Ce dépôt possède déjà une mémoire d'amélioration continue. Elle prime sur
 
 ## Conventions assumées, à ne jamais signaler comme défauts
 
-- **54 erreurs et 3 avertissements ESLint sur main.** Dette connue, non bloquante.
-  Consigne : ne pas aggraver. Ne la signale que si le nombre a augmenté depuis le
-  dernier audit, en chiffrant l'écart.
+- **47 erreurs et 4 avertissements ESLint sur `main`** (relevé le 2026-09-21 ;
+  ce compte disait « 54 et 3 » depuis juillet, il était faux de deux audits).
+  Dette connue, non bloquante. Consigne : ne pas aggraver. Ne la signale que si
+  le nombre a augmenté depuis le dernier audit, en chiffrant l'écart. Le chiffre
+  de référence qui fait foi est celui de la dernière entrée du journal, pas
+  celui-ci : tenir les deux à jour ensemble.
 - Absence totale de tests automatisés. La vérification se fait au rendu réel, via
   `npm run build`, `vite preview` et des scripts Playwright ponctuels en 390 × 844.
   Ne recommande la mise en place d'une suite de tests que si un bug de régression
@@ -328,6 +373,24 @@ Ne pas redécouvrir ce calcul : il est la preuve du constat A-012.
 - La branche de travail imposée par l'environnement d'exécution peut différer du
   `claude/audit-AAAA-MM-JJ` attendu. L'invariant à tenir est le préfixe
   `claude/`, jamais un push sur la branche par défaut.
+- **Le dépôt arrive sans `node_modules`.** Rien ne tourne — ni `eslint`, ni
+  `build`, ni les suites — avant `npm ci` (une minute environ). C'est la
+  première commande de l'audit, pas une réaction à une erreur.
+- **`playwright` n'est PAS dans `package.json`**, alors que `scripts/parcours.mjs`
+  et `scripts/verif-ui.mjs` l'importent. Pour les jouer :
+  `npm install --no-save --no-audit playwright` (le `--no-save` est ce qui
+  garantit que `package.json` et le verrou ne bougent pas — les toucher est
+  interdit à la routine). Chromium est déjà là, ne jamais lancer
+  `playwright install`.
+- **Le parcours exige un aperçu déjà servi** sur `http://localhost:4173` ; il
+  échoue en le disant. Donc : `npm run build`, puis
+  `(setsid npx vite preview --port 4173 --strictPort &) ; sleep 4`.
+- **Le dépôt fusionne en squash** : un commit sur `main` vaut une pull request
+  entière, donc une fonctionnalité entière. Le seuil de trois commits
+  significatifs de la Phase 0 sous-estime alors le volume d'un facteur qui n'a
+  rien de constant — deux commits ont valu 2 300 lignes le 2026-09-21. Mesurer
+  avec `git diff --stat <dernier-audit>..HEAD` avant de conclure à un audit
+  PASSÉ.
 
 ## Décisions déjà tranchées
 

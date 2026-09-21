@@ -62,6 +62,17 @@ Produit et UX, puis retour au début.
 | A-029 | 2026-08-31 | Fiabilité | `voyageSansVoyageur` (`helpers.js:1476`) ne nettoie pas `payerId`, et sort même en `return e` quand le retiré n'était pas participant. `calcDebts` crédite alors `bal[exp.payerId]` sur un id absent de `travelers` (`ExpensesTab.jsx:81`) : le panneau des dettes réaffiche une ligne au nom d'un identifiant technique — le symptôme exact d'A-025, par l'autre champ | Majeur | PROPOSÉ |
 | A-030 | 2026-08-31 | Fiabilité | Notification de dépense tirée à la saisie (`useTrips.js:790`) alors que l'écriture part 700 ms plus tard (`:224`). `notifier-depense` relit une fois après 1 500 ms puis abandonne (`index.ts:145-151`), et l'`invoke` est un `.catch(() => {})`. Hors ligne ou en réseau lent — le terrain de l'app — la notification est perdue sans trace ni reprise | Mineur | PROPOSÉ |
 | A-031 | 2026-08-31 | Dette technique | Trois liaisons mortes signalées par ESLint dans les fichiers touchés depuis le dernier audit : `CATEGORIES` (`ExpensesTab.jsx:3`), `useEffect` (`ActivityCard.jsx:1`), `signOut` (`App.jsx:16`) | Mineur | CORRIGÉ |
+| A-027 | 2026-09-21 | Sécurité | Clos par `23700ac` : `urlSure` est à la porte (`extract-place/index.ts:1188`) et l'aiguillage se décide sur l'hôte (`:1108`), les 25 cas de `verif-aiguillage.mjs` figent l'attaque du constat. La couverture reste partielle — une redirection franchit la porte sans repasser par le filtre, c'est A-033, un constat distinct. Clôture inscrite au registre : l'arbitrage du 2026-08-31 ne l'avait écrite que dans sa prose | Majeur | CORRIGÉ |
+| A-028 | 2026-09-21 | Fiabilité | Clos par `23700ac` : `dateLocale()` (`helpers.js:1596`) est appelée par `ExpensesTab.jsx:348` et `useTrips.js:795`, `verif-date-locale.mjs` fige 9 cas. Plus aucun `toISOString().slice(0,10)` ne sert à dater une dépense. Même remarque : clôture inscrite au registre | Majeur | CORRIGÉ |
+| A-029 | 2026-09-21 | Fiabilité | **Non reproduit**, arbitré le 2026-08-31 et confirmé ici. `voyageSansVoyageur` ne nettoie pas `payerId`, et c'est voulu : effacer le payeur rendrait la dépense payée par personne et fausserait le solde de tous les autres. Tout affichage traverse `getName`, qui replie sur « Voyageur retiré ». Statut porté au registre pour qu'il ne soit plus remonté | Sans objet | REFUSÉ |
+| A-030 | 2026-09-21 | Fiabilité | Clos par `23700ac` : la notification est mise en file (`useTrips.js:86`) et ne part qu'après une écriture acceptée (`:240`, `:253`). Hors ligne, l'identifiant attend la première écriture qui passe. Même remarque : clôture inscrite au registre | Mineur | CORRIGÉ |
+| A-032 | 2026-09-21 | Sécurité | `read-receipt`, retirée du dépôt le 2026-08-31, est **toujours déployée et ACTIVE** chez Supabase (v5, relevée par MCP le 2026-09-21). Elle appelle `api.anthropic.com` avec `ANTHROPIC_API_KEY` dès que le secret est encore posé, accepte 1,5 Mo d'image par appel, et son seul filtre est `origineAutorisee` — qui rend `true` quand l'en-tête `Origin` est absent, soit exactement le cas d'un appel en ligne de commande. Son code ne vit plus dans le dépôt : ni relecture ni correctif ne sont possibles autrement que par le tableau de bord | Majeur | PROPOSÉ |
+| A-033 | 2026-09-21 | Sécurité | `extract-place` : la porte valide bien l'URL d'entrée (correctif A-027), mais trois `fetch` suivent ensuite les redirections tout seuls en `redirect: "follow"` (`:269`, `:720`, `:791`). Une URL publique qui redirige vers `169.254.169.254` ou `10.x` est donc jointe depuis l'hébergeur, et `handleGeneric` rend à l'appelant le titre et la description de la page atteinte. C'est A-019, corrigé dans `enrich-place` (`:133-176` : sauts à la main, `redirect: "manual"`, `urlSure` à chaque saut) et jamais porté ici. `verif-aiguillage.mjs` ne contient aucun cas de redirection : ses 25 cas verts ne disent rien de ce chemin | Majeur | PROPOSÉ |
+| A-034 | 2026-09-21 | Fiabilité | La première lecture de ticket exige 4,5 Mo de moteur, sans que rien ne le dise et sans que rien ne le précharge (`sw.js:7` ne met en cache que `/`). Hors ligne au premier ticket, le message accuse la photo — « Ce ticket n'a pas pu être lu » — alors que c'est le moteur qui manque. Le parcours ne couvre pas ce cas : son mode hors ligne laisse passer l'origine locale (`parcours.mjs:2203`), donc le moteur y est toujours servi | Majeur | PROPOSÉ |
+| A-035 | 2026-09-21 | Performance et coûts | 1,35 Mo d'icônes pour du 512 × 512 : `icon-512.png` et `apple-touch-icon.png` pèsent 673 ko chacune, soit ~2,5 octets par pixel. `index.html:17` demande la seconde en 512 × 512, et `manifest.json` la déclare EN PLUS comme capture d'écran « Dashboard Provo ». Plus lourd que tout le JavaScript de l'app (250 ko gzip), sur un produit mobile d'abord | Mineur | PROPOSÉ |
+| A-036 | 2026-09-21 | Performance et coûts | Le moteur OCR (4,5 Mo) se range dans le cache versionné `provo-v3`, que `activate` vide dès que le nom change (`sw.js:18`) : la prochaine montée de version le fait retélécharger au ticket suivant. Les tuiles de carte, elles, ont leur cache à part. Et `sw.js:82` rend `index.html` quand un `.wasm.js` manque et que le réseau est coupé — le moteur reçoit du HTML à exécuter | Mineur | PROPOSÉ |
+| A-037 | 2026-09-21 | Dette technique | Deux liaisons mortes signalées par ESLint dans des fichiers touchés depuis le dernier audit : `exp` dans `SwipeableExpenseItem` (`ExpensesTab.jsx:11`, transmis par le parent pour rien) et `let d = {}` dans le gestionnaire push (`sw.js:98`). 49 erreurs → 47 | Mineur | CORRIGÉ |
+| A-038 | 2026-09-21 | Produit et UX | Le message de lecture du ticket porte le compteur d'avancement ET le « vérifie avant d'enregistrer » — le seul garde-fou contre un montant mal lu — sans être une région live (`ExpensesTab.jsx:745`). Croisé en passant, pas au terme d'une revue d'interface : celle-là reste le travail de `/audit` | Mineur | CORRIGÉ |
 
 <!--
 Exemple de ligne, à supprimer :
@@ -69,6 +80,37 @@ Exemple de ligne, à supprimer :
 -->
 
 ## Dernier audit effectif
+
+Date : 2026-09-21
+Type : STANDARD (21 jours écoulés, soit trois semaines pile)
+Axes : Sécurité, Fiabilité, plus l'axe rotatif **Performance et coûts** — enfin
+consommé après quatre audits LÉGERS qui l'avaient repoussé.
+Prochain axe rotatif : Dette technique
+
+**Le seuil de commits a été franchi sciemment, et c'est à discuter.** La règle
+dit de s'arrêter en dessous de trois commits significatifs. Il y en a deux
+(`23700ac` et `01e69f7` ; `ed16f77` ne touche que de la documentation et un
+commentaire de workflow). Mais ces deux commits pèsent **2 329 insertions et
+905 suppressions sur 33 fichiers** : la réécriture de trois fonctions Edge, la
+suppression d'une quatrième, un module OCR entier, et les quatre correctifs de
+l'audit précédent que personne n'a relus. Le dépôt fusionne en squash : un
+commit sur `main` vaut une fonctionnalité entière, et compter les commits
+sous-estime le volume d'un facteur qui n'a rien de constant. Le précédent est
+posé : le 2026-08-10, la profondeur s'était déjà décidée au volume et non au
+calendrier. Si ce jugement déplaît, la règle à changer est le seuil, pas la
+décision — un compteur de commits ne mesure rien ici.
+
+Référence ESLint à la date de l'audit : **49 erreurs, 4 avertissements** avant
+correction, **47 erreurs, 4 avertissements** après (A-037). Dette non aggravée
+malgré +2 300 lignes. `npm run build` passe. Les huit suites unitaires du dépôt
+passent (ticket, calcul, aiguillage, date locale, fiche, réservation, légende,
+notification).
+
+A-001 (`shared_trips` en `USING (true)`, Critique) reste ouvert, vérifié
+inchangé le 2026-09-21. C'est le plus ancien constat ouvert du registre et le
+seul Critique : sept semaines. Il n'est pas re-décrit ici, il est déjà écrit.
+
+### Audit du 2026-08-31
 
 Date : 2026-08-31
 Type : LÉGER (14 jours écoulés, 6 commits significatifs : la réécriture du
@@ -128,3 +170,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
+| 2026-09-21 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-038 |
