@@ -742,7 +742,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                 </>
               )}
             </div>
-            {recuMsg && <p className="recu__msg">{recuMsg}</p>}
+            {/* La lecture d'un ticket prend trois à dix secondes et parle en
+                chiffres qui bougent (« Lecture du ticket… 42 % »), puis annonce
+                un montant à vérifier. Sans `role="status"`, rien de tout cela
+                n'est annoncé : le message apparaît, personne ne le sait. Même
+                marquage que le bandeau d'annulation de TripView. */}
+            {recuMsg && <p className="recu__msg" role="status">{recuMsg}</p>}
           </div>
 
           <div className="form-group">
