@@ -72,6 +72,7 @@ Produit et UX, puis retour au début.
 | A-035 | 2026-09-21 | Performance et coûts | 1,35 Mo d'icônes pour du 512 × 512 : `icon-512.png` et `apple-touch-icon.png` pèsent 673 ko chacune, soit ~2,5 octets par pixel. `index.html:17` demande la seconde en 512 × 512, et `manifest.json` la déclare EN PLUS comme capture d'écran « Dashboard Provo ». Plus lourd que tout le JavaScript de l'app (250 ko gzip), sur un produit mobile d'abord | Mineur | PROPOSÉ |
 | A-036 | 2026-09-21 | Performance et coûts | Le moteur OCR (4,5 Mo) se range dans le cache versionné `provo-v3`, que `activate` vide dès que le nom change (`sw.js:18`) : la prochaine montée de version le fait retélécharger au ticket suivant. Les tuiles de carte, elles, ont leur cache à part. Et `sw.js:82` rend `index.html` quand un `.wasm.js` manque et que le réseau est coupé — le moteur reçoit du HTML à exécuter | Mineur | PROPOSÉ |
 | A-037 | 2026-09-21 | Dette technique | Deux liaisons mortes signalées par ESLint dans des fichiers touchés depuis le dernier audit : `exp` dans `SwipeableExpenseItem` (`ExpensesTab.jsx:11`, transmis par le parent pour rien) et `let d = {}` dans le gestionnaire push (`sw.js:98`). 49 erreurs → 47 | Mineur | CORRIGÉ |
+| A-039 | 2026-09-21 | Fiabilité | `/parcours` — le seul filet du projet avec cet audit — passe au ROUGE tout seul entre minuit et 13 h. Le scénario « Que faire maintenant ? » exige que la randonnée de 9 h soit écartée (`parcours.mjs:1951`), alors que `tempsRestant` plafonne la journée à 22 h (`piocheGuidee.js:36`) : avant 13 h, 9 h tiennent encore, et l'app a raison de les proposer. Reproduit à l'identique sur `origin/main` à 01:20 UTC. Le scénario garde déjà le cas « fin de journée » (`:1959`), donc l'horloge avait été pensée — dans un seul sens. Un filet qui rougit sans raison finit par ne plus être lu | Majeur | PROPOSÉ |
 | A-038 | 2026-09-21 | Produit et UX | Le message de lecture du ticket porte le compteur d'avancement ET le « vérifie avant d'enregistrer » — le seul garde-fou contre un montant mal lu — sans être une région live (`ExpensesTab.jsx:745`). Croisé en passant, pas au terme d'une revue d'interface : celle-là reste le travail de `/audit` | Mineur | CORRIGÉ |
 
 <!--
@@ -170,4 +171,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
-| 2026-09-21 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-038 |
+| 2026-09-21 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-039 |

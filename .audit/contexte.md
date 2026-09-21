@@ -254,10 +254,18 @@ Ce dépôt possède déjà une mémoire d'amélioration continue. Elle prime sur
   le nombre a augmenté depuis le dernier audit, en chiffrant l'écart. Le chiffre
   de référence qui fait foi est celui de la dernière entrée du journal, pas
   celui-ci : tenir les deux à jour ensemble.
-- Absence totale de tests automatisés. La vérification se fait au rendu réel, via
-  `npm run build`, `vite preview` et des scripts Playwright ponctuels en 390 × 844.
-  Ne recommande la mise en place d'une suite de tests que si un bug de régression
-  réel est identifiable dans l'historique git.
+- Absence totale de tests automatisés au sens d'un framework. La vérification se
+  fait au rendu réel, via `npm run build`, `vite preview` et des scripts
+  Playwright ponctuels en 390 × 844. Ne recommande la mise en place d'une suite
+  de tests que si un bug de régression réel est identifiable dans l'historique
+  git. En pratique le dépôt s'est doté de deux filets à lui : huit suites de cas
+  purs (`npm run verif-*`, toutes vertes le 2026-09-21) et `npm run parcours`,
+  78 scénarios joués dans un vrai navigateur.
+- **`/parcours` dépend de l'heure à laquelle on le lance.** Un scénario passe au
+  rouge tout seul entre minuit et 13 h (A-039) : avant de croire à une
+  régression, rejouer le scénario fautif sur `origin/main` dans un arbre de
+  travail séparé. C'est la seule façon de séparer « ma branche a cassé quelque
+  chose » de « le parcours rougit à cette heure-ci ».
 - Un seul fichier CSS de près de 6 000 lignes. C'est assumé. Ne propose ni
   découpage, ni CSS Modules, ni framework de style.
 - Aucun routeur. L'état de route vit dans App.jsx. Assumé.
