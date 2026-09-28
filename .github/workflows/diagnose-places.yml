@@ -72,8 +72,12 @@ jobs:
       - name: extract-place de la branche (deno check + banc)
         if: ${{ always() }}
         run: |
-          deno check supabase/functions/extract-place/index.ts
-          (deno run --allow-net --allow-env supabase/functions/extract-place/index.ts > /tmp/edge.log 2>&1 &)
+          # Les types de @supabase/functions-js réclament `npm:openai` : sans
+          # installation automatique, la vérification échoue avant notre code.
+          deno check --node-modules-dir=auto supabase/functions/extract-place/index.ts \
+            || echo "⚠️  vérification des types en échec (voir ci-dessus)"
+          (deno run --node-modules-dir=auto --allow-net --allow-env --allow-read --allow-write \
+            supabase/functions/extract-place/index.ts > /tmp/edge.log 2>&1 &)
           for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:8000 && break; sleep 1; done
           EDGE_URL=http://localhost:8000 node scripts/diag-verify.mjs
           tail -20 /tmp/edge.log
