@@ -17,6 +17,7 @@ on:
       - 'scripts/diag-verify.mjs'
       - 'scripts/diag-tiktok.mjs'
       - 'scripts/diag-instagram.mjs'
+      - 'scripts/diag-adresses.mjs'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
     inputs:
@@ -51,6 +52,11 @@ jobs:
       - name: Repli pour les lieux absents de l'index
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: node scripts/diag-fallback.mjs
+
+      # Adresses et noms hors de France : quelle stratégie trouve le bon lieu ?
+      - name: Adresses à l'étranger
+        if: ${{ always() }}
+        run: node scripts/diag-adresses.mjs
 
       - name: Vérification de la fonction Edge en production
         run: node scripts/diag-verify.mjs
