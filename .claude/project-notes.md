@@ -122,6 +122,12 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     `SUPABASE_ACCESS_TOKEN`, puis relancer « Déployer les fonctions
     Supabase ». Tant que ce n'est pas fait, toute fusion qui touche
     `supabase/functions/` n'arrive PAS en production.
+  · **Mesuré en production juste après** (`diagnose-places.yml`, ligne
+    « géocodeurs ») : **Nominatim répond 403 à l'hébergeur Supabase**, sur
+    chaque appel. C'est la cause du 0/9 : l'adresse IP est refusée, pas le
+    code. Photon prend le relais : 9 fiches sur 10 avec adresse, catégorie
+    juste 8 sur 9, mais **0 horaire** — Photon n'en porte pas. Les horaires
+    arrivent ensuite par `enrich-place` (Overpass + site du lieu), à l'ajout.
   · La leçon : un déploiement qui échoue doit se voir ailleurs que dans
     l'onglet Actions. Le canari quotidien mesure la production : c'est lui
     qui aurait dû le dire, et il ne compare pas la version déployée à `main`.
