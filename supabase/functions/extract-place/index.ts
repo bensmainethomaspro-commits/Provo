@@ -1039,6 +1039,14 @@ async function tiktokLecteurTiers(url: string) {
   }
 }
 
+// Une vignette barrée du bouton ▶ (TikTok la sert aux robots). Supprimée le
+// 31 août avec la lecture payante de la couverture, qui était son premier
+// usage — mais l'échelle TikTok s'en sert encore, ci-dessous. Sans elle, dès
+// que deux échelons rendaient chacun une vignette, `handleTikTok` levait une
+// ReferenceError et l'import entier répondait « extraction_failed ». Trouvé
+// par `deno check`, qui ne tournait nulle part.
+const VIGNETTE_INUTILISABLE = /smartui\/button\/play-icon/i;
+
 async function handleTikTok(rawUrl: string, ancre: Ancre | null = null) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
