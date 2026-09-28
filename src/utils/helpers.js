@@ -35,10 +35,12 @@ export async function extractViaEdge(url, destination = '') {
  * le texte du post. Il le colle dans le MÊME champ que les liens, et le
  * modèle le lit comme il lisait les légendes qu'on récupérait tout seuls.
  */
-export async function lireLegende(texte) {
+export async function lireLegende(texte, destination = '') {
   try {
     const { data, error } = await supabase.functions.invoke('extract-place', {
-      body: { texte },
+      // Même raison que pour un lien : le lieu lu dans la légende se cherche
+      // autour de la destination, pas n'importe où dans le monde.
+      body: { texte, ...(destination ? { destination } : {}) },
     });
     if (error || !data?.ok || !data.result?.title) return null;
     const autres = Array.isArray(data.autres) ? data.autres.filter(a => a?.title) : [];

@@ -153,7 +153,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // pour un lien TikTok, ou collée à la main. Un seul chemin, donc un seul
   // comportement à vérifier.
   const traiterLegende = async (texteLegende, raw, { lien = '' } = {}) => {
-    const lu = await lireLegende(texteLegende);
+    const lu = await lireLegende(texteLegende, tripDestination || '');
     if (!lu?.title) return false;
     if (lu.autresLieux?.length) {
       setAutresLieux(lu.autresLieux);

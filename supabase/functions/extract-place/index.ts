@@ -79,12 +79,13 @@ function categoryFromText(text: string): string | null {
 
 // Résultats bruts de Nominatim. On en demande plusieurs : le premier n'est pas
 // toujours le bon, et sans candidats on ne peut rien départager.
-async function nominatimSearch(query: string, limit = 5): Promise<any[]> {
+async function nominatimSearch(query: string, limit = 5, pays = ""): Promise<any[]> {
   const { signal, clear } = withTimeout(9000);
   try {
     const r = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}` +
-        `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}`,
+        `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}` +
+        (pays ? `&countrycodes=${pays}` : ""),
       { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
     );
     clear();
@@ -97,10 +98,52 @@ async function nominatimSearch(query: string, limit = 5): Promise<any[]> {
   }
 }
 
-async function geocode(query: string) {
-  const list = await nominatimSearch(query, 5);
-  const best = pickBest(list, { name: query });
-  return best ? shapePlace(best) : null;
+/**
+ * Où se passe le voyage : le point, le pays, et jusqu'où chercher.
+ *
+ * Le client envoie la destination depuis toujours ; cette fonction l'ignorait.
+ * Un nom lu sur un site ou dans une légende — « Café Central » — se géocodait
+ * donc sans ville, et le premier homonyme venu partait dans la fiche, avec des
+ * coordonnées : le client, qui ne refait la recherche située que quand il n'y
+ * a PAS de coordonnées, le gardait tel quel.
+ */
+type Ancre = { lat: number; lon: number; pays: string; nom: string; rayonKm: number | null };
+
+async function ancreDe(destination: string): Promise<Ancre | null> {
+  const nom = destination.trim();
+  if (!nom) return null;
+  const p = (await nominatimSearch(nom, 1))[0];
+  const lat = parseFloat(p?.lat), lon = parseFloat(p?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  // L'étendue de la destination dit jusqu'où chercher : une ville se fouille
+  // dans un rayon, un pays ou une grande région seulement par son code pays.
+  const b = (p.boundingbox || []).map(Number);
+  const diag = b.length === 4 && b.every(Number.isFinite) ? distanceKm(b[0], b[2], b[1], b[3]) : 0;
+  const rayonKm = diag > 400 ? null : Math.min(150, Math.max(40, diag / 2 + 25));
+  return { lat, lon, nom, pays: String(p.address?.country_code || "").toLowerCase(), rayonKm };
+}
+
+async function geocode(query: string, ancre: Ancre | null = null) {
+  if (!ancre) {
+    const list = await nominatimSearch(query, 5);
+    const best = pickBest(list, { name: query });
+    return best ? shapePlace(best) : null;
+  }
+  // Situé : d'abord avec la ville du voyage, puis seul — toujours dans le pays,
+  // et jamais hors du rayon. Un homonyme à l'étranger ne vaut pas mieux que
+  // rien : sans coordonnées, le client refait la recherche et propose.
+  const deja = normalize(query).includes(normalize(ancre.nom));
+  const essais = deja ? [query] : [`${query}, ${ancre.nom}`, query];
+  for (const q of essais) {
+    const best = pickBest(await nominatimSearch(q, 5, ancre.pays), {
+      name: query,
+      coords: ancre.rayonKm ? ancre : null,
+      maxKm: ancre.rayonKm ?? 25,
+      exigerNom: true,
+    });
+    if (best) return shapePlace(best);
+  }
+  return null;
 }
 
 function cityOf(p: any): string {
@@ -125,7 +168,7 @@ const normalize = (s: string) =>
 // basilique.
 function pickBest(
   list: any[],
-  { name = "", coords = null as { lat: number; lon: number } | null } = {},
+  { name = "", coords = null as { lat: number; lon: number } | null, maxKm = 25, exigerNom = false } = {},
 ): any | null {
   if (!list?.length) return null;
   const wanted = normalize(name);
@@ -168,13 +211,16 @@ function pickBest(
     // Mesuré : « 3823 22nd Ave kensoha Wi » ramenait « Delhi », et
     // « Perfect restaurant for Gen-Zs » ramenait « Günz ». Mieux vaut ne rien
     // rendre que rendre n'importe quoi.
-    if (wanted && !coords && !nameHit && !addrHit) continue;
+    // Autour d'une destination, la proximité seule ne prouve rien non plus :
+    // tout ce qui porte un nom dans un rayon de 40 km passerait.
+    if (wanted && (!coords || exigerNom) && !nameHit && !addrHit) continue;
 
     // Proximité : décisive quand le lien porte des coordonnées. Au-delà de
-    // 25 km, c'est un homonyme sur un autre continent — on l'écarte.
+    // 25 km, c'est un homonyme sur un autre continent — on l'écarte. Autour
+    // d'une destination, le rayon est celui de la destination.
     if (coords) {
       const d = distanceKm(coords.lat, coords.lon, lat, lon);
-      if (d > 25) continue;
+      if (d > maxKm) continue;
       s += d < 0.15 ? 6 : d < 1 ? 4 : d < 5 ? 2 : 0;
     }
 
@@ -198,7 +244,11 @@ function pickBest(
 async function resolvePlace(
   name: string | null,
   coords: { lat: number; lon: number } | null,
+  ancre: Ancre | null = null,
 ) {
+  // Un lien sans coordonnées (share.google ne porte que le nom) : c'est la
+  // destination du voyage qui situe la recherche.
+  if (!coords && name && ancre) return geocode(name, ancre);
   const reverse = coords ? await reverseGeocodeRaw(coords.lat, coords.lon) : null;
   const city = reverse ? cityOf(reverse) : "";
 
@@ -402,7 +452,7 @@ function extractGoogleSearchName(finalUrl: string, html: string): string | null 
   return null;
 }
 
-async function handleGoogleMaps(rawUrl: string) {
+async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
   const { finalUrl, html } = await resolve(rawUrl);
   const haystack = finalUrl + "\n" + html.slice(0, 200_000);
 
@@ -423,7 +473,7 @@ async function handleGoogleMaps(rawUrl: string) {
   const coords = extractMapsCoords(haystack);
   const clean = cleanTitle(name);
 
-  const place = await resolvePlace(name, coords);
+  const place = await resolvePlace(name, coords, ancre);
   if (place) {
     // Quand la fiche trouvée est bien celle du lien, ses coordonnées sont plus
     // précises que le centrage de la carte : on garde les siennes. Sinon on
@@ -899,7 +949,7 @@ async function tiktokLecteurTiers(url: string) {
   }
 }
 
-async function handleTikTok(rawUrl: string) {
+async function handleTikTok(rawUrl: string, ancre: Ancre | null = null) {
   const { finalUrl, html: pageHtml } = await resolve(rawUrl);
   const canonical = /tiktok\.com\/.+\/(video|photo)\//.test(finalUrl) ? finalUrl : rawUrl;
   // L'oEmbed n'aime pas les paramètres de suivi collés au lien partagé.
@@ -1024,7 +1074,7 @@ async function handleTikTok(rawUrl: string) {
   // Le client, lui, connaît la destination et refait la recherche située —
   // une adresse fausse est pire qu'absente.
   const geoQuery = extractGeoHint(caption) || (ai?.location) || "";
-  let place = geoQuery ? await geocode(geoQuery) : null;
+  let place = geoQuery ? await geocode(geoQuery, ancre) : null;
   // Un hashtag peut situer une activité (#lisbonne), il ne peut jamais la
   // nommer : « #genz » ne fait pas de « Günz » le nom du restaurant.
   let placeFromTag = false;
@@ -1053,7 +1103,7 @@ async function handleTikTok(rawUrl: string) {
 }
 
 // ── Generic website ───────────────────────────────────────────────────────
-async function handleGeneric(rawUrl: string) {
+async function handleGeneric(rawUrl: string, ancre: Ancre | null = null) {
   const { html } = await resolve(rawUrl);
   const title = metaTag(html, "og:title") || metaTag(html, "twitter:title") ||
     (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "");
@@ -1071,7 +1121,7 @@ async function handleGeneric(rawUrl: string) {
     notes: desc ? desc.slice(0, 300) : "",
     source: "web",
   };
-  const place = await geocode(cleaned).catch(() => null);
+  const place = await geocode(cleaned, ancre).catch(() => null);
   if (place) {
     result.address = place.address;
     result.lat = place.lat;
@@ -1125,10 +1175,12 @@ Deno.serve(async (req) => {
   let url = "";
   let texte = "";
   let sante = false;
+  let destination = "";
   try {
     const body = await req.json();
     url = String(body?.url || "").trim();
     texte = String(body?.texte || "").trim();
+    destination = String(body?.destination || "").trim().slice(0, 120);
     sante = body?.sante === true;
   } catch {
     return json({ error: "invalid_body" }, 400);
@@ -1149,7 +1201,8 @@ Deno.serve(async (req) => {
     if (!origineAutorisee(req)) return json({ error: "origine_refusee" }, 403);
     const ai = lireLegende(texte.slice(0, 1500));
     if (!ai?.title) return json({ error: "aucun_lieu" }, 200);
-    const place = ai.location ? await geocode(ai.location) : await geocode(ai.title);
+    const ancre = await ancreDe(destination).catch(() => null);
+    const place = await geocode(ai.location || ai.title, ancre);
     const result: any = {
       title: ai.title,
       category: VALID_CATEGORIES.includes(ai.category) ? ai.category : "visite",
@@ -1191,12 +1244,13 @@ Deno.serve(async (req) => {
   try {
     let result = null;
     const voie = aiguillage(cible);
+    const ancre = await ancreDe(destination).catch(() => null);
     if (voie === "tiktok") {
-      result = await handleTikTok(url);
+      result = await handleTikTok(url, ancre);
     } else if (voie === "maps") {
-      result = await handleGoogleMaps(url);
+      result = await handleGoogleMaps(url, ancre);
     } else {
-      result = await handleGeneric(url);
+      result = await handleGeneric(url, ancre);
     }
     if (!result) return json({ error: "no_data" }, 200);
     // `result` reste le lieu principal — aucun appelant existant ne change.
