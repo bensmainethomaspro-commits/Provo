@@ -364,6 +364,13 @@ const VECU = (() => {
   return t;
 })();
 
+// L'hôtel est posé à deux pas du Belvédère : trié « près de l'hôtel », c'est
+// lui qui doit ouvrir la Réserve, alors que l'ordre d'ajout le met cinquième.
+const AVEC_HOTEL = {
+  ...TRIP, accommodationAddress: 'Rennweg 8, Wien',
+  accommodationLat: 48.1990, accommodationLon: 16.3790,
+};
+
 /**
  * Le dernier soir : tout est fait, plus rien devant.
  *
@@ -625,6 +632,33 @@ const PARCOURS = [
       }
       t.verifier('un filtre de catégorie réduit bien la liste', reduit,
         `${total} au départ · ${essais.join(' · ')}`);
+    } },
+
+  { groupe: 'Réserve', nom: "Trier la Réserve près de l'hôtel", depart: AVEC_HOTEL,
+    intention: "Avant le départ, voir d'abord les idées à côté de là où l'on dort.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('[aria-label="Afficher en liste, réordonnable"]', { delai: 600, obligatoire: false });
+      const options = await t.p.$$eval('.reserve-sort-select option', os => os.map(o => o.value));
+      if (!options.includes('hotel')) t.injouable(`pas d'option hôtel : ${options.join(', ')}`);
+      await t.p.selectOption('.reserve-sort-select', 'hotel');
+      await t.p.waitForTimeout(500);
+      const cartes = await t.p.$$eval('.reserve-card', cs => cs.map(c => c.innerText));
+      t.verifier("l'idée la plus proche de l'hôtel ouvre la liste",
+        /Belvédère/.test(cartes[0] || ''), (cartes[0] || '').split('\n').slice(0, 2).join(' '));
+      t.verifier("la distance affichée est celle de l'hôtel",
+        cartes.some(c => c.includes('🏠')), `${cartes.length} fiches`);
+    } },
+
+  { groupe: 'Réserve', nom: "Sans hôtel, pas de tri par l'hôtel", depart: 'voyage',
+    intention: "Ne pas proposer un tri qui n'a pas de référence.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const options = await t.p.$$eval('.reserve-sort-select option', os => os.map(o => o.value));
+      if (!options.length) t.injouable('menu de tri absent');
+      t.verifier("l'option n'apparaît pas", !options.includes('hotel'), options.join(', '));
     } },
 
   { groupe: 'Réserve', nom: 'Réordonner la Réserve au doigt', depart: 'voyage',

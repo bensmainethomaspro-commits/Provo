@@ -106,6 +106,47 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Liens et adresses à l'étranger** (28 septembre 2026). Signalé : « l'ajout
+  de liens ne fonctionne pas très bien » et « les lieux sont souvent hors de
+  France ». Mesuré avant de toucher (`scripts/diag-adresses.mjs`,
+  `diag-verify.mjs`, exécuteur GitHub) :
+
+  | Mesure | Résultat |
+  |---|---|
+  | Fonction `extract-place` en production, 9 liens Maps | **0/9 fiches complètes** (8/9 le 2 août) : titre et point, ni adresse ni horaires |
+  | 23 adresses tapées à l'étranger | Photon **20** · Nominatim 17 · Nominatim limité au pays 17 |
+  | 6 adresses à moitié tapées | Photon 5 · Nominatim 5 · Nominatim limité au pays **3** |
+  | 12 noms seuls (liens de sites, légendes) | sans ville 9 (homonymes jusqu'à 10 318 km) · avec la ville **12** |
+
+  Ce qui en découle :
+  · **La fonction ignorait la destination** que le client lui envoie depuis
+    toujours. Elle la géocode maintenant : code pays + rayon (40 à 150 km
+    selon l'étendue ; un pays entier, pas de rayon). Rien dans ce cadre vaut
+    mieux qu'un homonyme : sans coordonnées, le client propose.
+  · **Photon en secours de Nominatim dans la fonction**, et la trace des
+    géocodeurs (`geocodeurs`) dans chaque réponse. La cause exacte du 0/9
+    n'est pas établie : Nominatim répond depuis GitHub, plus depuis
+    l'hébergeur. L'agent annonce désormais un contact, comme le demande sa
+    politique d'usage.
+  · **Le client complète** une fiche rendue sans adresse : recherche autour
+    du point du lien, un établissement du même nom à moins d'un kilomètre.
+  · **Recherche d'adresse : Photon d'abord**, Nominatim en complément quand
+    rien n'est près du voyage. Nominatim n'autorise pas la recherche à la
+    frappe, que l'app faisait.
+  · **Filtre par pays écarté** : mesuré sans gain, et nuisible à la frappe.
+  · **L'adresse tapée à la main** se géocodait à l'enregistrement sans aucun
+    repère du voyage. Elle passe par la même recherche située, puis avec la
+    destination si la saisie n'a pas de ville.
+  · Les liens Maps au format officiel `/maps/search/?api=1&query=…` n'étaient
+    pas lus (`query` ignoré), des deux côtés.
+
+  À vérifier une fois la fonction déployée : relancer `diagnose-places.yml`
+  et lire la ligne « géocodeurs » de chaque lien.
+
+- **La Réserve se trie par distance à l'hôtel** (28 septembre 2026), repris
+  de Tripsy. Option du tri existant, présente seulement si l'hébergement est
+  localisé ; la distance affichée suit la même référence (🏠).
+
 - **Tout gratuit : plus aucun appel payant** (31 août 2026, terminé). Demandé :
   « je veux que tout soit gratuit, plus d'API ». Quatre fonctions Edge
   appelaient le modèle payant. Arbitré avec l'utilisateur : **on garde les

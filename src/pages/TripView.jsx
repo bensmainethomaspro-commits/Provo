@@ -146,6 +146,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     useCallback((id, cibleId) => moveInReserve(tripId, id, cibleId), [moveInReserve, tripId])
   );
   const geoReserve = useLiveLocation();
+  // L'hébergement, tel qu'il a été localisé à la saisie. Jamais re-géocodé
+  // ici : la Réserve doit se trier hors ligne comme le reste.
+  const hotelReserve = Number.isFinite(trip?.accommodationLat) && Number.isFinite(trip?.accommodationLon)
+    ? { lat: trip.accommodationLat, lon: trip.accommodationLon } : null;
+  // Un tri retenu dont la référence a disparu (hôtel retiré, position
+  // éteinte) retombe sur l'ordre d'ajout au lieu d'un menu sans option choisie.
+  const tri = (reserveSort === 'hotel' && !hotelReserve) || (reserveSort === 'proche' && !geoReserve.position)
+    ? 'default' : reserveSort;
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
@@ -1210,13 +1218,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       >{grouper ? '⊞' : '☰'}</button>
                       {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
-                      <select className="reserve-sort-select" value={reserveSort} aria-label="Trier les idées"
+                      <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
                         onChange={e => setReserveSort(e.target.value)}>
                         <option value="default">Ajout</option>
                         <option value="alpha">A–Z</option>
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
                         {geoReserve.position && <option value="proche">Le plus proche</option>}
+                        {hotelReserve && <option value="hotel">🏠 Hôtel</option>}
                       </select>
                     </>
                   )}
@@ -1265,7 +1274,12 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 >
                 {(() => {
                   const q = reserveSearch.toLowerCase();
-                  const pos = geoReserve.position;
+                  // Trier « près de l'hôtel » sert AVANT le départ, quand on
+                  // n'est pas encore sur place : la référence devient
+                  // l'hébergement, et la distance affichée sur chaque fiche
+                  // aussi — sinon l'ordre ne se lirait pas.
+                  const parHotel = tri === 'hotel';
+                  const pos = parHotel ? hotelReserve : geoReserve.position;
                   const dist = (a) => (pos && a.lat != null && a.lon != null)
                     ? haversineKm(pos.lat, pos.lon, a.lat, a.lon) : null;
 
@@ -1277,10 +1291,10 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       return true;
                     })
                     .sort((a, b) => {
-                      if (reserveSort === 'alpha') return a.title.localeCompare(b.title, 'fr');
-                      if (reserveSort === 'duration') return ((a.durationHours||0)*60+(a.durationMinutes||0)) - ((b.durationHours||0)*60+(b.durationMinutes||0));
-                      if (reserveSort === 'price') return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
-                      if (reserveSort === 'proche') {
+                      if (tri === 'alpha') return a.title.localeCompare(b.title, 'fr');
+                      if (tri === 'duration') return ((a.durationHours||0)*60+(a.durationMinutes||0)) - ((b.durationHours||0)*60+(b.durationMinutes||0));
+                      if (tri === 'price') return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
+                      if (tri === 'proche' || tri === 'hotel') {
                         // Sans coordonnées, on ne peut pas classer : ces idées
                         // vont en fin de liste plutôt que de fausser l'ordre.
                         const da = dist(a), db = dist(b);
@@ -1304,7 +1318,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                   // Réordonner n'a de sens que sur une liste à plat, dans son
                   // ordre propre : groupée ou triée, la position manuelle ne se
                   // voit plus, donc la déplacer ne veut rien dire.
-                  const reordonnable = !grouper && reserveSort === 'default' && reserveFilter === 'all' && !q;
+                  const reordonnable = !grouper && tri === 'default' && reserveFilter === 'all' && !q;
 
                   if (!retenues.length) {
                     return (
@@ -1361,7 +1375,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                           <>
                             {ouv === true && <span className="reserve-etat__ouvert">Ouvert</span>}
                             {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
-                            {km != null && <span className="reserve-etat__km">{formatDistance(km)}</span>}
+                            {km != null && <span className="reserve-etat__km">{parHotel ? `🏠 ${formatDistance(km)}` : formatDistance(km)}</span>}
                             {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
                             {/* Qui l'a proposée. Muet quand on voyage seul, et
                                 muet pour ses propres idées : « proposé par moi »
