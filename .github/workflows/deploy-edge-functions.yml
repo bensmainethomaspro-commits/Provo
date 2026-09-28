@@ -18,6 +18,11 @@ on:
       - '.github/workflows/deploy-edge-functions.yml'
   workflow_dispatch:
 
+# Pour ouvrir une alerte quand le déploiement échoue (dernière étape).
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -64,3 +69,35 @@ jobs:
             supabase functions deploy "$nom" --project-ref usztistixgzdrvjzplqx
             echo "::endgroup::"
           done
+
+      # Du 31 août au 28 septembre 2026, ce workflow a échoué à CHAQUE fusion
+      # (jeton refusé, 401) sans que personne le voie : le rouge d'un workflow
+      # de déploiement ne se lit pas. La production est restée quatre semaines
+      # sur des fonctions périmées. Un échec ouvre donc une alerte — une seule
+      # à la fois — et un succès la referme.
+      - name: Alerte si le déploiement échoue
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create deploiement --color B60205 \
+            --description "Déploiement des fonctions Edge en échec" 2>/dev/null || true
+          NUM=$(gh issue list --state open --label deploiement --limit 1 --json number --jq '.[0].number // empty')
+          CORPS=$(printf '🔴 **Les fonctions Edge ne sont pas déployées.** Ce qui a été fusionné sur `main` dans `supabase/functions/` n'\''est PAS en production.\n\nSi le journal dit `401 Unauthorized` : le jeton a expiré. En créer un sur https://supabase.com/dashboard/account/tokens, le reposer dans Settings › Secrets › Actions › `SUPABASE_ACCESS_TOKEN`, puis relancer ce workflow.\n\n%s\n' "$RUN")
+          if [ -n "$NUM" ]; then
+            printf '%s' "$CORPS" | gh issue comment "$NUM" --body-file -
+          else
+            printf '%s' "$CORPS" | gh issue create --title "Déploiement des fonctions Edge en échec" --label deploiement --body-file -
+          fi
+
+      - name: Refermer l'alerte au retour au vert
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NUM=$(gh issue list --state open --label deploiement --limit 1 --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "🟢 Déploiement réussi : les fonctions en production sont à jour."
+            gh issue close "$NUM"
+          fi

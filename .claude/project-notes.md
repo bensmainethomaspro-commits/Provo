@@ -106,6 +106,32 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Les fonctions Edge n'étaient plus déployées depuis le 31 août** (constaté
+  le 28 septembre 2026). `deploy-edge-functions.yml` échoue à chaque fusion
+  sur `401 Unauthorized` : le secret GitHub `SUPABASE_ACCESS_TOKEN` n'est plus
+  accepté par Supabase. Le workflow finit en rouge sur `main`, et personne ne
+  lit le rouge d'un workflow de déploiement. La production tournait donc sur
+  les versions du **17 août** : tout le passage au « tout gratuit » (#82, #83),
+  et les correctifs de liens (#89), n'avaient jamais été mis en ligne côté
+  serveur.
+  · Déployé à la main le 28 septembre par le connecteur Supabase :
+    `extract-place` v33, `enrich-place` v10, `read-booking` v6, depuis `main`
+    (df9d1c5).
+  · **À FAIRE À LA MAIN :** créer un nouveau jeton (Supabase › Account ›
+    Access Tokens) et le reposer dans GitHub › Settings › Secrets › Actions ›
+    `SUPABASE_ACCESS_TOKEN`, puis relancer « Déployer les fonctions
+    Supabase ». Tant que ce n'est pas fait, toute fusion qui touche
+    `supabase/functions/` n'arrive PAS en production.
+  · **Mesuré en production juste après** (`diagnose-places.yml`, ligne
+    « géocodeurs ») : **Nominatim répond 403 à l'hébergeur Supabase**, sur
+    chaque appel. C'est la cause du 0/9 : l'adresse IP est refusée, pas le
+    code. Photon prend le relais : 9 fiches sur 10 avec adresse, catégorie
+    juste 8 sur 9, mais **0 horaire** — Photon n'en porte pas. Les horaires
+    arrivent ensuite par `enrich-place` (Overpass + site du lieu), à l'ajout.
+  · La leçon : un déploiement qui échoue doit se voir ailleurs que dans
+    l'onglet Actions. Le canari quotidien mesure la production : c'est lui
+    qui aurait dû le dire, et il ne compare pas la version déployée à `main`.
+
 - **Liens et adresses à l'étranger** (28 septembre 2026). Signalé : « l'ajout
   de liens ne fonctionne pas très bien » et « les lieux sont souvent hors de
   France ». Mesuré avant de toucher (`scripts/diag-adresses.mjs`,
