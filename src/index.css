@@ -7127,6 +7127,10 @@ button.budget-inline:active { transform: scale(0.98); }
 .activity-card__meta > .reserve-etat__km,
 .activity-card__meta > .reserve-etat__plan,
 .activity-card__meta > .reserve-etat__auteur { margin-right: 8px; }
+/* Sans point ni marge à gauche, la première mention collait au fait qui la
+   précède : « 17 €Ouvert », « 45 min🏠 890 m ». */
+.activity-card__meta > :is(.time-slot, .activity-card__duration, .activity-card__price)
+  + :is(.reserve-etat__ouvert, .reserve-etat__ferme, .reserve-etat__km, .reserve-etat__plan, .reserve-etat__auteur) { margin-left: 8px; }
 .reserve-etat__manque:disabled { color: var(--text-light); text-decoration: none; cursor: default; }
 .reserve-etat__manque:active:not(:disabled) { opacity: 0.6; }
 
