@@ -742,7 +742,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                 </>
               )}
             </div>
-            {recuMsg && <p className="recu__msg">{recuMsg}</p>}
+            {/* `role="status"` : ce paragraphe porte l'avancement de la lecture
+                (« Lecture du ticket… 40 % », trois à dix secondes) puis son
+                résultat. Sans région vive, rien n'annonce la fin à qui ne
+                regarde pas l'écran. Le paragraphe reste conditionnel — un
+                `<p>` vide ajouterait ses 8 px de marge au formulaire. */}
+            {recuMsg && <p className="recu__msg" role="status">{recuMsg}</p>}
           </div>
 
           <div className="form-group">
