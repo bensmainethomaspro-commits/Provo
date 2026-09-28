@@ -5,10 +5,12 @@
 // réellement dans le formulaire : titre, adresse, catégorie, coordonnées,
 // horaires.
 
-const EDGE = 'https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place';
+// `EDGE_URL` permet de mesurer la fonction de la BRANCHE, lancée dans
+// l'exécuteur par Deno, avant qu'elle soit déployée.
+const EDGE = process.env.EDGE_URL || 'https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place';
 const KEY = 'sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD';
 
-async function extract(url) {
+async function extract(url, destination = '') {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), 45000);
   try {
@@ -19,7 +21,7 @@ async function extract(url) {
         Authorization: `Bearer ${KEY}`, apikey: KEY,
         Origin: 'https://provo-tbens.vercel.app',
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, ...(destination ? { destination } : {}) }),
     });
     const body = await r.json().catch(() => null);
     return { status: r.status, body };
@@ -38,6 +40,9 @@ const LIENS = [
   ['Le Comptoir du Relais', 'https://www.google.com/maps/place/Le+Comptoir+du+Relais/@48.8523,2.3387,17z', 'resto'],
   ['La Cité du Vin', 'https://www.google.com/maps/place/La+Cite+du+Vin/@44.8627,-0.5506,17z', 'visite'],
   ['share.google (utilisateur)', 'https://share.google/WNSiI0AooI1HiDmyD', null],
+  // Un lien Maps SANS coordonnées, comme en donne share.google : seul le nom
+  // est lu, et sans la destination « Café Sacher » part à 250 km.
+  ['Café Sacher (sans coords)', 'https://www.google.com/maps/search/?api=1&query=Caf%C3%A9+Sacher', 'resto', 'Vienne'],
 ];
 
 function ligne(nom, r) {
@@ -51,8 +56,11 @@ function ligne(nom, r) {
     p.category ? `cat:${p.category}` : null,
   ].filter(Boolean);
   const n = [p.title, p.address, p.lat != null || null, p.openingHours].filter(Boolean).length;
+  // Ce que les géocodeurs ont répondu : c'est ce qui a manqué le jour où
+  // Nominatim a cessé de répondre à la fonction sans qu'aucune ligne le dise.
+  const geo = r.body?.geocodeurs?.length ? `\n       géocodeurs : ${r.body.geocodeurs.join(', ')}` : '';
   return `  ${n >= 3 ? '✅' : n >= 2 ? '⚠️ ' : '❌'} ${nom.padEnd(28)} « ${p.title || '?'} » · ${p.address || 'sans adresse'}\n`
-    + `       ${champs.join(' · ')}`;
+    + `       ${champs.join(' · ')}${geo}`;
 }
 
 console.log('='.repeat(76));
@@ -61,12 +69,12 @@ console.log('='.repeat(76));
 
 let complets = 0, total = 0, bonneCat = 0, avecHoraires = 0;
 const pause = ms => new Promise(r => setTimeout(r, ms));
-for (const [nom, url, catAttendue] of LIENS) {
+for (const [nom, url, catAttendue, destination] of LIENS) {
   // Chaque extraction déclenche jusqu'à trois requêtes Nominatim, qui limite à
   // une par seconde. Sans cette pause, c'est le banc qui se fait jeter — et il
   // le lit comme un échec du code.
   await pause(4000);
-  const r = await extract(url);
+  const r = await extract(url, destination);
   console.log(ligne(nom, r));
   const p = r.body?.result;
   total++;

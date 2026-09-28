@@ -27,7 +27,9 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const UA = "Provo-Travel-App/1.0 (place extractor)";
+// La politique d'usage de Nominatim demande un agent qui dise qui appelle et
+// comment joindre l'auteur. « (place extractor) » ne disait ni l'un ni l'autre.
+const UA = "Provo-Travel-App/1.0 (+https://github.com/bensmainethomaspro-commits/Provo)";
 
 // TikTok sert un captcha aux agents ordinaires, mais une page propre de 16 ko
 // aux robots qui déplient les liens dans les messageries — mesuré depuis un
@@ -79,7 +81,75 @@ function categoryFromText(text: string): string | null {
 
 // Résultats bruts de Nominatim. On en demande plusieurs : le premier n'est pas
 // toujours le bon, et sans candidats on ne peut rien départager.
-async function nominatimSearch(query: string, limit = 5, pays = ""): Promise<any[]> {
+// Ce que les géocodeurs ont répondu pendant cet appel. Remonté tel quel dans
+// la réponse : le 28 septembre 2026, la mesure en production est passée de
+// 8 fiches complètes sur 9 (2 août) à 0 sur 9 — titre et coordonnées, plus
+// d'adresse ni d'horaires — sans qu'aucune erreur ne le dise. Nominatim
+// répondait encore depuis un exécuteur GitHub : c'est depuis l'hébergeur de la
+// fonction qu'il ne répondait plus. Un diagnostic qui montre la réponse entière
+// aurait vu la panne le premier jour.
+// (Variable de module : deux appels simultanés peuvent mêler leurs traces. Ça
+// ne sert qu'au diagnostic, jamais à décider.)
+let traceGeo: string[] = [];
+
+/**
+ * Photon, mis à la forme d'un résultat Nominatim, pour que `pickBest` et
+ * `shapePlace` servent tels quels. Même fond OpenStreetMap, autre hébergeur :
+ * c'est ce qui compte quand le premier ne répond plus. Mesuré le 28/09/2026
+ * sur 23 adresses à l'étranger : Photon 20, Nominatim 17. Il ne porte ni
+ * horaires ni tarifs — le client les complète ensuite.
+ */
+function depuisPhoton(f: any) {
+  const p = f?.properties || {};
+  const [lon, lat] = f?.geometry?.coordinates || [];
+  return {
+    lat: String(lat), lon: String(lon),
+    name: p.name || "",
+    class: p.osm_key || "", type: p.osm_value || "",
+    display_name: [p.name, [p.housenumber, p.street].filter(Boolean).join(" "), p.city, p.country]
+      .filter(Boolean).join(", "),
+    address: {
+      house_number: p.housenumber, road: p.street,
+      city: p.city || p.town || p.village || p.county, country: p.country,
+      country_code: String(p.countrycode || "").toLowerCase(),
+    },
+    // `extent` de Photon = [ouest, nord, est, sud] ; `ancreDe` lit l'étendue
+    // au format Nominatim [sud, nord, ouest, est].
+    ...(Array.isArray(p.extent) && p.extent.length === 4
+      ? { boundingbox: [p.extent[3], p.extent[1], p.extent[0], p.extent[2]].map(String) }
+      : {}),
+    extratags: {},
+    namedetails: {},
+  };
+}
+
+async function photonSearch(query: string, limit = 5, pres: { lat: number; lon: number } | null = null): Promise<any[]> {
+  const { signal, clear } = withTimeout(8000);
+  try {
+    let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${limit}&lang=fr`;
+    if (pres) url += `&lat=${pres.lat}&lon=${pres.lon}`;
+    const r = await fetch(url, { headers: { "User-Agent": UA }, signal });
+    clear();
+    traceGeo.push(`photon ${r.status}`);
+    if (!r.ok) return [];
+    const d = await r.json();
+    return (d?.features || []).map(depuisPhoton);
+  } catch (e) {
+    clear();
+    traceGeo.push(`photon ${(e as Error)?.name || "erreur"}`);
+    return [];
+  }
+}
+
+/** Nominatim d'abord (il porte horaires et tarifs), Photon s'il ne rend rien. */
+async function nominatimSearch(query: string, limit = 5, pays = "", pres: { lat: number; lon: number } | null = null): Promise<any[]> {
+  const liste = await nominatimSeul(query, limit, pays);
+  if (liste.length) return liste;
+  const secours = await photonSearch(query, limit, pres);
+  return pays ? secours.filter((p) => !p.address.country_code || p.address.country_code === pays) : secours;
+}
+
+async function nominatimSeul(query: string, limit = 5, pays = ""): Promise<any[]> {
   const { signal, clear } = withTimeout(9000);
   try {
     const r = await fetch(
@@ -89,11 +159,13 @@ async function nominatimSearch(query: string, limit = 5, pays = ""): Promise<any
       { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
     );
     clear();
+    traceGeo.push(`nominatim ${r.status}`);
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data) ? data : [];
-  } catch {
+  } catch (e) {
     clear();
+    traceGeo.push(`nominatim ${(e as Error)?.name || "erreur"}`);
     return [];
   }
 }
@@ -135,7 +207,7 @@ async function geocode(query: string, ancre: Ancre | null = null) {
   const deja = normalize(query).includes(normalize(ancre.nom));
   const essais = deja ? [query] : [`${query}, ${ancre.nom}`, query];
   for (const q of essais) {
-    const best = pickBest(await nominatimSearch(q, 5, ancre.pays), {
+    const best = pickBest(await nominatimSearch(q, 5, ancre.pays, ancre), {
       name: query,
       coords: ancre.rayonKm ? ancre : null,
       maxKm: ancre.rayonKm ?? 25,
@@ -255,7 +327,7 @@ async function resolvePlace(
   if (name) {
     const queries = city ? [`${name}, ${city}`, name] : [name];
     for (const q of queries) {
-      const best = pickBest(await nominatimSearch(q, 5), { name, coords });
+      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords });
       if (best) return shapePlace(best);
     }
   }
@@ -272,12 +344,26 @@ async function reverseGeocodeRaw(lat: number, lon: number) {
       { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
     );
     clear();
-    if (!r.ok) return null;
-    const p = await r.json();
-    if (!p?.display_name) return null;
-    return p;
-  } catch {
+    traceGeo.push(`nominatim-inverse ${r.status}`);
+    const p = r.ok ? await r.json() : null;
+    if (p?.display_name) return p;
+  } catch (e) {
     clear();
+    traceGeo.push(`nominatim-inverse ${(e as Error)?.name || "erreur"}`);
+  }
+  // Le géocodage inverse ne sert ici qu'à connaître la VILLE du point : Photon
+  // la donne aussi bien.
+  const { signal: s2, clear: c2 } = withTimeout(8000);
+  try {
+    const r = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&lang=fr`,
+      { headers: { "User-Agent": UA }, signal: s2 });
+    c2();
+    traceGeo.push(`photon-inverse ${r.status}`);
+    if (!r.ok) return null;
+    const f = (await r.json())?.features?.[0];
+    return f ? depuisPhoton(f) : null;
+  } catch {
+    c2();
     return null;
   }
 }
@@ -388,7 +474,7 @@ function extractMapsCoords(s: string): { lat: number; lon: number } | null {
   m = s.match(/!3d(-?\d{1,3}\.\d{3,})!4d(-?\d{1,3}\.\d{3,})/);
   if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
   // ?q=lat,lon or ll=lat,lon
-  m = s.match(/[?&](?:q|ll|center|destination)=(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
+  m = s.match(/[?&](?:q|ll|center|destination|query)=(-?\d{1,3}\.\d{3,}),(-?\d{1,3}\.\d{3,})/);
   if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
   return null;
 }
@@ -401,7 +487,11 @@ function extractMapsName(s: string): string | null {
       const name = decodeURIComponent(m[1].replace(/\+/g, " ")).replace(/_/g, " ").trim();
       if (name && !/^-?\d+\.\d+,/.test(name)) return name;
     }
-    const q = u.searchParams.get("q") || u.searchParams.get("destination");
+    // `query` : le format officiel des liens Maps (`/maps/search/?api=1&query=…`),
+    // celui que produisent les sites et les applications qui renvoient vers
+    // Google Maps. Il n'était pas lu — le lien tombait sur la page de
+    // consentement, et la fiche restait sans nom.
+    const q = u.searchParams.get("q") || u.searchParams.get("destination") || u.searchParams.get("query");
     if (q && !/^-?\d+\.\d+,/.test(q)) return q;
   } catch { /* ignore */ }
   return null;
@@ -1192,6 +1282,7 @@ Deno.serve(async (req) => {
   // panne, c'est l'état normal depuis le passage au tout-gratuit, et le canari
   // ne doit plus en faire une alerte.
   if (sante) return json({ ok: true, modele: false, gratuit: true });
+  traceGeo = [];
 
   // Une légende collée à la main. C'est la porte de secours quand la nôtre
   // n'aboutit pas : l'utilisateur la copie dans l'app d'origine et la colle
@@ -1219,7 +1310,7 @@ Deno.serve(async (req) => {
       category: VALID_CATEGORIES.includes(l.category) ? l.category : "visite",
       location: l.location || "",
     }));
-    return json({ ok: true, result, autres }, 200);
+    return json({ ok: true, result, autres, geocodeurs: traceGeo }, 200);
   }
 
   if (!url || !/^https?:\/\//i.test(url)) {
@@ -1259,7 +1350,7 @@ Deno.serve(async (req) => {
     // perdus alors qu'ils étaient déjà lus.
     const autres = Array.isArray(result.autres) ? result.autres : [];
     delete result.autres;
-    return json({ ok: true, result, autres }, 200);
+    return json({ ok: true, result, autres, geocodeurs: traceGeo }, 200);
   } catch (e) {
     return json({ error: "extraction_failed", detail: String(e) }, 200);
   }
