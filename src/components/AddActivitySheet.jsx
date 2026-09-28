@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, fetchPlaceData, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm } from '../utils/helpers';
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
@@ -279,6 +279,28 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           }
           applyResult({ ...result, link: result.link || raw }, raw);
 
+          // Le serveur a situé le lieu mais n'a pas su le décrire : titre et
+          // point, ni adresse, ni horaires, catégorie par défaut. C'est ce que
+          // rendait la fonction pour 9 liens sur 9 le 28 septembre 2026, quand
+          // le géocodeur a cessé de lui répondre. Le téléphone, lui, y a
+          // accès : on cherche le lieu AUTOUR DU POINT du lien, et on ne
+          // retient qu'un établissement à moins d'un kilomètre qui porte le
+          // même nom — un voisin ne remplit pas la fiche.
+          if (result.lat != null && !result.address && result.title) {
+            const mots = (t) => (t || '').toLowerCase().normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(w => w.length > 3);
+            const voulus = mots(result.title);
+            const autour = await searchPlaces(result.title, { lat: result.lat, lon: result.lon, limit: 5 })
+              .catch(() => []);
+            const meme = autour.find(c => !c.isAddress
+              && haversineKm(result.lat, result.lon, c.lat, c.lon) < 1
+              && mots(c.title).some(w => voulus.includes(w)));
+            if (meme) {
+              applyResult({ ...meme, title: result.title, link: result.link || raw,
+                photoUrl: result.photoUrl || meme.photoUrl }, raw);
+            }
+          }
+
           // Un lien partagé donne presque toujours le NOM du lieu, rarement son
           // adresse : une recherche du nom seul ne donne rien (« Agapii Mou »
           // n'existe pas pour un géocodeur sans ville). On relance donc la
@@ -518,9 +540,19 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     if (addressChanged) { lat = null; lon = null; }
     if ((lat == null || lon == null) && form.address && form.address.trim()) {
       setSaving(true);
+      // Situé sur la destination : une adresse tapée à l'étranger porte
+      // rarement sa ville (« Ermou 10 »), et le géocodeur n'a aucune raison de
+      // deviner Athènes. Sans ville dans la saisie, on la lui donne aussi.
+      const adr = form.address.trim();
+      const reperes = { lat: tripLat, lon: tripLon, limit: 3 };
       const place = await Promise.race([
-        fetchPlaceData(form.address.trim()).catch(() => null),
-        new Promise(r => setTimeout(() => r(null), 4500)),
+        (async () => {
+          const [p] = await searchPlaces(adr, reperes).catch(() => []);
+          if (p || !tripDestination || adr.includes(',')) return p || null;
+          const [p2] = await searchPlaces(`${adr}, ${tripDestination}`, reperes).catch(() => []);
+          return p2 || null;
+        })(),
+        new Promise(r => setTimeout(() => r(null), 6000)),
       ]);
       setSaving(false);
       if (place?.lat != null) { lat = place.lat; lon = place.lon; }

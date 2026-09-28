@@ -397,8 +397,10 @@ export function parseGoogleMapsUrl(url) {
     if (!u.hostname.includes('google') && !u.hostname.includes('goo.gl')) return null;
     const m = u.pathname.match(/\/maps\/(?:place|search)\/([^/@?&]+)/);
     if (m) return decodeURIComponent(m[1].replace(/\+/g, ' ')).replace(/_/g, ' ');
-    const q = u.searchParams.get('q') || u.searchParams.get('daddr');
-    if (q) return q;
+    // `query` : format officiel `/maps/search/?api=1&query=…`. Des
+    // coordonnées nues ne sont pas un nom.
+    const q = u.searchParams.get('q') || u.searchParams.get('daddr') || u.searchParams.get('query');
+    if (q && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(q.trim())) return q;
   } catch {}
   return null;
 }
@@ -868,7 +870,9 @@ function _rank(list, { query = '', lat = null, lon = null } = {}) {
       }
       if (lat != null && lon != null) {
         const d = haversineKm(lat, lon, r.lat, r.lon);
-        s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : d > 500 ? -4 : 0;
+        // Entre 75 et 500 km, ce n'est plus la destination : l'« Adrianou 23 »
+      // qu'on cherche à Athènes n'est pas celui d'une ville à 176 km.
+      s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : d > 500 ? -4 : -2;
       }
       return { ...r, _score: s };
     })
@@ -887,35 +891,45 @@ function _rank(list, { query = '', lat = null, lon = null } = {}) {
 export async function searchPlaces(query, { limit = 5, lat = null, lon = null } = {}) {
   const q = (query || '').trim();
   if (q.length < 3) return [];
+  const situe = lat != null && lon != null;
 
-  let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
-    + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}`;
-  // Biais géographique autour de la destination : une adresse tapée pendant un
-  // voyage à Biarritz désigne presque toujours une rue de Biarritz.
-  if (lat != null && lon != null) {
-    const d = 0.7; // ≈ 75 km
-    url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
-  }
-
+  // Photon d'abord. Mesuré le 28 septembre 2026 sur 23 adresses tapées à
+  // l'étranger, destination connue : Photon 20, Nominatim 17. Nominatim prend
+  // le premier homonyme quand le cadre n'est qu'une préférence — « Via Roma
+  // 12 » à Palerme ressortait à 141 km, « Calle de Postas 5 » à 44 km de
+  // Madrid. Photon est aussi fait pour la recherche à la frappe, que la
+  // politique d'usage de Nominatim n'autorise pas.
+  // Restreindre Nominatim au pays du voyage a été mesuré aussi : aucun gain
+  // sur les adresses complètes, et 3/6 au lieu de 5/6 sur les saisies à moitié
+  // tapées. Écarté.
   let out = [];
   try {
-    const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+    let purl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}&lang=fr`;
+    if (situe) purl += `&lat=${lat}&lon=${lon}`;
+    const res = await fetch(purl);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data)) out = data.map(_shapeNominatim);
+      out = (data?.features || []).map(_shapePhoton).filter(r => r.title);
     }
-  } catch { /* réseau : on tentera Photon */ }
+  } catch { /* réseau : on tentera Nominatim */ }
 
-  // Second recours seulement si le premier n'a rien : Nominatim porte les
-  // horaires et les tarifs, on ne le remplace pas, on le complète.
-  if (!out.length) {
+  // Nominatim en complément quand Photon n'a rien près du voyage : il porte
+  // les horaires et les tarifs, et connaît des noms que Photon ignore.
+  const presDuVoyage = (r) => !situe || haversineKm(lat, lon, r.lat, r.lon) < 75;
+  if (!out.some(r => Number.isFinite(r.lat) && presDuVoyage(r))) {
+    let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
+      + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=${limit}`;
+    // Biais géographique autour de la destination : une adresse tapée pendant
+    // un voyage à Biarritz désigne presque toujours une rue de Biarritz.
+    if (situe) {
+      const d = 0.7; // ≈ 75 km
+      url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
+    }
     try {
-      let purl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}&lang=fr`;
-      if (lat != null && lon != null) purl += `&lat=${lat}&lon=${lon}`;
-      const res = await fetch(purl);
+      const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
       if (res.ok) {
         const data = await res.json();
-        out = (data?.features || []).map(_shapePhoton).filter(r => r.title);
+        if (Array.isArray(data)) out = [...data.map(_shapeNominatim), ...out];
       }
     } catch { /* les deux ont échoué */ }
   }
@@ -924,11 +938,15 @@ export async function searchPlaces(query, { limit = 5, lat = null, lon = null } 
 }
 
 export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}`
-    + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5`,
-    { headers: { 'Accept-Language': 'fr' } }
-  );
+  let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}`
+    + `&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5`;
+  // Un cadre autour du voyage, quand on le connaît : sans lui, le géocodeur
+  // prend le premier homonyme venu, parfois sur un autre continent.
+  if (lat != null && lon != null) {
+    const d = 0.7;
+    url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
+  }
+  const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
   // Nominatim limite à une requête par seconde et répond alors 429 avec un
   // corps qui n'est pas du JSON : sans ce contrôle, `res.json()` lève et
   // l'échec ressort en exception au lieu du `null` que tous les appelants
