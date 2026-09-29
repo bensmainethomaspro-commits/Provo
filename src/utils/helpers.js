@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
 
 // Server-side extractor (Supabase Edge Function "extract-place").
 // Resolves short links (TikTok / Google Maps) and returns structured place
@@ -805,8 +806,9 @@ function _placePrice(p) {
  * @param {object} opts         {limit, lat, lon} — lat/lon = centre du voyage
  * @returns {Promise<Array>}    candidats, du plus pertinent au moins pertinent
  */
-const _norm = (s) => (s || '').toLowerCase().normalize('NFD')
-  .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+// Toutes les écritures gardées : l'ancienne version ne gardait que a-z, et un
+// nom grec ou japonais devenait vide — donc sans effet sur le classement.
+const _norm = normaliser;
 
 function _shapeNominatim(p) {
   return {
