@@ -106,6 +106,30 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Liens et complétion, 29 septembre 2026.**
+  · `extract-place` lit, sans réseau, les liens Plans (Apple), OpenStreetMap,
+    Waze, Bing, Yandex et Mapy ; le JSON-LD des pages (nom, adresse, point,
+    horaires) ; les meta de position ; le titre débarrassé du nom du site ; et
+    le nom dans l'adresse des pages Tripadvisor, Booking, TheFork et Yelp
+    (`_shared/lecture-lien.ts`, 48 cas dans `verif-lecture-lien.mjs`).
+    Mesuré sur un exécuteur : Plans et Waze donnent des fiches complètes.
+  · **Non résolu :** le site du Prado rend `no_data` depuis la fonction ;
+    cause non établie (blocage probable des robots).
+  · Les noms se comparent dans toutes les écritures et toutes les variantes
+    OSM (`name:en`, `int_name`…). Avant, un nom grec normalisait en chaîne
+    vide et « correspondait » à tout.
+  · La complétion automatique (`lookupPlace`) exige le nom du lieu, reste à
+    150 km du voyage, se replie sur Photon. Elle écrivait auparavant le
+    résultat le mieux renseigné, sans nom, jusqu'à 500 km.
+  · Un partage collé avec du texte autour se lit (`lienColle.js`), comme les
+    adresses `geo:`.
+- **Repère de distances** (idée tirée de Tripsy) : un lieu ou l'hôtel, commun
+  à la Carte (cercles de 1, 2, 3 km) et à la Réserve (tri « 📍 Depuis… »).
+- **Doublon signalé à l'ajout**, sans bloquer (`doublon.js`) : même lien, même
+  point sous un nom apparenté, ou même nom.
+- **Proposées depuis Tripsy et pas retenues pour l'instant** : le ＋ à portée
+  du pouce, la bande horizontale des jours. Non écartées : pas encore choisies.
+
 - **Les fonctions Edge n'étaient plus déployées depuis le 31 août** (constaté
   le 28 septembre 2026). `deploy-edge-functions.yml` échoue à chaque fusion
   sur `401 Unauthorized` : le secret GitHub `SUPABASE_ACCESS_TOKEN` n'est plus

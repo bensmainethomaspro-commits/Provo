@@ -667,7 +667,8 @@ body {
 .category-btn:active { transform: scale(0.94); }
 .category-btn span:first-child { font-size: var(--t-xl); }
 .category-btn--active {
-  border-color: var(--accent); color: var(--accent);
+  /* Le libellé est du texte : --accent y tombait à 2,35:1. */
+  border-color: var(--accent); color: var(--accent-texte, var(--accent));
   background: color-mix(in srgb, var(--accent) 9%, var(--surface-raised));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
@@ -6357,6 +6358,11 @@ button.budget-inline:active { transform: scale(0.98); }
   border-radius: 0 var(--radius-sm, var(--radius-sm)) var(--radius-sm, var(--radius-sm)) 0;
   padding: 8px 10px;
 }
+/* Un doublon n'est pas une erreur : ambre, comme les autres alertes. */
+.import-msg--doublon {
+  border-left-color: var(--amber, #f59e0b);
+  color: var(--text);
+}
 .form-error { color: var(--red); font-size: var(--t-sm); line-height: 1.4; }
 
 /* Établissement détecté à l'adresse saisie — proposition, pas imposition. */
@@ -7027,6 +7033,44 @@ button.budget-inline:active { transform: scale(0.98); }
 .map-proche__dist { margin-left: auto; font-weight: 600; color: var(--accent-deep, var(--accent)); }
 .map-proche--err { color: var(--red, #b91c1c); font-size: var(--t-sm); }
 
+/* ─── Distances depuis un repère ──────────────────────────────────────────
+   « Est-ce loin de l'hôtel ? » se lit d'un coup d'œil sur trois cercles.
+   Le bandeau dit depuis où, et se retire d'un geste. */
+.map-depuis { align-items: center; flex-wrap: nowrap; }
+.map-depuis__nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+.map-depuis .map-proche__label { white-space: nowrap; flex-shrink: 0; }
+.map-depuis__retirer {
+  min-width: 44px; min-height: 44px; margin: -10px -10px -10px 0;
+  border: none; background: transparent; color: var(--text);
+  font-size: var(--t-md); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+/* Posée sur les tuiles, toujours claires : couleurs fixes, lisibles dans les
+   deux thèmes. */
+.map-cercle__label {
+  font: 700 11px/18px system-ui, sans-serif; text-align: center;
+  color: #0b4f70; background: rgba(255, 255, 255, 0.88);
+  border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+.map-popup__km { color: #555; }
+.map-popup__depuis {
+  display: block; width: 100%; margin-top: 8px;
+  min-height: 44px; padding: 0 12px; border-radius: var(--radius-sm);
+  background: transparent; color: #0b4f70; border: 1px solid #c9d6de;
+  font-family: inherit; font-size: var(--t-md); font-weight: 600;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.map-popup__depuis:active { opacity: 0.82; }
+
+/* Le repère de la Réserve : un sélecteur natif, le seul qui liste vingt lieux
+   sans écran de plus. */
+.reserve-depuis {
+  display: flex; align-items: center; gap: 8px; padding: 0 0 10px;
+  font-size: var(--t-sm); color: var(--text-muted);
+}
+.reserve-depuis__label { flex-shrink: 0; }
+.reserve-depuis__select { flex: 1 1 auto; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+
 /* Piocher depuis la carte : l'action principale passe devant « ouvrir ». */
 .map-popup__pick {
   display: block; width: 100%; margin-top: 10px;
@@ -7083,7 +7127,9 @@ button.budget-inline:active { transform: scale(0.98); }
    et « · ● Ouvert » faisait deux marques pour une seule information. Le mot
    porte la couleur, elle suffit. */
 .reserve-etat__ferme { color: var(--text-light); font-weight: 600; }
-.reserve-etat__km { font-weight: 600; color: var(--accent-deep, var(--accent)); }
+/* --accent-texte, pas --accent-deep : celui-ci reçoit du blanc, il ne tient
+   qu'à 4,38:1 posé en texte sur une fiche claire (3,83:1 en sombre). */
+.reserve-etat__km { font-weight: 600; color: var(--accent-texte, var(--accent)); }
 .reserve-etat__plan { font-style: italic; }
 /* C'est un bouton depuis qu'il fait quelque chose : il lance la recherche
    pour cette fiche. Il garde l'allure d'une mention discrète — souligné

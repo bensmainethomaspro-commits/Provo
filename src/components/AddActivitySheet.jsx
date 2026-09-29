@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm } from '../utils/helpers';
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 import { lienPartage, lireGeo } from '../utils/lienColle';
+import { trouverDoublon } from '../utils/doublon';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
@@ -118,6 +119,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   };
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  // Le même lieu, déjà mis de côté par un autre chemin (une vidéo, un guide,
+  // un ami) : signalé dès que la fiche se remplit, pas au moment d'enregistrer.
+  const doublon = useMemo(
+    () => (isOpen && !isEdit ? trouverDoublon(form, days || [], reserveActivities || []) : null),
+    [isOpen, isEdit, form.title, form.lat, form.lon, form.link, days, reserveActivities], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Les candidats d'un import ambigu passent devant : l'utilisateur vient
   // d'agir dessus, ils répondent à une question posée.
@@ -684,6 +692,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
             {importMsg && <p className="import-msg">{importMsg}</p>}
+            {/* Déjà dans le voyage : on le dit, sans bloquer — ajouter une
+                seconde fois reste possible (deux dîners au même endroit). */}
+            {doublon && (
+              <p className="import-msg import-msg--doublon" role="status">
+                Déjà {doublon.ou} : « {doublon.activite.title} ». Tu peux l'ajouter quand même.
+              </p>
+            )}
 
             {/* Les autres lieux cités par la même légende. Ils partent en
                 Réserve — ce sont des idées, pas un programme — et l'app ira

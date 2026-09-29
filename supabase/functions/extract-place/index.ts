@@ -1233,7 +1233,10 @@ async function handleGeneric(rawUrl: string, ancre: Ancre | null = null) {
     ? (metaTag(html, "og:title") || metaTag(html, "twitter:title") ||
       (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? ""))
     : "";
-  const titreSite = titreDeSite(brut);
+  // Le titre d'une page de carte est celui du service (« OpenStreetMap »),
+  // jamais celui du lieu : sans nom dans le lien, c'est la fiche trouvée au
+  // point qui nommera.
+  const titreSite = carte ? "" : titreDeSite(brut);
   let slug = null;
   try { slug = nomDepuisAdresse(new URL(finalUrl)) || nomDepuisAdresse(new URL(rawUrl)); } catch { /* ignore */ }
 
