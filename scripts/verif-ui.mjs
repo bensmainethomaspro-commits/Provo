@@ -436,6 +436,37 @@ const ECRANS = [
     },
   },
   { nom: 'Carte', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200); } },
+  // Le repère des distances (septembre 2026) : le sélecteur de la Réserve,
+  // et les cercles de 1, 2 et 3 km avec leur bandeau sur la Carte.
+  {
+    nom: 'Réserve (depuis)',
+    repere: '.reserve-depuis',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('select[aria-label="Trier les idées"]').selectOption('depuis').catch(() => {});
+      await p.waitForTimeout(500);
+    },
+  },
+  {
+    nom: 'Carte (cercles)',
+    repere: '.map-depuis',
+    aller: async (p) => {
+      await p.evaluate(() => localStorage.setItem('provo_vue_tr1_depuis', JSON.stringify('a01')));
+      await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200);
+    },
+  },
+  {
+    nom: 'Ajout (doublon)',
+    repere: '.import-msg--doublon',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('.header__add-btn').click().catch(() => {});
+      await p.waitForTimeout(500);
+      await p.locator('.details-pli').click().catch(() => {});
+      await p.locator('input[placeholder="Ex: Déjeuner au marché"]').fill('Schönbrunn').catch(() => {});
+      await p.waitForTimeout(400);
+    },
+  },
   // Deux écrans arrivés en août 2026 et jamais mesurés : le pli du formulaire
   // d'ajout, et les billets du voyage. Le débordement de la zone de notes
   // sous la barre d'onglets s'était vu à l'œil — c'est exactement ce que cet

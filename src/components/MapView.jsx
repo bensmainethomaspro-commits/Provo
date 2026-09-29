@@ -53,7 +53,11 @@ function homeIcon() {
   });
 }
 
-export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity, onPiocher }) {
+// Les cercles de distance : ce qu'on fait à pied (1 km, un quart d'heure),
+// ce qu'on fait encore à pied (2 km), et la limite où l'on prend un transport.
+const CERCLES_KM = [1, 2, 3];
+
+export default function MapView({ days, reserve, roadTripMode, tripColor, accommodationAddress, accommodationLat, accommodationLon, onOpenActivity, onPiocher, depuisId = null, onDepuis }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   // Les épingles vivent dans leur propre calque : on peut les redessiner sans
@@ -74,8 +78,11 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
   // bulles refermées. Ils passent donc par des refs, tenus à jour hors rendu.
   const piocherRef = useRef(onPiocher);
   const ouvrirRef = useRef(onOpenActivity);
-  useEffect(() => { piocherRef.current = onPiocher; ouvrirRef.current = onOpenActivity; },
-    [onPiocher, onOpenActivity]);
+  const depuisRef = useRef(onDepuis);
+  const cerclesRef = useRef(null);
+  useEffect(() => {
+    piocherRef.current = onPiocher; ouvrirRef.current = onOpenActivity; depuisRef.current = onDepuis;
+  }, [onPiocher, onOpenActivity, onDepuis]);
 
   // L'hébergement est localisé une fois, à la saisie, et rangé sur le voyage.
   // La carte n'a donc plus rien à demander au réseau : elle affiche l'épingle
@@ -107,6 +114,14 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
 
   const hasContent = geoActs.length > 0 || !!(accom && accom.lat != null);
 
+  // Le repère des distances : un lieu du voyage, ou l'hébergement. « Est-ce
+  // loin de l'hôtel ? », « qu'y a-t-il autour du musée ? » : la question se
+  // pose depuis n'importe quel point, pas seulement depuis sa position. Le
+  // même repère trie la Réserve (« 📍 Depuis un lieu »).
+  const repere = depuisId === 'hotel'
+    ? (accom && accom.lat != null ? { id: 'hotel', title: 'Hébergement', lat: accom.lat, lon: accom.lon } : null)
+    : (geoActs.find(a => a.id === depuisId) || null);
+
   // Ce que la carte dessine, résumé en texte. Le comparer par contenu et non
   // par identité est ce qui empêche la carte de se reconstruire pour rien :
   // à chaque rendu, `geoActs` et `accom` sont des objets neufs, alors que ce
@@ -115,6 +130,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     geoActs.map(a => [a.id, a.lat, a.lon, a.category, a.title, a.address || '', a.dayLabel, !!a.enReserve]),
     !!roadTripMode, tripColor || '',
     accom && accom.lat != null ? [accom.lat, accom.lon, accom.address || ''] : null,
+    repere ? [repere.id, repere.lat, repere.lon] : null,
   ]);
 
   // Ce qu'on veut savoir en regardant la carte : lequel est à portée.
@@ -166,6 +182,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
       map.remove();
       mapRef.current = null;
       couchesRef.current = null;
+      cerclesRef.current = null;
       moiRef.current = null;
     };
   }, [hasContent]);
@@ -176,6 +193,25 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     const couche = couchesRef.current;
     if (!map || !couche) return;
     couche.clearLayers();
+
+    // La distance au repère, dite dans la bulle ; et le geste qui en fait le
+    // repère, ou qui retire les cercles quand c'est déjà lui.
+    const boutonDepuis = (id) => {
+      if (!depuisRef.current) return '';
+      if (repere?.id === id) {
+        return '<br><button type="button" class="map-popup__depuis">✕ Retirer les cercles</button>';
+      }
+      const lieu = id === 'hotel' ? accom : geoActs.find(x => x.id === id);
+      const km = repere && lieu ? haversineKm(repere.lat, repere.lon, lieu.lat, lieu.lon) : null;
+      return (km != null
+        ? `<br><small class="map-popup__km">📏 ${esc(formatDistance(km))} de ${esc(repere.title)}</small>`
+        : '')
+        + `<br><button type="button" class="map-popup__depuis">📏 Distances d'ici</button>`;
+    };
+    const brancherDepuis = (el, id) => {
+      const b = el?.querySelector('.map-popup__depuis');
+      if (b) b.onclick = () => { map.closePopup(); depuisRef.current?.(repere?.id === id ? null : id); };
+    };
 
     const bounds = [];
     geoActs.forEach((a, idx) => {
@@ -201,6 +237,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
           + (ouvrirRef.current
             ? `<br><button type="button" class="map-popup__edit">Ouvrir la fiche</button>`
             : '')
+          + boutonDepuis(a.id)
         );
 
       marker.on('popupopen', (e) => {
@@ -213,6 +250,7 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         // donc invisible. C'est le bandeau d'annulation de l'app qui confirme —
         // et il permet en plus de revenir en arrière.
         if (prendre) prendre.onclick = () => { map.closePopup(); piocherRef.current?.(a.id); };
+        brancherDepuis(el, a.id);
       });
 
       if (roadTripMode) {
@@ -243,7 +281,9 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
     if (accom && accom.lat != null) {
       L.marker([accom.lat, accom.lon], { icon: homeIcon(), zIndexOffset: 200, title: 'Hébergement' })
         .addTo(couche)
-        .bindPopup(`<strong>🏠 Hébergement</strong>${accom.address ? `<br><small style="color:#888">${accom.address}</small>` : ''}`);
+        .bindPopup(`<strong>🏠 Hébergement</strong>${accom.address ? `<br><small style="color:#888">${esc(accom.address)}</small>` : ''}`
+          + boutonDepuis('hotel'))
+        .on('popupopen', (e) => brancherDepuis(e.popup.getElement(), 'hotel'));
       bounds.push([accom.lat, accom.lon]);
     }
 
@@ -256,6 +296,34 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
       recadreRef.current = cadrer(map, bounds);
     }
   }, [dessin]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Les cercles autour du repère. Leur propre calque, leur propre effet : les
+  // tracer ne touche ni aux épingles ni au zoom.
+  const repLat = repere?.lat, repLon = repere?.lon;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (cerclesRef.current) { cerclesRef.current.remove(); cerclesRef.current = null; }
+    if (repLat == null || repLon == null) return;
+    const couche = L.layerGroup().addTo(map);
+    cerclesRef.current = couche;
+    const couleur = tripColor || '#35A7DD';
+    CERCLES_KM.forEach((km) => {
+      L.circle([repLat, repLon], {
+        radius: km * 1000, color: couleur, weight: 1.5, opacity: 0.8,
+        dashArray: '5 6', fill: km === 1, fillOpacity: 0.06, interactive: false,
+      }).addTo(couche);
+      // L'étiquette posée au nord de chaque cercle : un cercle sans chiffre
+      // ne dit pas s'il fait 1 ou 3 km.
+      L.marker([repLat + (km * 1000) / 111320, repLon], {
+        interactive: false, keyboard: false,
+        icon: L.divIcon({ className: 'map-cercle__label', html: `${km} km`, iconSize: [44, 18], iconAnchor: [22, 9] }),
+      }).addTo(couche);
+    });
+    // Un repère choisi dans la Réserve peut être hors du cadre : on montre le
+    // cercle de 3 km en entier, sauf si l'utilisateur a déjà pris la main.
+    if (!toucheeRef.current) map.fitBounds(L.latLng(repLat, repLon).toBounds(6400), { padding: [16, 16] });
+  }, [repLat, repLon, tripColor, hasContent]);
 
   // La position bouge en continu : la redessiner par le même effet que les
   // épingles reconstruirait la carte entière à chaque pas, et perdrait le
@@ -322,6 +390,18 @@ export default function MapView({ days, reserve, roadTripMode, tripColor, accomm
         </div>
       )}
       {geo.erreur && <div className="map-proche map-proche--err">{geo.erreur}</div>}
+      {repere && (
+        <div className="map-proche map-depuis">
+          <span className="map-proche__label">Distances depuis</span>
+          <strong className="map-depuis__nom">{repere.id === 'hotel' ? '🏠 ' : ''}{repere.title}</strong>
+          <button
+            type="button"
+            className="map-depuis__retirer"
+            onClick={() => onDepuis?.(null)}
+            aria-label="Retirer les cercles de distance"
+          >✕</button>
+        </div>
+      )}
       <div ref={containerRef} className="map-canvas" />
     </div>
   );

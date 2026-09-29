@@ -43,6 +43,15 @@ const LIENS = [
   // Un lien Maps SANS coordonnées, comme en donne share.google : seul le nom
   // est lu, et sans la destination « Café Sacher » part à 250 km.
   ['Café Sacher (sans coords)', 'https://www.google.com/maps/search/?api=1&query=Caf%C3%A9+Sacher', 'resto', 'Vienne'],
+  // Un lieu dont le nom OpenStreetMap est en grec : le lien donne le nom
+  // latin, que seules les variantes (`name:en`, `int_name`) portent.
+  ['Musée de l’Acropole (grec)', 'https://www.google.com/maps/place/Acropolis+Museum/@37.9685,23.7285,17z', 'visite'],
+  // Les autres applications de cartes : nom et point dans les paramètres.
+  ['Plans (Apple)', 'https://maps.apple.com/?q=Acropolis%20Museum&ll=37.9685,23.7285', 'visite', 'Athènes'],
+  ['Waze', 'https://waze.com/ul?ll=41.4036,2.1744&q=Sagrada%20Familia', 'visite', 'Barcelone'],
+  ['OpenStreetMap (marqueur seul)', 'https://www.openstreetmap.org/?mlat=41.8902&mlon=12.4922#map=17/41.8902/12.4922', null, 'Rome'],
+  // Un site officiel : JSON-LD s'il en publie un, sinon le titre nettoyé.
+  ['Site du Prado', 'https://www.museodelprado.es/', 'visite', 'Madrid'],
 ];
 
 function ligne(nom, r) {

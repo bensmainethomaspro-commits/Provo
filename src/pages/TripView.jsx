@@ -150,10 +150,36 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // ici : la Réserve doit se trier hors ligne comme le reste.
   const hotelReserve = Number.isFinite(trip?.accommodationLat) && Number.isFinite(trip?.accommodationLon)
     ? { lat: trip.accommodationLat, lon: trip.accommodationLon } : null;
+  // Le repère des distances, commun à la Carte et à la Réserve : l'hôtel, ou
+  // n'importe quel lieu du voyage qui a des coordonnées. Sur la Carte il trace
+  // les cercles de 1, 2 et 3 km ; dans la Réserve il trie les idées.
+  const [depuisId, setDepuisId] = useEtatRetenu(`${tripId}_depuis`, null);
+  const lieuxRepere = useMemo(() => {
+    const vus = new Set();
+    const l = [];
+    if (hotelReserve) l.push({ id: 'hotel', title: '🏠 Hébergement', ...hotelReserve });
+    const tous = [...(trip?.days || []).flatMap(d => d.activities || []), ...(trip?.reserve || [])];
+    for (const a of tous) {
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon) || vus.has(a.id)) continue;
+      vus.add(a.id);
+      l.push({ id: a.id, title: a.title || 'Lieu', lat: a.lat, lon: a.lon });
+    }
+    return l;
+  }, [hotelReserve?.lat, hotelReserve?.lon, trip?.days, trip?.reserve]); // eslint-disable-line react-hooks/exhaustive-deps
+  const repere = lieuxRepere.find(l => l.id === depuisId) || null;
   // Un tri retenu dont la référence a disparu (hôtel retiré, position
-  // éteinte) retombe sur l'ordre d'ajout au lieu d'un menu sans option choisie.
+  // éteinte, lieu supprimé) retombe sur l'ordre d'ajout au lieu d'un menu
+  // sans option choisie.
   const tri = (reserveSort === 'hotel' && !hotelReserve) || (reserveSort === 'proche' && !geoReserve.position)
+    || (reserveSort === 'depuis' && !repere)
     ? 'default' : reserveSort;
+  const choisirTri = (v) => {
+    // Choisir « depuis un lieu » sans repère : on part de l'hôtel s'il existe,
+    // sinon du premier lieu situé. Le sélecteur juste dessous permet d'en
+    // changer.
+    if (v === 'depuis' && !repere && lieuxRepere.length) setDepuisId(lieuxRepere[0].id);
+    setReserveSort(v);
+  };
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
@@ -1219,13 +1245,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
-                        onChange={e => setReserveSort(e.target.value)}>
+                        onChange={e => choisirTri(e.target.value)}>
                         <option value="default">Ajout</option>
                         <option value="alpha">A–Z</option>
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
                         {geoReserve.position && <option value="proche">Le plus proche</option>}
                         {hotelReserve && <option value="hotel">🏠 Hôtel</option>}
+                        {lieuxRepere.length > 0 && <option value="depuis">📍 Depuis…</option>}
                       </select>
                     </>
                   )}
@@ -1238,6 +1265,15 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     pour en atteindre une, et le défilement décalait la cible
                     sous le doigt. Mesuré : le parcours qui filtre par catégorie
                     ouvrait la recherche à la place. */}
+                {tri === 'depuis' && repere && (
+                  <label className="reserve-depuis">
+                    <span className="reserve-depuis__label">Distances depuis</span>
+                    <select className="reserve-sort-select reserve-depuis__select" value={repere.id}
+                      onChange={e => setDepuisId(e.target.value)}>
+                      {lieuxRepere.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                    </select>
+                  </label>
+                )}
                 {!grouper && !rechercheOuverte && (
                   <div className="reserve-filter">
                     {/* « Tout » ne sert qu'à revenir : muet tant qu'on n'est
@@ -1279,7 +1315,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                   // l'hébergement, et la distance affichée sur chaque fiche
                   // aussi — sinon l'ordre ne se lirait pas.
                   const parHotel = tri === 'hotel';
-                  const pos = parHotel ? hotelReserve : geoReserve.position;
+                  const parRepere = tri === 'depuis';
+                  const pos = parHotel ? hotelReserve : parRepere ? repere : geoReserve.position;
                   const dist = (a) => (pos && a.lat != null && a.lon != null)
                     ? haversineKm(pos.lat, pos.lon, a.lat, a.lon) : null;
 
@@ -1294,7 +1331,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                       if (tri === 'alpha') return a.title.localeCompare(b.title, 'fr');
                       if (tri === 'duration') return ((a.durationHours||0)*60+(a.durationMinutes||0)) - ((b.durationHours||0)*60+(b.durationMinutes||0));
                       if (tri === 'price') return (parseFloat(a.price)||0) - (parseFloat(b.price)||0);
-                      if (tri === 'proche' || tri === 'hotel') {
+                      if (tri === 'proche' || tri === 'hotel' || tri === 'depuis') {
                         // Sans coordonnées, on ne peut pas classer : ces idées
                         // vont en fin de liste plutôt que de fausser l'ordre.
                         const da = dist(a), db = dist(b);
@@ -1375,7 +1412,14 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                           <>
                             {ouv === true && <span className="reserve-etat__ouvert">Ouvert</span>}
                             {ouv === false && <span className="reserve-etat__ferme">Fermé</span>}
-                            {km != null && <span className="reserve-etat__km">{parHotel ? `🏠 ${formatDistance(km)}` : formatDistance(km)}</span>}
+                            {km != null && (
+                              <span className="reserve-etat__km">
+                                {parRepere && repere?.id === activity.id ? '📍 repère'
+                                  : parHotel ? `🏠 ${formatDistance(km)}`
+                                  : parRepere ? `📍 ${formatDistance(km)}`
+                                  : formatDistance(km)}
+                              </span>
+                            )}
                             {planifiee && <span className="reserve-etat__plan">déjà au programme</span>}
                             {/* Qui l'a proposée. Muet quand on voyage seul, et
                                 muet pour ses propres idées : « proposé par moi »
@@ -1485,6 +1529,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
         {tab === 'map' && (
           <Suspense fallback={<div className="map-empty"><div className="map-empty__icon">🗺️</div><p>Chargement de la carte…</p></div>}>
             <MapView days={trip.days} reserve={trip.reserve} roadTripMode={trip.roadTripMode} tripColor={trip.color} accommodationAddress={trip.accommodationAddress} accommodationLat={trip.accommodationLat} accommodationLon={trip.accommodationLon} onOpenActivity={openActivityFromMap}
+              depuisId={repere?.id ?? null} onDepuis={setDepuisId}
               onPiocher={todayDay ? (actId) => undoableAssignFromReserve(todayDay.id, actId) : null} />
           </Suspense>
         )}

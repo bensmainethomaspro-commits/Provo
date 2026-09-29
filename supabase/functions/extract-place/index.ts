@@ -19,6 +19,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
 import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
+import {
+  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, titreDeSite,
+} from "../_shared/lecture-lien.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -231,8 +234,8 @@ function distanceKm(aLat: number, aLon: number, bLat: number, bLon: number): num
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-const normalize = (s: string) =>
-  (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+// Garde les lettres de toutes les écritures : voir `normaliser`.
+const normalize = normaliser;
 
 // Un résultat vaut mieux qu'un autre s'il désigne un établissement nommé et
 // renseigné, et s'il se trouve là où on l'attend. Sans ce tri, `limit=1`
@@ -264,11 +267,13 @@ function pickBest(
 
     // Le nom demandé doit se retrouver dans le résultat, dans un sens ou dans
     // l'autre (« Da Enzo al 29 » → « Da Enzo »).
+    // Toutes les variantes comptent : à Athènes, `name` est en grec et c'est
+    // `name:en`, `int_name` ou `alt_name` qui porte ce que l'utilisateur a lu.
     let nameHit = false;
     if (wanted) {
-      const cand = normalize([p.name, p.namedetails?.["name:en"], p.namedetails?.int_name].filter(Boolean).join(" "));
-      if (cand && (cand.includes(wanted) || wanted.includes(cand))) { s += 5; nameHit = true; }
-      else if (cand && wanted.split(" ").some((w) => w.length > 3 && cand.includes(w))) { s += 2; nameHit = true; }
+      const accord = accordNom(name, nomsConnus(p));
+      if (accord === "fort") { s += 5; nameHit = true; }
+      else if (accord === "faible") { s += 2; nameHit = true; }
     }
 
     // Une adresse ne porte pas de nom : c'est la voie qui doit correspondre.
@@ -1204,32 +1209,79 @@ async function handleTikTok(rawUrl: string, ancre: Ancre | null = null) {
 }
 
 // ── Generic website ───────────────────────────────────────────────────────
+/**
+ * Tout ce qui n'est ni Google Maps ni TikTok : une autre application de
+ * cartes, la page d'un restaurant, d'un musée, d'un hôtel, un guide.
+ *
+ * Ce lecteur ne prenait que le titre de la page et le géocodait. Il lit
+ * maintenant, du plus sûr au moins sûr : les paramètres d'un lien de carte
+ * (Plans, OpenStreetMap, Waze…), le bloc JSON-LD de la page (nom, adresse,
+ * coordonnées, horaires), les balises meta de position, le titre débarrassé
+ * du nom du site, et enfin le nom écrit dans l'adresse quand le site bloque
+ * les robots. Voir `_shared/lecture-lien.ts`.
+ */
 async function handleGeneric(rawUrl: string, ancre: Ancre | null = null) {
-  const { html } = await resolve(rawUrl);
-  const title = metaTag(html, "og:title") || metaTag(html, "twitter:title") ||
-    (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? "");
-  const desc = metaTag(html, "og:description") || metaTag(html, "description");
-  const image = metaTag(html, "og:image") || metaTag(html, "twitter:image");
-  if (!title) return null;
+  // Un lien de carte complet se lit sans télécharger la page.
+  let carte = (() => { try { return lienCarte(new URL(rawUrl)); } catch { return null; } })();
+  const complet = Boolean(carte?.nom && carte?.coords);
+  const { finalUrl, html } = complet ? { finalUrl: rawUrl, html: "" } : await resolve(rawUrl);
+  if (!complet) {
+    try { carte = lienCarte(new URL(finalUrl)) || carte; } catch { /* ignore */ }
+  }
+  const ld = html ? lireJsonLd(html) : null;
+  const brut = html
+    ? (metaTag(html, "og:title") || metaTag(html, "twitter:title") ||
+      (html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? ""))
+    : "";
+  // Le titre d'une page de carte est celui du service (« OpenStreetMap »),
+  // jamais celui du lieu : sans nom dans le lien, c'est la fiche trouvée au
+  // point qui nommera.
+  const titreSite = carte ? "" : titreDeSite(brut);
+  let slug = null;
+  try { slug = nomDepuisAdresse(new URL(finalUrl)) || nomDepuisAdresse(new URL(rawUrl)); } catch { /* ignore */ }
 
-  const cleaned = cleanTitle(title) || title;
-  let category = categoryFromHashtags(`${title} ${desc}`) || null;
+  const nom = carte?.nom || ld?.nom || titreSite || slug?.nom || "";
+  const coords = carte?.coords || ld?.coords || (html ? metaGeo(html) : null);
+  const adresseLue = carte?.adresse || ld?.adresse || null;
+  if (!nom && !coords && !adresseLue) return null;
+
+  const desc = html ? (metaTag(html, "og:description") || metaTag(html, "description")) : "";
+  const image = html ? (metaTag(html, "og:image") || metaTag(html, "twitter:image")) : "";
+  const cleaned = cleanTitle(nom) || nom;
 
   const result: any = {
-    title: cleaned,
+    title: cleaned || adresseLue || "Lieu",
     link: rawUrl,
     photoUrl: image || "",
     notes: desc ? desc.slice(0, 300) : "",
-    source: "web",
+    source: carte ? "carte" : "web",
   };
-  const place = await geocode(cleaned, ancre).catch(() => null);
-  if (place) {
-    result.address = place.address;
-    result.lat = place.lat;
-    result.lon = place.lon;
-    category = category || place.category;
+
+  // Chercher la fiche OpenStreetMap : c'est elle qui porte horaires et
+  // catégorie. Les coordonnées de la page situent et vérifient la recherche ;
+  // sans elles, la destination du voyage — et la ville lue dans l'adresse de
+  // la page, quand il n'y a pas de destination.
+  let place: any = null;
+  if (coords) {
+    place = await resolvePlace(cleaned || null, coords, ancre).catch(() => null);
+  } else if (cleaned) {
+    const q = slug?.ville && !ancre ? `${cleaned}, ${slug.ville}` : cleaned;
+    place = await geocode(q, ancre).catch(() => null);
   }
-  result.category = category || "visite";
+  if (!place && !coords && adresseLue) place = await geocode(adresseLue, ancre).catch(() => null);
+
+  // Le point publié par la page est plus sûr qu'un résultat de géocodeur ;
+  // l'adresse publiée aussi.
+  const lat = coords?.lat ?? place?.lat;
+  const lon = coords?.lon ?? place?.lon;
+  if (Number.isFinite(lat) && Number.isFinite(lon)) { result.lat = lat; result.lon = lon; }
+  const adresse = adresseLue || place?.address;
+  if (adresse) result.address = adresse;
+  const horaires = place?.openingHours || ld?.horaires;
+  if (horaires) result.openingHours = horaires;
+  if (place?.price) result.price = place.price;
+  if (result.title === "Lieu" && place?.title) result.title = place.title;
+  result.category = ld?.categorie || categoryFromHashtags(`${brut} ${desc}`) || place?.category || "visite";
   return result;
 }
 // ── Ce qui vivait ici : trois appels au modèle payant ───────────────────────

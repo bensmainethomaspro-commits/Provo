@@ -8,6 +8,8 @@
 // comme le fait déjà l'app pour Overpass, Wikipédia et la météo. Pas de clé
 // d'API, pas de fonction serveur à déployer.
 
+import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-lien.ts';
+
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const cache = new Map();
@@ -59,10 +61,32 @@ export function distKm(aLat, aLon, bLat, bLon) {
 // On demande cinq résultats et on garde le mieux renseigné, le plus proche du
 // voyage. Avec `limit=1`, le géocodeur imposait son premier choix — souvent une
 // rue ou un immeuble plutôt que l'établissement cherché.
-async function searchNominatim(query, lat = null, lon = null) {
+//
+// Le résultat doit PORTER LE NOM cherché. Ce n'était pas vérifié : la fiche
+// « Vienna state opera » se complétait avec l'adresse d'Opera, en Italie, et
+// l'app l'écrivait d'office dans la fiche — le rayon toléré allait jusqu'à
+// 500 km. Un voisin qui a des horaires n'est pas le lieu ; mieux vaut ne rien
+// remplir que remplir faux.
+//
+// Rayon : 150 km autour du voyage, le seuil au-delà duquel le contrôle des
+// lieux signale déjà une fiche comme mal située. Accepter plus loin ici
+// fabriquait l'erreur que ce contrôle doit ensuite rattraper.
+const RAYON_KM = 150;
+
+function candidatValable(noms, cLat, cLon, { nom, lat, lon }) {
+  if (nom && !accordNom(nom, noms)) return null;
+  if (lat != null && lon != null) {
+    const d = distKm(lat, lon, cLat, cLon);
+    if (d > RAYON_KM) return null;
+    return d;
+  }
+  return Infinity;
+}
+
+async function searchNominatim(query, lat = null, lon = null, nom = '') {
   try {
     const url = `${NOMINATIM}?q=${encodeURIComponent(query)}`
-      + '&format=json&addressdetails=1&extratags=1&limit=5';
+      + '&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5';
     const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
     if (!res.ok) return null;
     const data = await res.json();
@@ -72,6 +96,8 @@ async function searchNominatim(query, lat = null, lon = null) {
     for (const c of data) {
       const cLat = parseFloat(c.lat), cLon = parseFloat(c.lon);
       if (!Number.isFinite(cLat)) continue;
+      const d = candidatValable(nomsConnus(c), cLat, cLon, { nom, lat, lon });
+      if (d == null) continue;
       const ex = c.extratags || {};
       let s = 0;
       if (c.name) s += 3;
@@ -79,12 +105,8 @@ async function searchNominatim(query, lat = null, lon = null) {
       if (ex.opening_hours) s += 2;
       if (ex.website || ex['contact:website']) s += 1;
       if (c.address?.house_number) s += 1;
-      if (lat != null && lon != null) {
-        const d = distKm(lat, lon, cLat, cLon);
-        // Un homonyme à l'autre bout du monde n'est jamais le bon.
-        if (d > 500) continue;
-        s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : 0;
-      }
+      if (nom && accordNom(nom, nomsConnus(c)) === 'fort') s += 4;
+      if (Number.isFinite(d)) s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : 0;
       if (s > best) { best = s; p = c; }
     }
     if (!p) return null;
@@ -104,18 +126,73 @@ async function searchNominatim(query, lat = null, lon = null) {
   }
 }
 
+// ── Photon : même fond OpenStreetMap, autre hébergeur ─────────────────────────
+// Le secours quand Nominatim ne rend rien — ou refuse, ce qu'il fait dès qu'on
+// enchaîne les recherches. Mesuré le 28/09/2026 sur 23 adresses à l'étranger :
+// Photon 20, Nominatim 17. Il ne porte ni horaires ni tarifs ; Overpass, juste
+// après, les complète.
+async function searchPhoton(query, lat = null, lon = null, nom = '') {
+  try {
+    let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=fr`;
+    if (lat != null && lon != null) url += `&lat=${lat}&lon=${lon}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    let p = null, best = -Infinity;
+    for (const f of data?.features || []) {
+      const [cLon, cLat] = f.geometry?.coordinates || [];
+      if (!Number.isFinite(cLat)) continue;
+      const q = f.properties || {};
+      const d = candidatValable([q.name].filter(Boolean), cLat, cLon, { nom, lat, lon });
+      if (d == null) continue;
+      let s = q.name ? 3 : 0;
+      if (!GENERIC_CLASSES.includes(q.osm_key)) s += 4;
+      if (q.housenumber) s += 1;
+      if (Number.isFinite(d)) s += d < 1 ? 5 : d < 10 ? 3 : d < 75 ? 1 : 0;
+      if (s > best) { best = s; p = { q, cLat, cLon }; }
+    }
+    if (!p) return null;
+    const { q } = p;
+    return {
+      lat: p.cLat,
+      lon: p.cLon,
+      address: buildAddress({
+        house_number: q.housenumber, road: q.street,
+        city: q.city || q.town || q.village, country: q.country,
+      }),
+      openingHours: '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ── Overpass : bien meilleur sur les commerces (restaurants, bars, cafés), que
 // la recherche par nom de Nominatim rate souvent. On cherche l'objet OSM dont
 // le nom correspond, autour de la destination.
 async function searchOverpass(name, lat, lon) {
   if (!lat || !lon) return null;
   const safe = name.replace(/["\\]/g, ' ').replace(/[.*+?^${}()|[\]]/g, '.');
-  const q = `[out:json][timeout:20];nwr["name"~"${safe}",i](around:25000,${lat},${lon});out tags center 1;`;
+  const q = `[out:json][timeout:20];nwr["name"~"${safe}",i](around:25000,${lat},${lon});out tags center 8;`;
   try {
     const res = await fetch(`${OVERPASS}?data=${encodeURIComponent(q)}`);
     if (!res.ok) return null;
     const data = await res.json();
-    const el = data?.elements?.[0];
+    // Le premier élément rendu n'est pas le meilleur : on prend celui qui porte
+    // le nom le plus exactement, puis le plus renseigné, puis le plus proche.
+    let el = null, best = -Infinity;
+    for (const e of data?.elements || []) {
+      const t = e.tags || {};
+      const eLat = e.lat ?? e.center?.lat, eLon = e.lon ?? e.center?.lon;
+      if (!Number.isFinite(eLat)) continue;
+      const accord = accordNom(name, nomsConnus({ name: t.name, namedetails: t }));
+      if (!accord) continue;
+      let s = accord === 'fort' ? 5 : 2;
+      if (t.opening_hours) s += 2;
+      if (t['addr:street']) s += 1;
+      s -= distKm(lat, lon, eLat, eLon) / 10;
+      if (s > best) { best = s; el = e; }
+    }
     if (!el) return null;
     const t = el.tags || {};
     const price = parsePrice(t);
@@ -215,6 +292,13 @@ function merge(a, b) {
   };
 }
 
+/** Le nom sans ce que l'utilisateur y a ajouté : parenthèses, « - visite ». */
+export function nomSansPrecision(titre) {
+  const t = String(titre || '').replace(/\s*[([][^)\]]*[)\]]/g, ' ').split(/\s+[-–—|•·]\s+/)[0]
+    .replace(/\s+/g, ' ').trim();
+  return t.length >= 3 ? t : String(titre || '').trim();
+}
+
 /**
  * Cherche les informations manquantes d'un lieu.
  * @param {string} title  nom de l'activité (ex. « Rocher de la Vierge »)
@@ -231,17 +315,32 @@ export async function lookupPlace(title, near, coords = {}) {
   if (cache.has(key)) return cache.get(key);
 
   const run = async () => {
-    let found = await searchNominatim(query, coords.lat, coords.lon);
-    // Le nom seul, sans la ville, ramène des homonymes à l'autre bout du monde
-    // (« Da Enzo al 29 » → une rue au Brésil). On ne l'essaie qu'en dernier, et
-    // seulement si le voyage donne un point d'ancrage pour vérifier.
-    if (!found && near && coords.lat != null) {
-      found = await searchNominatim(name, coords.lat, coords.lon);
+    // « Acropole (billets coupe-file) », « Sagrada Família - visite guidée » :
+    // la précision ajoutée par l'utilisateur n'est pas dans le nom du lieu.
+    const court = nomSansPrecision(name);
+    // Plusieurs recherches dans la même place de la file : chacune respecte
+    // quand même l'intervalle d'une seconde que Nominatim demande.
+    let appels = 0;
+    const nominatim = async (...args) => {
+      if (appels++) await pause(PAUSE_MS);
+      return searchNominatim(...args);
+    };
+    let found = null;
+    for (const n of [...new Set([name, court])]) {
+      found = await nominatim(near ? `${n}, ${near}` : n, coords.lat, coords.lon, n);
+      // Le nom seul, sans la ville, ramène des homonymes à l'autre bout du
+      // monde (« Da Enzo al 29 » → une rue au Brésil). On ne l'essaie qu'en
+      // dernier, et seulement si le voyage donne un point d'ancrage.
+      if (!found && near && coords.lat != null) {
+        found = await nominatim(n, coords.lat, coords.lon, n);
+      }
+      if (!found) found = await searchPhoton(n, coords.lat, coords.lon, n);
+      if (found) break;
     }
     // Complète (ou remplace) via Overpass si des informations clés manquent —
     // typiquement le cas des restaurants et cafés.
     if (!found || !found.openingHours || !found.address) {
-      const viaOsm = await searchOverpass(name, coords.lat, coords.lon);
+      const viaOsm = await searchOverpass(court, coords.lat, coords.lon);
       found = merge(found, viaOsm);
     }
     if (found) cache.set(key, found);

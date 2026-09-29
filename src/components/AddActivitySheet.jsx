@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm } from '../utils/helpers';
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
+import { lienPartage, lireGeo } from '../utils/lienColle';
+import { trouverDoublon } from '../utils/doublon';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
@@ -117,6 +119,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   };
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  // Le même lieu, déjà mis de côté par un autre chemin (une vidéo, un guide,
+  // un ami) : signalé dès que la fiche se remplit, pas au moment d'enregistrer.
+  const doublon = useMemo(
+    () => (isOpen && !isEdit ? trouverDoublon(form, days || [], reserveActivities || []) : null),
+    [isOpen, isEdit, form.title, form.lat, form.lon, form.link, days, reserveActivities], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Les candidats d'un import ambigu passent devant : l'utilisateur vient
   // d'agir dessus, ils répondent à une question posée.
@@ -251,24 +260,43 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg('');
     setCandidates([]);
     try {
-      const isUrl = raw.startsWith('http') || raw.includes('google.com') || raw.includes('goo.gl')
-        || raw.includes('maps.app') || raw.includes('share.google') || raw.includes('tiktok.com');
+      // Un partage arrive rarement nu : « Taverna Platanos » puis le lien,
+      // « Regarde ce lieu : https://… », ou une adresse `geo:` d'Android. Le
+      // lien se lit à part, et le nom écrit à côté sert si le lien ne dit rien.
+      const partage = lienPartage(raw);
+      const geo = partage ? null : lireGeo(raw);
+      const nu = !/\s/.test(raw);
+      const isUrl = Boolean(partage) || (nu && (raw.includes('google.com') || raw.includes('goo.gl')
+        || raw.includes('maps.app') || raw.includes('share.google') || raw.includes('tiktok.com')
+        || raw.includes('maps.apple')));
 
-      if (isUrl) {
-        const normalized = raw.startsWith('http') ? raw : `https://${raw}`;
+      if (isUrl || geo) {
+        const lien = partage?.lien || raw;
+        const normalized = geo ? raw : (lien.startsWith('http') ? lien : `https://${lien}`);
+        const indice = partage?.indice ? nomDeLieu(partage.indice) : (geo?.nom || null);
 
         // TikTok d'abord, et depuis le téléphone. Aucun serveur n'obtient plus
         // la légende — mesuré — mais une application installée reçoit la page
         // complète, parce qu'elle sort par la connexion de la personne avec un
         // agent mobile ordinaire. C'est le seul chemin automatique qui marche.
-        if (/tiktok\.com/i.test(normalized) && lectureNativePossible()) {
+        if (!geo && /tiktok\.com/i.test(normalized) && lectureNativePossible()) {
           const nat = await legendeTikTokNative(normalized).catch(() => null);
           if (nat?.legende && await traiterLegende(nat.legende, raw, { lien: normalized })) return;
         }
         // 1) server-side agent (best — resolves short links + classifies + geocodes)
         // 2) robust client extractor (TikTok oEmbed, Maps proxy chain, geocoding)
-        let result = await extractViaEdge(normalized, tripDestination || '');
-        if (!result) result = await extractPlaceClient(normalized);
+        let result = geo
+          ? (geo.lat != null || geo.nom
+            ? { title: geo.nom || '', lat: geo.lat ?? undefined, lon: geo.lon ?? undefined, category: 'visite' }
+            : null)
+          : await extractViaEdge(normalized, tripDestination || '');
+        if (!result && !geo) result = await extractPlaceClient(normalized);
+        // Le nom écrit à côté du lien : il vaut mieux qu'un titre générique
+        // (« Lieu », « Idée de @compte »), et bien mieux que rien.
+        const titreVide = (t) => !t || /^(lieu|activité tiktok)$/i.test(t) || /^Idée de /.test(t);
+        if (indice && titreVide(result?.title)) {
+          result = { ...(result || {}), title: indice, category: result?.category || 'visite' };
+        }
 
         if (result && (result.title || result.lat != null)) {
           // Retenus par défaut : ils viennent d'être trouvés, et décocher est
@@ -277,7 +305,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             setAutresLieux(result.autresLieux);
             setLieuxRetenus(new Set(result.autresLieux.map((_, i) => i)));
           }
-          applyResult({ ...result, link: result.link || raw }, raw);
+          applyResult({ ...result, link: result.link || normalized }, raw);
+          // Un point `geo:` sans nom : ce qui se trouve à cet endroit précis
+          // est proposé, comme pour une adresse tapée.
+          if (geo && !result.title && result.lat != null) offerPoiAt(result);
 
           // Le serveur a situé le lieu mais n'a pas su le décrire : titre et
           // point, ni adresse, ni horaires, catégorie par défaut. C'est ce que
@@ -296,7 +327,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               && haversineKm(result.lat, result.lon, c.lat, c.lon) < 1
               && mots(c.title).some(w => voulus.includes(w)));
             if (meme) {
-              applyResult({ ...meme, title: result.title, link: result.link || raw,
+              applyResult({ ...meme, title: result.title, link: result.link || normalized,
                 photoUrl: result.photoUrl || meme.photoUrl }, raw);
             }
           }
@@ -310,11 +341,11 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
             if (found.length === 1) {
               // Le nom du lien fait foi : il vient de la fiche Google.
-              applyResult({ ...found[0], title: result.title, link: result.link || raw }, raw);
+              applyResult({ ...found[0], title: result.title, link: result.link || normalized }, raw);
             } else if (found.length > 1) {
               const net = (found[0]._score ?? 0) - (found[1]._score ?? 0) >= 5;
               if (net) {
-                applyResult({ ...found[0], title: result.title, link: result.link || raw }, raw);
+                applyResult({ ...found[0], title: result.title, link: result.link || normalized }, raw);
               } else {
                 setCandidates(found);
                 setImportMsg(`« ${result.title} » importé — précise lequel c'est.`);
@@ -661,6 +692,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </button>
             </div>
             {importMsg && <p className="import-msg">{importMsg}</p>}
+            {/* Déjà dans le voyage : on le dit, sans bloquer — ajouter une
+                seconde fois reste possible (deux dîners au même endroit). */}
+            {doublon && (
+              <p className="import-msg import-msg--doublon" role="status">
+                Déjà {doublon.ou} : « {doublon.activite.title} ». Tu peux l'ajouter quand même.
+              </p>
+            )}
 
             {/* Les autres lieux cités par la même légende. Ils partent en
                 Réserve — ce sont des idées, pas un programme — et l'app ira
