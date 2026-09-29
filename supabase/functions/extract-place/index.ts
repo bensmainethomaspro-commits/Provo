@@ -18,7 +18,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
-import { urlSure } from "../_shared/reseau.ts";
+import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -400,30 +400,33 @@ function shapePlace(p: any) {
 async function fetchOnce(url: string): Promise<{ finalUrl: string; html: string }> {
   const { signal, clear } = withTimeout(10000);
   try {
-    const isGoogle = /google\.|goo\.gl/i.test(url);
-    const r = await fetch(url, {
-      redirect: "follow",
-      signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Accept-Language": "fr,en;q=0.8",
-        // Court-circuite l'interstitiel de consentement Google (UE) qui remplace
-        // la page Maps et vide l'extraction pour goo.gl / share.google.
-        ...(isGoogle ? { "Cookie": "CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg" } : {}),
-      },
-    });
-    clear();
-    const finalUrl = r.url || url;
+    // Chaque saut repasse par `urlSure` : une URL publique qui redirige vers
+    // le réseau interne de l'hébergeur s'arrête avant d'y entrer (A-035).
+    const suivi = await joindre(url, signal, (u) => ({
+      "User-Agent":
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "Accept-Language": "fr,en;q=0.8",
+      // Court-circuite l'interstitiel de consentement Google (UE) qui remplace
+      // la page Maps et vide l'extraction pour goo.gl / share.google. Décidé
+      // à chaque saut : le lien court n'est pas chez google.com, l'arrivée si.
+      ...(/google\.|goo\.gl/i.test(u.hostname) ? { "Cookie": "CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg" } : {}),
+    }));
+    if (!suivi) return { finalUrl: url, html: "" };
+    const finalUrl = suivi.urlFinale.toString();
+    const r = suivi.reponse;
     let html = "";
-    const ct = r.headers.get("content-type") || "";
-    if (ct.includes("text/html") || ct.includes("application/json") || ct === "") {
-      html = (await r.text()).slice(0, 600_000);
+    const ct = r?.headers.get("content-type") || "";
+    if (r && (ct.includes("text/html") || ct.includes("application/json") || ct === "")) {
+      // Lu sous le délai, et plafonné PENDANT la lecture (A-034).
+      html = await lireCorps(r, 600_000);
+    } else {
+      await r?.body?.cancel().catch(() => {});
     }
     return { finalUrl, html };
   } catch {
-    clear();
     return { finalUrl: url, html: "" };
+  } finally {
+    clear();
   }
 }
 
@@ -857,13 +860,13 @@ function looksLikeCaptcha(html: string): boolean {
 async function pageRobotSocial(url: string): Promise<string> {
   const { signal, clear } = withTimeout(8000);
   try {
-    const r = await fetch(url, { headers: { "User-Agent": UA_ROBOT_SOCIAL }, signal, redirect: "follow" });
-    clear();
-    if (!r.ok) return "";
-    return await r.text();
+    const r = (await joindre(url, signal, () => ({ "User-Agent": UA_ROBOT_SOCIAL })))?.reponse;
+    if (!r?.ok) return "";
+    return await lireCorps(r, 600_000);
   } catch {
-    clear();
     return "";
+  } finally {
+    clear();
   }
 }
 
@@ -927,12 +930,11 @@ async function tiktokPageEmbed(id: string) {
 async function tiktokDonneesPage(url: string) {
   const { signal, clear } = withTimeout(12000);
   try {
-    const r = await fetch(url, {
-      headers: { "User-Agent": UA_NAVIGATEUR }, signal, redirect: "follow",
-    });
-    clear();
-    if (!r.ok) return null;
-    const h = await r.text();
+    const r = (await joindre(url, signal, () => ({ "User-Agent": UA_NAVIGATEUR })))?.reponse;
+    if (!r?.ok) return null;
+    // La page complète pèse plusieurs centaines de ko à quelques Mo. Plafond
+    // large, mais un plafond.
+    const h = await lireCorps(r, 5_000_000);
     if (looksLikeCaptcha(h) && !h.includes("__UNIVERSAL_DATA_FOR_REHYDRATION__")) return null;
     const bloc =
       (h.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/) || [])[1]
@@ -948,8 +950,9 @@ async function tiktokDonneesPage(url: string) {
     if (!caption && !author) return null;
     return { caption, author, thumb };
   } catch {
-    clear();
     return null;
+  } finally {
+    clear();
   }
 }
 
@@ -1324,6 +1327,10 @@ Deno.serve(async (req) => {
   if (!url || !/^https?:\/\//i.test(url)) {
     return json({ error: "invalid_url" }, 400);
   }
+  // La branche URL télécharge des pages choisies par l'appelant : elle garde
+  // le même contrôle d'origine que la légende et qu'`enrich-place` (A-033).
+  // Il ne filtre que les navigateurs, voir `_shared/origine.ts`.
+  if (!origineAutorisee(req)) return json({ error: "origine_refusee" }, 403);
 
   // ── L'URL de l'appelant entre ICI, et nulle part ailleurs ──────────────────
   //
