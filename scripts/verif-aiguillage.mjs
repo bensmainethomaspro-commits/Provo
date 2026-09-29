@@ -13,6 +13,9 @@
  * Usage :  node scripts/verif-aiguillage.mjs
  */
 import { readFileSync } from 'node:fs';
+// Importé tel quel : Node retire les types. Le découper au texte cassait dès
+// que le module grandissait (`joindre`, `lireCorps`).
+import { urlSure } from '../supabase/functions/_shared/reseau.ts';
 
 const lire = (chemin) => readFileSync(new URL(chemin, import.meta.url), 'utf8');
 // Le TypeScript est retiré à la main : le type de RETOUR d'abord — il peut
@@ -22,16 +25,14 @@ const ts = (bloc) => bloc
   .replace(/:\s*(URL|string|number|boolean|any)\b/g, '')
   .replace(/export /g, '');
 
-const reseau = lire('../supabase/functions/_shared/reseau.ts');
 const extract = lire('../supabase/functions/extract-place/index.ts');
 const blocAig = extract.slice(
   extract.indexOf('function aiguillage'),
   extract.indexOf('Deno.serve'));
 
-const { urlSure, aiguillage } = new Function(
-  `${ts(reseau.slice(reseau.indexOf('export const PRIVE')))}
-   ${ts(blocAig)}
-   return { urlSure, aiguillage };`)();
+const { aiguillage } = new Function('urlSure',
+  `${ts(blocAig)}
+   return { aiguillage };`)(urlSure);
 
 // ── 1 · Ce qui ne doit JAMAIS être joint ────────────────────────────────────
 const refus = [

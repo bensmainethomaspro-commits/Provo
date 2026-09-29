@@ -70,16 +70,27 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Hashed assets are immutable — cache-first with background refresh.
+  // Cache-first. Le rafraîchissement en tâche de fond ne sert qu'aux fichiers
+  // dont le nom ne change pas avec leur contenu (manifeste, icônes).
+  //
+  // Pas pour `/assets/` : le nom porte l'empreinte du contenu, une copie en
+  // cache ne peut pas être périmée. Pas pour `/tesseract/` : le moteur OCR
+  // pèse 4,5 Mo, et le re-télécharger à CHAQUE lecture de ticket coûtait la
+  // donnée mobile d'un séjour à l'étranger (audit A-036). Il se renouvelle
+  // avec le cache versionné, à chaque nouvelle version de l'app.
+  const fige = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/tesseract/');
   e.respondWith(
     caches.open(CACHE).then(async (cache) => {
       const cached = await cache.match(e.request);
+      if (cached && fige) return cached;
       const fetchPromise = fetch(e.request)
         .then((res) => {
           if (res.ok) cache.put(e.request, res.clone());
           return res;
         })
-        .catch(() => cached || caches.match('/'));
+        // Hors ligne et rien en cache : une vraie erreur. Rendre `index.html`
+        // à la place d'un script faisait exécuter du HTML au moteur OCR.
+        .catch(() => cached || new Response('', { status: 503 }));
       return cached || fetchPromise;
     })
   );
@@ -95,7 +106,9 @@ self.addEventListener('fetch', (e) => {
 // parce qu'une notification se lit d'un coup d'oeil, sur un écran verrouillé,
 // en marchant.
 self.addEventListener('push', (e) => {
-  let d = {};
+  // Les deux chemins affectent `d` : l'initialiser en plus ne servait à rien
+  // (signalé par ESLint), et laissait croire qu'un troisième cas existait.
+  let d;
   try { d = e.data ? e.data.json() : {}; } catch { d = { corps: e.data && e.data.text() }; }
   const titre = d.titre || 'Provo';
   e.waitUntil(self.registration.showNotification(titre, {

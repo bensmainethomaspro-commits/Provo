@@ -62,13 +62,61 @@ Produit et UX, puis retour au début.
 | A-029 | 2026-08-31 | Fiabilité | `voyageSansVoyageur` (`helpers.js:1476`) ne nettoie pas `payerId`, et sort même en `return e` quand le retiré n'était pas participant. `calcDebts` crédite alors `bal[exp.payerId]` sur un id absent de `travelers` (`ExpensesTab.jsx:81`) : le panneau des dettes réaffiche une ligne au nom d'un identifiant technique — le symptôme exact d'A-025, par l'autre champ | Majeur | PROPOSÉ |
 | A-030 | 2026-08-31 | Fiabilité | Notification de dépense tirée à la saisie (`useTrips.js:790`) alors que l'écriture part 700 ms plus tard (`:224`). `notifier-depense` relit une fois après 1 500 ms puis abandonne (`index.ts:145-151`), et l'`invoke` est un `.catch(() => {})`. Hors ligne ou en réseau lent — le terrain de l'app — la notification est perdue sans trace ni reprise | Mineur | PROPOSÉ |
 | A-031 | 2026-08-31 | Dette technique | Trois liaisons mortes signalées par ESLint dans les fichiers touchés depuis le dernier audit : `CATEGORIES` (`ExpensesTab.jsx:3`), `useEffect` (`ActivityCard.jsx:1`), `signOut` (`App.jsx:16`) | Mineur | CORRIGÉ |
+| A-032 | 2026-09-28 | Sécurité | `read-receipt` est **toujours déployée** chez Supabase (relevé au MCP le jour de l'audit : `status: ACTIVE`, version 5), 28 jours après son retrait du dépôt. La fonction déployée est celle d'avant : elle lit `ANTHROPIC_API_KEY`, accepte 1,5 Mo de base64 par appel et appelle le modèle payant. Les deux gestes manuels notés dans `project-notes.md` le 31 août (supprimer la fonction, retirer le secret) n'ont pas été faits | Majeur | PROPOSÉ |
+| A-033 | 2026-09-28 | Sécurité | `extract-place` n'appelle `origineAutorisee` que sur la branche « légende collée » (`index.ts:1149`). La branche URL — celle qui télécharge des pages entières, jusqu'à ~80 s d'appels en chaîne — ne l'appelle nulle part. Ce n'est pas une régression du 31 août : avant, le drapeau était passé à `handleTikTok` pour gager l'appel payant, et il est parti avec lui. Seule des cinq fonctions à ne pas l'avoir, alors que `enrich-place` écrit à sa porte « elle télécharge toujours une page choisie par l'appelant, le contrôle reste » (`:365-371`) | Majeur | PROPOSÉ |
+| A-034 | 2026-09-28 | Fiabilité | Le corps de la réponse est lu en entier avant d'être coupé, et hors délai : `clear()` est appelé AVANT `await r.text()` (`extract-place:281-285`, `enrich-place:183-191`), donc le plafond de 600 ko / 400 ko s'applique à une chaîne déjà entièrement en mémoire et plus aucun `AbortSignal` ne borne la lecture. `pageRobotSocial` (`:723`) n'a ni plafond ni contrôle de type. Un serveur qui annonce `text/html` et sert un gigaoctet fait tomber la fonction sur sa limite mémoire | Majeur | PROPOSÉ |
+| A-035 | 2026-09-28 | Sécurité | `extract-place` valide l'URL d'entrée à la porte (A-027) mais laisse les redirections se suivre seules — `redirect: "follow"` en `:269`, `:720`, `:791`. Une URL publique qui renvoie 302 vers `http://169.254.169.254/` ou une plage privée est donc jointe, et `handleGeneric` rend au client le `og:title` et 300 caractères d'`og:description` de la page d'arrivée : lecture, pas seulement SSRF aveugle. C'est exactement A-019, corrigé dans `enrich-place` par `suivreRedirections` (chaque saut repasse par `urlSure`) et jamais porté ici | Majeur | PROPOSÉ |
+| A-036 | 2026-09-28 | Performance et coûts | Le service worker re-télécharge en tâche de fond tout ce qu'il sert depuis son cache : `const fetchPromise = fetch(...)` est construit inconditionnellement avant `return cached || fetchPromise` (`public/sw.js:79-88`). Sans conséquence tant qu'il s'agissait de 800 ko de bundle ; depuis le 31 août, le moteur OCR passe par la même branche — 4,5 Mo par lecture de ticket, sur la donnée mobile d'un séjour à l'étranger. `vercel.json` n'accorde `immutable` qu'à `/assets/`, jamais à `/tesseract/` | Majeur | PROPOSÉ |
+| A-037 | 2026-09-28 | Méthode | Lint stable : **49 erreurs, 4 avertissements**, identique à la référence du 2026-08-31, malgré +2 300 lignes. Dette non aggravée, rien à signaler | Sans objet | PASSÉ |
+| A-038 | 2026-09-28 | Produit et UX | `.recu__msg` porte l'avancement de la lecture du ticket (trois à dix secondes) puis son résultat, sans région vive : rien n'annonce la fin à qui ne regarde pas l'écran (`ExpensesTab.jsx:750`) | Mineur | CORRIGÉ |
+| A-022 | 2026-09-28 | Méthode | `.audit/contexte.md.` (point final parasite) subsiste, inchangé depuis le 2026-08-10 et toujours divergent. Rappelé sans être re-remonté : la routine n'a pas le droit de supprimer un fichier, c'est un geste d'une seconde côté propriétaire | Mineur | PROPOSÉ |
 
 <!--
 Exemple de ligne, à supprimer :
 | A-001 | 2026-08-03 | Sécurité | Route /api/export accessible sans vérification de session | Critique | CORRIGÉ |
+| A-039 | 2026-09-29 | Fiabilité | Repris de la PR #87 (non fusionnée, numéro libre ici) : `/parcours` rougissait tout seul le matin. « Que faire maintenant ? » exigeait que la randonnée de 9 h soit écartée alors qu'avant 11 h elle tient avant l'opéra de 20 h, et l'app a raison de la proposer | Majeur | CORRIGÉ |
+| A-040 | 2026-09-29 | Fiabilité | Repris de la PR #87 : la première lecture de ticket exige 4,5 Mo de moteur que rien ne précharge. Hors ligne au premier ticket, le message accuse la photo alors que c'est le moteur qui manque | Majeur | PROPOSÉ |
+| A-041 | 2026-09-29 | Performance et coûts | Repris de la PR #87 : `icon-512.png` et `apple-touch-icon.png` pèsent 673 ko chacune, plus que tout le JavaScript de l'app | Mineur | PROPOSÉ |
+| A-042 | 2026-09-29 | Fiabilité | Repris de la PR #80 (numéroté A-027 là-bas, numéro déjà pris) : ouverte par une notification (`?voyage=…`), l'app re-navigue vers le voyage à chaque retour au tableau de bord. Non revérifié sur le code du jour | Majeur | PROPOSÉ |
+| A-043 | 2026-09-29 | Fiabilité | Repris de la PR #80 : aucun contrôle automatique (lint, build, `verif-*.mjs`) ne tourne sur push ou sur PR | Majeur | PROPOSÉ |
+| A-044 | 2026-09-29 | Sécurité | Repris de la PR #80 : Supabase Auth, la vérification des mots de passe compromis est désactivée (advisor `auth_leaked_password_protection`) | Mineur | PROPOSÉ |
+| A-033 | 2026-09-29 | Sécurité | `origineAutorisee` posé sur la branche URL d'`extract-place` | Majeur | CORRIGÉ |
+| A-034 | 2026-09-29 | Fiabilité | `lireCorps` (`_shared/reseau.ts`) lit le flux et coupe AU plafond, sous le délai toujours armé ; utilisé par `extract-place` et `enrich-place`. `verif-redirections.mjs` fige un corps sans fin coupé à 400 ko | Majeur | CORRIGÉ |
+| A-035 | 2026-09-29 | Sécurité | `suivreRedirections` d'`enrich-place` devient `joindre` dans `_shared/reseau.ts`, et les trois `redirect: "follow"` d'`extract-place` passent par lui. `verif-redirections.mjs` importe le module (plus de découpage du source, qui était cassé) et vérifie qu'aucune des deux fonctions ne laisse `fetch` suivre seul | Majeur | CORRIGÉ |
+| A-036 | 2026-09-29 | Performance et coûts | Le service worker ne rafraîchit plus en tâche de fond ce qui ne peut pas changer (`/assets/`, empreinte dans le nom) ni le moteur OCR (`/tesseract/`), et ne rend plus `index.html` à la place d'un script hors ligne | Majeur | CORRIGÉ |
+| A-032 | 2026-09-29 | Sécurité | Toujours ouvert : supprimer `read-receipt` dans le tableau de bord Supabase et retirer `ANTHROPIC_API_KEY`. Geste manuel du propriétaire | Majeur | PROPOSÉ |
 -->
 
 ## Dernier audit effectif
+
+Date : 2026-09-28
+Type : STANDARD (28 jours écoulés, donc au-delà du seuil de trois semaines)
+Axes : Sécurité, Fiabilité, plus l'axe rotatif **Performance et coûts** —
+consommé pour la première fois après trois audits LÉGERS qui l'avaient repoussé.
+Prochain axe rotatif : Dette technique.
+Référence ESLint à la date de l'audit : **49 erreurs, 4 avertissements**,
+inchangé depuis le 2026-08-31. `npm run build` vert.
+
+### Le contrôle de pertinence, et pourquoi il n'a pas arrêté cet audit
+
+Trois commits seulement depuis le 2026-08-31, et l'un des trois
+(`ed16f77`) ne touche que de la documentation et un commentaire de workflow.
+À la lettre, deux commits significatifs, donc moins de trois : PASSÉ.
+
+Audit conduit quand même, et la raison est consignée ici pour que la prochaine
+routine tranche pareil sans re-délibérer : ce dépôt écrase ses PR en un seul
+commit. Les deux qui restent portent +2 300 lignes, trois fonctions Edge
+réécrites, une quatrième supprimée et un moteur OCR neuf dans le navigateur.
+Le seuil compte des commits pour mesurer une quantité de changement ; ici il
+mesure une convention de fusion. **Compter les fichiers applicatifs touchés,
+pas les commits**, quand le dépôt écrase ses PR.
+
+Le code de ces deux commits n'avait de plus jamais été relu : `23700ac` est
+l'arbitrage de l'audit du 31 août (l'auditeur ne relit pas ses propres
+correctifs le jour où il les écrit) et `01e69f7` est parti le même jour.
+Quatre des six constats ci-dessous vivent précisément là.
+
+### Audit précédent
 
 Date : 2026-08-31
 Type : LÉGER (14 jours écoulés, 6 commits significatifs : la réécriture du
@@ -96,7 +144,7 @@ Deuxième fois qu'un audit lit une faille là où le correctif est déjà posé
 (A-017 en août, A-029 ici). Les deux fois, la lecture portait sur le chemin de
 données sans dérouler l'affichage.
 
-### Audit précédent
+### Audit du 2026-08-17
 
 Date : 2026-08-17
 Type : LÉGER (7 jours écoulés, 3 commits significatifs : les deux correctifs de
@@ -119,6 +167,26 @@ correction (52 erreurs / 6 avertissements avant). La dette d'erreurs n'a pas
 augmenté malgré +14 500 lignes ; les deux avertissements de plus étaient des
 directives `eslint-disable` mortes, retirées ici.
 
+### Regroupement du 2026-09-29
+
+Six PR d'audit s'étaient accumulées sans être fusionnées (#80, #81, #85, #86,
+#87, #88), chacune avec son propre journal, et leurs numéros se chevauchaient.
+Elles sont remplacées par une seule. Ce qui a été repris :
+
+- #88 en entier (journal du 2026-09-28, `role="status"` sur la lecture du ticket) ;
+- de #87 : les deux liaisons mortes (A-037 là-bas) et trois constats sans
+  équivalent, renumérotés A-039 à A-041 ;
+- de #80 : les trois correctifs du formulaire de dépense (champs nommés, groupe
+  radio, pourcentage à la virgule) et trois constats, renumérotés A-042 à A-044.
+
+Écarté : #81 (journal du 2026-08-31 et correctifs de lint déjà sur `main`),
+#85 et #86 (passages sans objet). #80 et #81 étaient de plus branchées avant le
+tout-gratuit : les fusionner telles quelles aurait recréé `read-receipt`.
+
+**Leçon de méthode : une PR d'audit non fusionnée dans la semaine se périme.**
+La routine suivante repart de `main`, ignore la précédente et réutilise ses
+numéros.
+
 ### Historique
 
 | Date | Type | Axes | Constats retenus |
@@ -128,3 +196,5 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-10 | PROFOND | Tous + roadmap | A-017 à A-022 |
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
+| 2026-09-28 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-036 |
+| 2026-09-29 | Regroupement | Sécurité, Fiabilité, Performance et coûts | A-039 à A-044, clôture d'A-033 à A-036 |

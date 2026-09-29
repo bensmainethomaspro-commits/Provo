@@ -81,6 +81,27 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   C'est une app de voyage : les fuseaux ne sont pas un cas limite. Un seul
   endroit y déroge encore, `ExpensesTab.jsx:335` (A-028).
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
+- **Le service worker (`public/sw.js`) sert depuis le cache ET re-télécharge à
+  chaque fois.** La branche générique (`:79-88`) construit
+  `const fetchPromise = fetch(...)` inconditionnellement avant de rendre
+  `cached || fetchPromise` : tout ce qui est servi depuis le cache repart aussi
+  sur le réseau, en tâche de fond. Deux branches y échappent, les tuiles OSM
+  (cache d'abord, vrai) et les navigations HTML (réseau d'abord, voulu).
+  Sans conséquence tant qu'il s'agissait de 800 ko de bundle haché. Depuis le
+  2026-08-31, le moteur OCR passe par la même branche : ~4,5 Mo re-téléchargés
+  à chaque lecture de ticket, sur la donnée mobile d'un séjour à l'étranger
+  (A-036). `vercel.json` n'accorde `max-age=31536000, immutable` qu'à
+  `/assets/`, jamais à `/tesseract/`.
+  Corollaire de méthode : la phrase « il passe par le service worker et se
+  garde comme le reste » (répétée dans `ocrTicket.js`, `vendor-tesseract.mjs`
+  et `project-notes.md`) est vraie pour la conservation et fausse pour
+  l'économie de réseau. Les deux tiennent à la même interception.
+- **Moteur OCR.** `public/tesseract/` (non versionné, reconstruit en `prebuild`
+  par `scripts/vendor-tesseract.mjs`) : 11,9 Mo sur le disque de déploiement,
+  dont ~4,5 Mo par appareil — `core/` 11,7 Mo pour trois cœurs dont un seul est
+  téléchargé, `lang/fra.traineddata.gz` 707 ko, `worker.min.js` 111 ko. Chargé à
+  la demande au premier ticket (`import('tesseract.js')`), donc hors du paquet
+  principal : `dist/assets/ocrTicket-*.js` ne pèse que 4,2 ko.
 - `supabase/functions/extract-place/index.ts` : fonction Edge Deno qui résout les
   liens courts et extrait les métadonnées d'une page tierce. Utilise
   optionnellement le secret ANTHROPIC_API_KEY.
@@ -96,14 +117,47 @@ comme constat, pas comme état de fait à re-vérifier à chaque audit.
 
 | Fonction | Rôle | Appel payant | Contrôle d'origine |
 |---|---|---|---|
-| `extract-place` | liens et légendes | aucun | **oui** |
+| `extract-place` | liens et légendes | aucun | **sur une branche sur deux** (voir ci-dessous) |
 | `enrich-place` | site du lieu | aucun | **oui** (depuis A-018) |
 | `read-booking` | confirmation collée | aucun | **oui** (depuis A-018) |
 | `push-tick` | rappels planifiés | aucun | non (assumé, voir project-notes) |
 | `notifier-depense` | prévient les autres voyageurs | aucun | **oui**, plus jeton utilisateur et appartenance au voyage |
 
-`read-receipt` a été **supprimée** : la photo de ticket se lit désormais sur le
-téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte plus l'appareil.
+`read-receipt` a été **retirée du dépôt** le 2026-08-31 : la photo de ticket se
+lit désormais sur le téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte
+plus l'appareil. **Mais elle est toujours DÉPLOYÉE** — relevé au MCP le
+2026-09-28 : `status: ACTIVE`, version 5. La boucle de
+`deploy-edge-functions.yml` parcourt le dossier et ne supprime jamais : le code
+déployé reste celui d'avant, avec son appel au modèle payant et ses 1,5 Mo de
+base64 acceptés par appel. C'est A-032, et c'est un geste manuel dans le
+tableau de bord Supabase.
+
+**Règle générale à retenir, elle vaut pour tout ce dossier : le dépôt ne dit
+pas ce qui tourne.** Un `git rm` sur une fonction Edge ne la retire pas de la
+production, et une ligne de `contexte.md` écrite au passé (« a été supprimée »)
+décrit une intention, pas un état. Sur les fonctions Edge, lire le MCP —
+`list_edge_functions` — avant d'écrire quoi que ce soit au passé.
+
+**Le contrôle d'origine sur `extract-place` ne couvre qu'une branche sur deux**
+(A-033, relevé le 2026-09-28). `origineAutorisee` n'est appelé qu'à l'entrée de
+la branche « légende collée à la main » (`index.ts:1149`). La branche URL — la
+seule des deux qui télécharge des pages entières, et celle où vit la chaîne
+d'appels de ~80 s du budget de temps relevé plus bas — ne l'appelle nulle part.
+Ce n'est pas une régression du passage au tout-gratuit : avant, le résultat
+d'`origineAutorisee(req)` était passé en argument à `handleTikTok` pour gager
+le seul appel payant, et il est parti avec lui. La fonction n'a donc jamais
+filtré ses appelants sur cette branche ; c'est le retrait du paiement qui a
+rendu le trou visible, pas qui l'a créé. Les quatre autres fonctions appellent
+le garde-fou en première ligne de leur `Deno.serve`.
+
+**Le plafond de taille des pages téléchargées est écrit après coup, et hors
+délai** (A-034). Dans `extract-place:281-285` comme dans
+`enrich-place:183-191`, `clear()` — qui annule l'`AbortSignal` — est appelé
+AVANT `await r.text()`. Les `.slice(0, 600_000)` / `.slice(0, 400_000)`
+s'appliquent donc à une chaîne déjà entièrement en mémoire, et plus aucun délai
+ne borne la lecture du corps. `pageRobotSocial` (`extract-place:723`) rend
+`await r.text()` sans plafond ni contrôle de `content-type`. Ne pas lire un
+`.slice` comme une protection : regarder où le `clear()` tombe.
 
 `notifier-depense` (ajoutée le 2026-08-17) est la seule fonction qui tourne en
 `SUPABASE_SERVICE_ROLE_KEY`, donc au-dessus de RLS. Trois contrôles la bordent,
@@ -158,6 +212,21 @@ point d'appel au lieu de l'entrée de la fonction. Le correctif proposé pour
 A-027 est un `urlSure` dans `Deno.serve` (`index.ts:1488`), là où l'URL entre.
 Ne pas croire qu'un `_shared/` importé prouve une couverture : vérifier les
 points d'appel.
+
+**A-027 est clos depuis le 2026-08-31, et la moitié du sujet reste ouverte**
+(A-035, relevé le 2026-09-28). Le filtre est bien à la porte et l'aiguillage se
+décide sur l'hôte, donc l'URL d'ENTRÉE est validée. Les REDIRECTIONS, elles, ne
+le sont toujours pas : `redirect: "follow"` en `extract-place:269`, `:720` et
+`:791`. Une URL publique qui renvoie un 302 vers `169.254.169.254` ou une plage
+privée est jointe, et `handleGeneric` rend au client le `og:title` et 300
+caractères d'`og:description` de la page d'arrivée — donc une lecture, pas un
+SSRF aveugle. `enrich-place` a `suivreRedirections` (`:130-177`, cinq sauts au
+plus, chaque saut repassant par `urlSure`) depuis A-019 ; il n'a jamais été
+porté ni partagé dans `_shared/reseau.ts`. **Deux niveaux à distinguer
+désormais quand on parle de couverture SSRF : l'URL d'entrée, et chaque saut.**
+Non prouvé depuis le bac à sable : qu'une adresse interne soit effectivement
+joignable depuis le runtime Supabase. La sévérité tient à l'asymétrie avec
+`enrich-place`, où le projet a déjà tranché que ça comptait.
 
 **Modèle de données** : un voyage entier tient dans un seul objet JSON, stocké tel
 quel dans localStorage (`provo_trips`) et dans la colonne `data` de la table
@@ -327,7 +396,21 @@ Ne pas redécouvrir ce calcul : il est la preuve du constat A-012.
   MCP Supabase, lui, passe — c'est par lui qu'on lit `pg_policies` et les droits.
 - La branche de travail imposée par l'environnement d'exécution peut différer du
   `claude/audit-AAAA-MM-JJ` attendu. L'invariant à tenir est le préfixe
-  `claude/`, jamais un push sur la branche par défaut.
+  `claude/`, jamais un push sur la branche par défaut. Tenu ainsi le 2026-08-31
+  et le 2026-09-28.
+- **Le contrôle de pertinence ne peut pas compter les commits dans ce dépôt :
+  les PR y sont écrasées en un seul commit.** Le 2026-09-28, deux commits
+  portaient +2 300 lignes, trois fonctions Edge réécrites, une quatrième
+  supprimée et un moteur OCR neuf — le seuil de « moins de 3 commits
+  significatifs » aurait arrêté l'audit sur la convention de fusion, pas sur une
+  quantité de changement. Compter les fichiers applicatifs touchés.
+- **L'arbitrage d'un audit n'est pas relu par l'audit suivant si on ne le veut
+  pas explicitement.** Les correctifs du 31 août ont été écrits et fusionnés le
+  jour même par l'auditeur : quatre des six constats du 2026-09-28 vivent dans
+  ce code-là. Un correctif d'audit mérite la même lecture que n'importe quel
+  autre code, au passage suivant.
+- `npm ci` est nécessaire avant `npm run lint` et `npm run build` : le bac à
+  sable démarre sans `node_modules` (~40 s).
 
 ## Décisions déjà tranchées
 

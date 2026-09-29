@@ -8,7 +8,7 @@ import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRate
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
 
-function SwipeableExpenseItem({ exp, onDelete, children }) {
+function SwipeableExpenseItem({ onDelete, children }) {
   const [offset, setOffset] = useState(0);
   const swRef = useRef({ startX: null, startY: null, dragging: false });
   // Un glissement se termine par un clic de synthèse. Depuis que la ligne
@@ -198,10 +198,15 @@ function repartir(mode, participants, valeurs, total) {
     let somme = 0;
     participants.forEach(id => { const v = lu(id) ?? 0; part[id] = total * v / 100; somme += v; });
     const reste = Math.round((100 - somme) * 100) / 100;
+    // Écrit à la française. `${reste}` donnait « Il reste 0.01 % à répartir »
+    // — un point décimal dans une app où tout le reste, montants compris,
+    // s'écrit à la virgule. Le cas n'est pas rare : trois parts égales en
+    // pourcentages (33,33 chacune) laissent justement 0,01 à répartir.
+    const pc = (v) => v.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
     return {
       part,
       ecart: Math.abs(reste) < 0.005 ? null
-        : reste > 0 ? `Il reste ${reste} % à répartir` : `${-reste} % de trop`,
+        : reste > 0 ? `Il reste ${pc(reste)} % à répartir` : `${pc(-reste)} % de trop`,
     };
   }
 
@@ -688,12 +693,19 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
           {/* Dépense · Revenu · Transfert. Un revenu est enregistré en montant
               NÉGATIF, pas avec un drapeau : sept endroits somment de l'argent
               dans ce dépôt, et un drapeau obligerait chacun à s'en souvenir.
-              Le signe vit dans la valeur, tout le reste suit sans le savoir. */}
+              Le signe vit dans la valeur, tout le reste suit sans le savoir.
+
+              `radiogroup` et non `tablist` : un onglet promet un panneau, et un
+              lecteur d'écran annonce « onglet 1 sur 3 » puis cherche le
+              `tabpanel` correspondant — il n'y en a aucun, la suite du
+              formulaire est la même quel que soit le segment. Trois choix
+              exclusifs sur une même ligne, c'est un groupe de boutons radio, et
+              `aria-checked` est l'état qui va avec. */}
           {!editingId && (
-            <div className="ef__segments" role="tablist" aria-label="Nature de l'opération">
+            <div className="ef__segments" role="radiogroup" aria-label="Nature de l'opération">
               {TYPES.map(t => (
-                <button key={t.id} type="button" role="tab"
-                  aria-selected={form.type === t.id}
+                <button key={t.id} type="button" role="radio"
+                  aria-checked={form.type === t.id}
                   className={`ef__segment${form.type === t.id ? ' ef__segment--on' : ''}`}
                   onClick={() => changerType(t.id)}>
                   {t.label}
@@ -709,6 +721,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                   le reste de la ligne. « Par exemple : boissons » y était
                   coupé au milieu du mot. */}
               <input className="form-input" placeholder="Boissons, taxi…"
+                aria-label="Titre"
                 value={form.description} onChange={e => set('description', e.target.value)} />
               <button type="button" className="ef__icone" aria-label="Choisir une icône"
                 aria-expanded={emojisOuverts} onClick={() => setEmojisOuverts(o => !o)}>
@@ -742,7 +755,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                 </>
               )}
             </div>
-            {recuMsg && <p className="recu__msg">{recuMsg}</p>}
+            {/* `role="status"` : ce paragraphe porte l'avancement de la lecture
+                (« Lecture du ticket… 40 % », trois à dix secondes) puis son
+                résultat. Sans région vive, rien n'annonce la fin à qui ne
+                regarde pas l'écran. Le paragraphe reste conditionnel — un
+                `<p>` vide ajouterait ses 8 px de marge au formulaire. */}
+            {recuMsg && <p className="recu__msg" role="status">{recuMsg}</p>}
           </div>
 
           <div className="form-group">
@@ -755,6 +773,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                   clavier système ne les propose sur un pavé décimal. */}
               <input className="form-input ef__montant" type="text" inputMode="decimal"
                 placeholder="0,00" autoFocus ref={montantRef}
+                aria-label="Montant"
                 value={form.amount}
                 onChange={e => set('amount', e.target.value)}
                 onFocus={() => { clearTimeout(fermetureCalc.current); setCalculOuvert(true); }}
@@ -818,6 +837,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             <div className="form-group">
               <label className="form-label">Quand</label>
               <input className="form-input" type="date" value={form.date}
+                aria-label="Quand"
                 onChange={e => set('date', e.target.value)} />
             </div>
           </div>
@@ -1146,7 +1166,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             const modifiable = !exp.isSettlement && !!onUpdateExpense;
             const Ligne = modifiable ? 'button' : 'div';
             return (
-              <SwipeableExpenseItem key={exp.id} exp={exp} onDelete={() => onDeleteExpense(exp.id)}>
+              <SwipeableExpenseItem key={exp.id} onDelete={() => onDeleteExpense(exp.id)}>
                 <Ligne
                   className={`expense-item${modifiable ? ' expense-item--ouvrable' : ''}`}
                   {...(modifiable ? {

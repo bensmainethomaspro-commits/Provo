@@ -1982,8 +1982,15 @@ const PARCOURS = [
       // Ce qui doit être écarté, et pourquoi.
       t.verifier('le lieu fermé est écarté', !titres.includes('Musée fermé'), titres.join(' · '));
       t.verifier('le lieu à 80 km est écarté', !titres.includes('Abbaye de Melk'), titres.join(' · '));
-      t.verifier('la randonnée de 9 h est écartée',
-        !titres.some(x => /Kahlenberg/.test(x)), titres.join(' · '));
+      // Neuf heures tiennent encore avant l'opéra de 20 h tant qu'il n'est pas
+      // 11 h : l'app a alors raison de les proposer. Le scénario tournait au
+      // rouge chaque matin (audit A-039) ; il juge maintenant selon l'heure,
+      // comme il le fait déjà pour la fin de journée plus bas.
+      const minutes = await t.p.evaluate(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
+      if (20 * 60 - minutes < 9 * 60) {
+        t.verifier('la randonnée de 9 h est écartée',
+          !titres.some(x => /Kahlenberg/.test(x)), titres.join(' · '));
+      }
       t.verifier('ce qui a été écarté est dit',
         /écart/i.test(await t.p.evaluate(() => document.querySelector('.sheet--pioche')?.innerText || '')));
 
