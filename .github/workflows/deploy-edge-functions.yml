@@ -29,14 +29,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Vérifier que le jeton est configuré
+      - name: Vérifier que le jeton est configuré, et qu'il est du bon genre
+        env:
+          JETON: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+          # Le jeton n'est JAMAIS affiché : on dit seulement de quel genre il
+          # est, et ce que Supabase en pense. Un 401 seul ne disait pas si
+          # c'était un jeton expiré, une clé de projet collée à la place, ou
+          # un espace en trop.
+          if [ -z "$JETON" ]; then
             echo "::error::Le secret SUPABASE_ACCESS_TOKEN est absent."
-            echo "Ajoute-le dans Settings › Secrets and variables › Actions."
-            echo "Jeton à créer sur https://supabase.com/dashboard/account/tokens"
+            echo "Ajoute-le dans Settings › Secrets and variables › Actions › Repository secrets."
             exit 1
           fi
+          echo "Longueur : ${#JETON} caractères"
+          if [ "$JETON" != "$(printf '%s' "$JETON" | tr -d '[:space:]')" ]; then
+            echo "::error::Le jeton contient un espace ou un retour à la ligne : le recoller sans."
+          fi
+          case "$JETON" in
+            sbp_*)            echo "Genre : jeton personnel (sbp_…), c'est le bon genre." ;;
+            sb_secret_*)      echo "::error::Genre : clé SECRÈTE du projet (sb_secret_…). Il faut un jeton personnel sbp_…, créé sur https://supabase.com/dashboard/account/tokens" ;;
+            sb_publishable_*) echo "::error::Genre : clé PUBLIABLE du projet (sb_publishable_…). Il faut un jeton personnel sbp_…, créé sur https://supabase.com/dashboard/account/tokens" ;;
+            eyJ*)             echo "::error::Genre : clé JWT du projet (anon ou service_role). Il faut un jeton personnel sbp_…, créé sur https://supabase.com/dashboard/account/tokens" ;;
+            *)                echo "::error::Genre inconnu (ne commence pas par sbp_). Il faut un jeton personnel sbp_…, créé sur https://supabase.com/dashboard/account/tokens" ;;
+          esac
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $JETON" \
+            https://api.supabase.com/v1/projects/usztistixgzdrvjzplqx)
+          echo "Réponse de Supabase au jeton : $CODE"
+          case "$CODE" in
+            200) echo "Le jeton est accepté et voit le projet." ;;
+            401) echo "::error::Supabase refuse ce jeton (401) : révoqué, expiré, ou pas un jeton personnel."; exit 1 ;;
+            403|404) echo "::error::Le jeton est valide mais ne voit pas ce projet ($CODE) : il appartient à un autre compte ou à une organisation sans accès."; exit 1 ;;
+            *) echo "::warning::Réponse inattendue ($CODE), on tente quand même le déploiement." ;;
+          esac
 
       - uses: supabase/setup-cli@v1
         with:
