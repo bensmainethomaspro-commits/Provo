@@ -74,6 +74,17 @@ Produit et UX, puis retour au début.
 <!--
 Exemple de ligne, à supprimer :
 | A-001 | 2026-08-03 | Sécurité | Route /api/export accessible sans vérification de session | Critique | CORRIGÉ |
+| A-039 | 2026-09-29 | Fiabilité | Repris de la PR #87 (non fusionnée, numéro libre ici) : `/parcours` rougissait tout seul le matin. « Que faire maintenant ? » exigeait que la randonnée de 9 h soit écartée alors qu'avant 11 h elle tient avant l'opéra de 20 h, et l'app a raison de la proposer | Majeur | CORRIGÉ |
+| A-040 | 2026-09-29 | Fiabilité | Repris de la PR #87 : la première lecture de ticket exige 4,5 Mo de moteur que rien ne précharge. Hors ligne au premier ticket, le message accuse la photo alors que c'est le moteur qui manque | Majeur | PROPOSÉ |
+| A-041 | 2026-09-29 | Performance et coûts | Repris de la PR #87 : `icon-512.png` et `apple-touch-icon.png` pèsent 673 ko chacune, plus que tout le JavaScript de l'app | Mineur | PROPOSÉ |
+| A-042 | 2026-09-29 | Fiabilité | Repris de la PR #80 (numéroté A-027 là-bas, numéro déjà pris) : ouverte par une notification (`?voyage=…`), l'app re-navigue vers le voyage à chaque retour au tableau de bord. Non revérifié sur le code du jour | Majeur | PROPOSÉ |
+| A-043 | 2026-09-29 | Fiabilité | Repris de la PR #80 : aucun contrôle automatique (lint, build, `verif-*.mjs`) ne tourne sur push ou sur PR | Majeur | PROPOSÉ |
+| A-044 | 2026-09-29 | Sécurité | Repris de la PR #80 : Supabase Auth, la vérification des mots de passe compromis est désactivée (advisor `auth_leaked_password_protection`) | Mineur | PROPOSÉ |
+| A-033 | 2026-09-29 | Sécurité | `origineAutorisee` posé sur la branche URL d'`extract-place` | Majeur | CORRIGÉ |
+| A-034 | 2026-09-29 | Fiabilité | `lireCorps` (`_shared/reseau.ts`) lit le flux et coupe AU plafond, sous le délai toujours armé ; utilisé par `extract-place` et `enrich-place`. `verif-redirections.mjs` fige un corps sans fin coupé à 400 ko | Majeur | CORRIGÉ |
+| A-035 | 2026-09-29 | Sécurité | `suivreRedirections` d'`enrich-place` devient `joindre` dans `_shared/reseau.ts`, et les trois `redirect: "follow"` d'`extract-place` passent par lui. `verif-redirections.mjs` importe le module (plus de découpage du source, qui était cassé) et vérifie qu'aucune des deux fonctions ne laisse `fetch` suivre seul | Majeur | CORRIGÉ |
+| A-036 | 2026-09-29 | Performance et coûts | Le service worker ne rafraîchit plus en tâche de fond ce qui ne peut pas changer (`/assets/`, empreinte dans le nom) ni le moteur OCR (`/tesseract/`), et ne rend plus `index.html` à la place d'un script hors ligne | Majeur | CORRIGÉ |
+| A-032 | 2026-09-29 | Sécurité | Toujours ouvert : supprimer `read-receipt` dans le tableau de bord Supabase et retirer `ANTHROPIC_API_KEY`. Geste manuel du propriétaire | Majeur | PROPOSÉ |
 -->
 
 ## Dernier audit effectif
@@ -156,6 +167,26 @@ correction (52 erreurs / 6 avertissements avant). La dette d'erreurs n'a pas
 augmenté malgré +14 500 lignes ; les deux avertissements de plus étaient des
 directives `eslint-disable` mortes, retirées ici.
 
+### Regroupement du 2026-09-29
+
+Six PR d'audit s'étaient accumulées sans être fusionnées (#80, #81, #85, #86,
+#87, #88), chacune avec son propre journal, et leurs numéros se chevauchaient.
+Elles sont remplacées par une seule. Ce qui a été repris :
+
+- #88 en entier (journal du 2026-09-28, `role="status"` sur la lecture du ticket) ;
+- de #87 : les deux liaisons mortes (A-037 là-bas) et trois constats sans
+  équivalent, renumérotés A-039 à A-041 ;
+- de #80 : les trois correctifs du formulaire de dépense (champs nommés, groupe
+  radio, pourcentage à la virgule) et trois constats, renumérotés A-042 à A-044.
+
+Écarté : #81 (journal du 2026-08-31 et correctifs de lint déjà sur `main`),
+#85 et #86 (passages sans objet). #80 et #81 étaient de plus branchées avant le
+tout-gratuit : les fusionner telles quelles aurait recréé `read-receipt`.
+
+**Leçon de méthode : une PR d'audit non fusionnée dans la semaine se périme.**
+La routine suivante repart de `main`, ignore la précédente et réutilise ses
+numéros.
+
 ### Historique
 
 | Date | Type | Axes | Constats retenus |
@@ -166,3 +197,4 @@ directives `eslint-disable` mortes, retirées ici.
 | 2026-08-17 | LÉGER | Sécurité, Fiabilité | A-023 à A-026 |
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
 | 2026-09-28 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-036 |
+| 2026-09-29 | Regroupement | Sécurité, Fiabilité, Performance et coûts | A-039 à A-044, clôture d'A-033 à A-036 |
