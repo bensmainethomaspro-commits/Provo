@@ -332,7 +332,11 @@ async function resolvePlace(
   if (name) {
     const queries = city ? [`${name}, ${city}`, name] : [name];
     for (const q of queries) {
-      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords });
+      // Le résultat doit porter le nom lu dans le lien, même quand le lien
+      // donne un point : sans cette exigence, le voisin le mieux renseigné à
+      // moins de 25 km fournissait adresse et horaires (A-047). C'est la règle
+      // que le client applique déjà (`candidatValable`, enrich.js).
+      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords, exigerNom: true });
       if (best) return shapePlace(best);
     }
   }
@@ -1281,7 +1285,11 @@ async function handleGeneric(rawUrl: string, ancre: Ancre | null = null) {
   if (horaires) result.openingHours = horaires;
   if (place?.price) result.price = place.price;
   if (result.title === "Lieu" && place?.title) result.title = place.title;
-  result.category = ld?.categorie || categoryFromHashtags(`${brut} ${desc}`) || place?.category || "visite";
+  // La catégorie OSM passe avant les mots du titre : ces règles-là sont faites
+  // pour des hashtags, et lisent « spa » dans « España » — le site du Prado
+  // sortait en « repos ». Un résultat OSM retenu porte le nom cherché.
+  result.category = ld?.categorie || (place?.osmClass && place.osmClass !== "place" ? place.category : null)
+    || categoryFromHashtags(`${brut} ${desc}`) || place?.category || "visite";
   return result;
 }
 // ── Ce qui vivait ici : trois appels au modèle payant ───────────────────────

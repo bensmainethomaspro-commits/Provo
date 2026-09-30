@@ -3,7 +3,7 @@ import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCate
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
-import { lienPartage, lireGeo } from '../utils/lienColle';
+import { lienPartage, lireGeo, premierLien } from '../utils/lienColle';
 import { trouverDoublon } from '../utils/doublon';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
@@ -266,12 +266,15 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const partage = lienPartage(raw);
       const geo = partage ? null : lireGeo(raw);
       const nu = !/\s/.test(raw);
-      const isUrl = Boolean(partage) || (nu && (raw.includes('google.com') || raw.includes('goo.gl')
+      // Un texte qui COMMENCE par un lien est un lien, même suivi d'une longue
+      // description : avant #94 c'était la règle, et la perdre envoyait ces
+      // collages en recherche de texte libre, lien jeté (A-046).
+      const isUrl = Boolean(partage) || /^https?:\/\//i.test(raw) || (nu && (raw.includes('google.com') || raw.includes('goo.gl')
         || raw.includes('maps.app') || raw.includes('share.google') || raw.includes('tiktok.com')
         || raw.includes('maps.apple')));
 
       if (isUrl || geo) {
-        const lien = partage?.lien || raw;
+        const lien = partage?.lien || premierLien(raw) || raw;
         const normalized = geo ? raw : (lien.startsWith('http') ? lien : `https://${lien}`);
         const indice = partage?.indice ? nomDeLieu(partage.indice) : (geo?.nom || null);
 
@@ -465,6 +468,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
         setCandidates(found);
         return;
       }
+      // Un lien cité au milieu du texte ne se perd pas pour autant : il rejoint
+      // la fiche, comme quand un lien seul n'a rien donné.
+      const lienCite = premierLien(raw);
+      if (lienCite) set('link', lienCite);
       setImportMsg(tripDestination
         ? `Aucun lieu trouvé, ni à ${tripDestination} ni ailleurs. Précise la ville — `
           + 'ex. « 5 rue Victor Hugo, Biarritz ».'

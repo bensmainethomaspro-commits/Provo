@@ -81,7 +81,12 @@ la main. Les garde-fous sont décrits dans `.claude/project-notes.md`.
   C'est une app de voyage : les fuseaux ne sont pas un cas limite. Un seul
   endroit y déroge encore, `ExpensesTab.jsx:335` (A-028).
 - `src/lib/supabase.js` : client Supabase, URL et clé publiable.
-- **Le service worker (`public/sw.js`) sert depuis le cache ET re-télécharge à
+- **Le service worker : corrigé le 2026-09-29 (A-036).** `/assets/` et
+  `/tesseract/` ne repartent plus sur le réseau en tâche de fond, et
+  `index.html` n'est plus rendu à la place d'un script hors ligne. Le
+  paragraphe qui suit décrit l'état d'avant, gardé pour le corollaire de
+  méthode en fin de point.
+- **(état d'avant) Le service worker sert depuis le cache ET re-télécharge à
   chaque fois.** La branche générique (`:79-88`) construit
   `const fetchPromise = fetch(...)` inconditionnellement avant de rendre
   `cached || fetchPromise` : tout ce qui est servi depuis le cache repart aussi
@@ -125,8 +130,12 @@ comme constat, pas comme état de fait à re-vérifier à chaque audit.
 
 `read-receipt` a été **retirée du dépôt** le 2026-08-31 : la photo de ticket se
 lit désormais sur le téléphone (`src/utils/ocrTicket.js`), et l'image ne quitte
-plus l'appareil. **Mais elle est toujours DÉPLOYÉE** — relevé au MCP le
-2026-09-28 : `status: ACTIVE`, version 5. La boucle de
+plus l'appareil. **Elle n'est plus déployée depuis le 2026-09-30** — relevé au MCP ce jour-là :
+cinq fonctions ACTIVE seulement (`extract-place` v36, `enrich-place` v12,
+`push-tick` v6, `read-booking` v8, `notifier-depense` v4). A-032 est clos ; le
+retrait du secret `ANTHROPIC_API_KEY` n'est pas vérifiable par le MCP. Elle
+avait été relevée ACTIVE en version 5 le 2026-09-28, 28 jours après son retrait
+du dépôt. La boucle de
 `deploy-edge-functions.yml` parcourt le dossier et ne supprime jamais : le code
 déployé reste celui d'avant, avec son appel au modèle payant et ses 1,5 Mo de
 base64 acceptés par appel. C'est A-032, et c'est un geste manuel dans le
@@ -213,6 +222,21 @@ A-027 est un `urlSure` dans `Deno.serve` (`index.ts:1488`), là où l'URL entre.
 Ne pas croire qu'un `_shared/` importé prouve une couverture : vérifier les
 points d'appel.
 
+> **À JOUR AU 2026-09-30 :** A-033, A-034 et A-035 sont CLOS depuis le
+> 2026-09-29. `origineAutorisee` couvre les deux branches d'`extract-place` ;
+> `lireCorps` coupe AU plafond sous le délai armé ; `joindre` suit les
+> redirections à la main, chaque saut repassant par `urlSure`, dans les deux
+> fonctions. `scripts/verif-redirections.mjs` le fige. Les quatre paragraphes
+> qui suivent décrivent l'état d'AVANT et sont conservés pour la trace du
+> raisonnement — ne pas les relire comme l'état du code.
+>
+> Il reste deux `await r.text()` sans plafond et hors délai
+> (`clear()` avant la lecture) : `tiktokPageEmbed` (`:912`) et
+> `tiktokLecteurTiers` (`:1034`). Hôtes fixes (tiktok.com, r.jina.ai), donc pas
+> le risque d'A-034, mais le code dit lui-même que la page TikTok pèse « de
+> plusieurs centaines de ko à quelques Mo ». Non corrigé d'office : tronquer
+> casserait peut-être la lecture de `"desc"`, qui vit loin dans la page.
+
 **A-027 est clos depuis le 2026-08-31, et la moitié du sujet reste ouverte**
 (A-035, relevé le 2026-09-28). Le filtre est bien à la porte et l'aiguillage se
 décide sur l'hôte, donc l'URL d'ENTRÉE est validée. Les REDIRECTIONS, elles, ne
@@ -256,6 +280,50 @@ raison et sa condition de réfutation sont dans le fichier de migration.
 **Ne pas le remonter à nouveau sur la seule lecture de `pg_policies`** : un
 `with_check: null` sur une politique `UPDATE` ne prouve rien à lui seul, il faut
 lire l'expression `USING`.
+
+## Le code partagé entre le client et les fonctions Edge
+
+Depuis le 2026-09-29, **du code de `supabase/functions/_shared/` est importé par
+le bundle client** : `lecture-lien.ts` (pur, sans réseau) est importé par
+`src/utils/helpers.js:2`, `src/utils/enrich.js` et `src/utils/doublon.js`.
+`helpers.js` étant importé par presque tout l'écran, ce module est sur le chemin
+critique de l'app entière.
+
+**Aucun contrôle ne le lit** (A-048). Mesuré le 2026-09-30 : `eslint.config.js`
+ignore `supabase/functions` par `globalIgnores`, il n'y a pas d'étape de
+typecheck, et `deno check` ne tourne nulle part (un commentaire
+d'`extract-place` le dit déjà : « Trouvé par `deno check`, qui ne tournait
+nulle part »). Vérifié en ajoutant `Deno.env.get("X")` dans le fichier : ESLint
+reste à 47 erreurs / 4 avertissements, `npm run build` réussit, et
+`Deno.env.get` se retrouve dans `dist/assets/index-*.js`. En production, ce
+serait une `ReferenceError` à l'évaluation du module, donc une app qui ne
+démarre pas.
+
+Conséquence à tenir : **un fichier de `_shared/` qui finit dans le bundle client
+ne doit utiliser aucune API Deno**, et rien dans le dépôt ne le vérifie
+aujourd'hui.
+
+## La complétion automatique passe par une file unique, en mémoire
+
+`src/utils/enrich.js` sérialise tous ses appels dans une seule file (`enfile`),
+avec 1,1 s entre deux places — c'est ce que Nominatim demande, et le dépôt a
+mesuré qu'enchaîner sans pause faisait répondre des vides. Y passent
+`lookupPlace` (complétion d'une fiche, `TripView.autoEnrich`), `poiAtCoords`
+(ce qui se trouve à un point), et le contrôle des lieux
+(`verifyPlaces.chercherCorrections`, en boucle sur toutes les activités).
+
+**La file est un point unique de panne** : jusqu'au 2026-09-30, aucun des quatre
+`fetch` n'avait de délai, et une seule requête jamais réglée arrêtait la
+complétion pour le reste de la session (A-045). Corrigé par `avecDelai`
+(budgets 9 s / 8 s / 20 s, ceux de la fonction Edge pour les mêmes services)
+plus un plafond de 30 s sur la file elle-même. **Toute requête ajoutée à ce
+fichier doit passer par `avecDelai`.**
+
+Autre chose à savoir avant d'y toucher : depuis #94 un `lookupPlace` infructueux
+peut faire jusqu'à 7 appels et 3,3 s de pauses délibérées (deux formes du nom ×
+deux requêtes Nominatim + Photon, puis Overpass), là où il en faisait 2 ou 3.
+Et **seuls les succès sont mis en cache** (`if (found) cache.set(...)`) : un
+échec est refait en entier au passage suivant.
 
 ## Coexistence avec le système .claude/ existant
 
