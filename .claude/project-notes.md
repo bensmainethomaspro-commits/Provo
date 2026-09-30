@@ -43,6 +43,8 @@ trace de ce qu'on a sciemment écarté.
 | E6 · Prouver qu'on est arrivé | Champ `repere` de chaque écran dans `verif-ui.mjs` |
 | E7 · Une échelle récitable | `--t-xs…--t-3xl`, 3 graisses, `--radius-xs…lg` + `pill` |
 | F1 · Cache PWA | `vercel.json` |
+| F6 · Saisie locale jamais écrasée | `src/utils/synchro.js`, clé `provo_synchro`, `verif-synchro-demarrage` |
+| E3 · Corollaire, état vierge | Parcours « Un lien ouvre le voyage dès le tout premier lancement » (désinscrit le service worker avant de suivre le lien) |
 
 ## Détection de lieux — ce qui a été mesuré
 
