@@ -2104,6 +2104,13 @@ body {
   z-index: 200;
   letter-spacing: 0.01em;
 }
+/* Un envoi refusé : rouge, et le geste qui débloque (règle A8). */
+.offline-banner--alerte { background: var(--red-deep); color: #fff; }
+.offline-banner__action {
+  margin-left: 8px; min-height: 44px; padding: 0 10px;
+  background: none; border: 0; color: inherit; font: inherit;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
 
 /* ─── LONG PRESS ACTION SHEET ───────────────────────────────── */
 .card-action-sheet {

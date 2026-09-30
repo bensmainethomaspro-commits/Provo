@@ -333,6 +333,12 @@ export function useTrips() {
     return () => subscription.unsubscribe();
   }, [charger, applySession, persisterAttente]);
 
+  // « Réessayer », depuis le bandeau : relire, fusionner, renvoyer.
+  const renvoyer = useCallback(() => {
+    setSynchro(s => (s.refus ? { ...s, refus: false } : s));
+    if (userIdRef.current) charger(userIdRef.current, { force: true });
+  }, [charger]);
+
   // Le réseau revient : relire le nuage (les autres ont pu avancer pendant
   // l'absence, et le temps réel ne rejoue rien), fusionner, renvoyer. Avant,
   // une écriture échouée hors ligne ne repartait qu'à la modification suivante.
@@ -1078,6 +1084,7 @@ export function useTrips() {
     // Pour le bandeau : ce qui n'est pas encore parti, et un refus du serveur.
     aEnvoyer: synchro.aEnvoyer,
     envoiRefuse: synchro.refus,
+    renvoyer,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
     signIn, signUp, signOut, resetPassword,

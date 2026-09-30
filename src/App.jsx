@@ -13,7 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const ONGLETS = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein, aEnvoyer, envoiRefuse, renvoyer } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
@@ -186,8 +186,23 @@ function AppInner() {
           ❌ {inviteError} <button onClick={() => setInviteError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
         </div>
       )}
-      {!isOnline && (
-        <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
+      {/* L'état de la synchro, dans le bandeau qui existait déjà (règle A7).
+          Il promettait « données sauvegardées localement » sans jamais dire
+          si elles étaient parties ; et un envoi refusé par le serveur ne
+          laissait qu'une trace dans la console. En ligne et sans refus, rien :
+          quelques centaines de millisecondes d'attente ne méritent pas un
+          bandeau qui clignote à chaque frappe. */}
+      {!isOnline ? (
+        <div className="offline-banner" role="status">
+          {aEnvoyer > 0
+            ? '📡 Hors ligne · tes modifications partiront au retour du réseau'
+            : '📡 Hors ligne · tout est gardé sur ce téléphone'}
+        </div>
+      ) : envoiRefuse && (
+        <div className="offline-banner offline-banner--alerte" role="alert">
+          ⚠️ Envoi refusé par le serveur · tes modifications restent sur ce téléphone
+          <button className="offline-banner__action" onClick={renvoyer}>Réessayer</button>
+        </div>
       )}
       {/* La pire panne possible : l'écriture locale échoue, et tout ce qui n'est
           pas encore parti chez Supabase disparaîtra au rechargement. Elle était
