@@ -14,7 +14,7 @@ if ('serviceWorker' in navigator) {
   //
   // Deux pièges refermés (audit du 30 septembre 2026, reproduits) :
   //  · à la toute première installation, `clients.claim()` déclenche aussi
-  //    cet événement. On rechargeait donc au premier lancement — et l'app
+  //    cet événement. On rechargeait donc au premier lancement, et l'app
   //    avait déjà retiré de l'adresse le lien qui l'avait ouverte
   //    (`?invite=`, `?share=`, `?voyage=`, `?ajout=`). Une invitation ouverte
   //    par quelqu'un qui n'avait jamais lancé Provo ne faisait rien. Sans

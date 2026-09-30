@@ -128,7 +128,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   const soucis = getLogicAlerts(day.activities, slots)
     .filter(a => a.type === 'overload' || a.type === 'conflict');
 
-  // Le geste du voyage — piocher dans la Réserve au lieu de chercher — posé
+  // Le geste du voyage (piocher dans la Réserve au lieu de chercher), posé
   // sur la carte d'aujourd'hui, là où l'on regarde, et seulement quand il a un
   // sens : du temps libre (au moins une demi-heure) et des idées en Réserve.
   // Sinon rien (règle D3). Il n'était que la 7e entrée d'un menu ⋯ de 13.

@@ -38,8 +38,8 @@ import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches, dejaFouillee } from
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
 // Le bilan ne sert qu'aux voyages terminés, et il embarque Leaflet (sa carte
-// du vécu) : importé d'office, il faisait précharger 149 ko de carte — le
-// sixième du JavaScript — à chaque ouverture de l'app.
+// du vécu) : importé d'office, il faisait précharger 149 ko de carte, le
+// sixième du JavaScript, à chaque ouverture de l'app.
 const TripRecap = lazy(() => import('../components/TripRecap'));
 // Le contrôle des lieux ne sert qu'à la demande : inutile de l'embarquer
 // dans le paquet principal.
@@ -477,7 +477,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
     const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
     const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
-    // Le brief de demain occupait le haut du Planning TOUTE la journée — au
+    // Le brief de demain occupait le haut du Planning TOUTE la journée : au
     // jour 1 à 11 h, le premier bloc de l'écran qui doit répondre « qu'est-ce
     // que je fais maintenant ? » parlait du lendemain. Il revient le soir (le
     // rappel « c'est demain » part à 18 h), ou toute la veille du départ,

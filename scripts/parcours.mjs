@@ -2328,7 +2328,7 @@ const PARCOURS = [
     } },
 
   // L'heure est FIXÉE (horloge simulée) : un parcours ne dépend jamais de
-  // l'heure qu'il est vraiment — sinon il rougit à midi et passe le matin.
+  // l'heure qu'il est vraiment : sinon il rougit à midi et passe le matin.
   { groupe: 'Planning', nom: "À 11 h le jour J, le Planning parle d'aujourd'hui", depart: 'voyage',
     intention: "Ouvrir le Planning en pleine journée : voir de quoi est fait AUJOURD'HUI, "
       + "et pouvoir piocher une idée dans le temps libre, d'un geste.",

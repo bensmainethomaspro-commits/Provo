@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { avecDelai } from '../utils/reseau';
 
 const CACHE_KEY = 'provo_fx_rates';
-// Au-delà, on cherche des taux plus récents — mais les anciens RESTENT en
+// Au-delà, on cherche des taux plus récents, mais les anciens RESTENT en
 // repli. Avant, ils étaient jetés au bout de 24 h même sans réseau pour les
 // remplacer : hors ligne depuis un jour, une dépense de 10 000 ¥ (une
 // soixantaine d'euros) s'enregistrait à 10 000 € (audit A-003).
@@ -50,7 +50,7 @@ const etatDepuis = (c) => ({
 // Deux sources, dans cet ordre (règle E9 : ce qui dépend d'un tiers a
 // plusieurs échelons, et l'ordre est écrit).
 //  1. Frankfurter : les taux de référence de la BCE. Sûrs, mais une trentaine
-//     de devises seulement — le dirham marocain, le dirham des Émirats ou la
+//     de devises seulement : le dirham marocain, le dirham des Émirats ou la
 //     livre égyptienne n'y sont pas, et la liste ci-dessus les propose.
 //  2. open.er-api.com (ExchangeRate-API, accès libre sans clé) : ne sert qu'à
 //     ce que la première ne publie pas.
@@ -103,7 +103,7 @@ export function useCurrencyRates() {
   }, []);
 
   /**
-   * `null` quand le taux manque — JAMAIS le montant tel quel. Rendre le
+   * `null` quand le taux manque, JAMAIS le montant tel quel. Rendre le
    * montant revenait à décréter 1 € = 1 ¥, et le chiffre faux était enregistré
    * pour toujours dans la dépense.
    */

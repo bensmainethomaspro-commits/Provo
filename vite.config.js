@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
  * téléphone ne voyait même pas qu'une nouvelle version était en ligne.
  *
  * Après le build, trois lignes de `dist/sw.js` sont réécrites :
- *  · VERSION : l'empreinte de la liste des fichiers produits — elle ne change
+ *  · VERSION : l'empreinte de la liste des fichiers produits ; elle ne change
  *    que si l'app change, donc pas de mise à jour pour rien ;
  *  · PRECACHE : ces fichiers, pour que tout l'écran existe hors ligne, même
  *    ce qu'on n'a jamais ouvert en ligne ;

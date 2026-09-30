@@ -39,7 +39,7 @@ personnes, quelques fois par an. Aucun objectif de croissance ni de monétisatio
 | Cartographie | Leaflet, tuiles OpenStreetMap |
 | Hébergement | Vercel, vercel.json pilote le cache |
 | Mobile natif | Capacitor 8 (com.provo.app), dossier android/ |
-| Qualité | ESLint 10, aucune suite de tests automatisés |
+| Qualité | ESLint 10 (dette plafonnée par `verif-lint`) ; suites `verif-*` et `/parcours`, lancées sur chaque PR par `.github/workflows/verif.yml` depuis le 2026-09-30 |
 
 Services externes gratuits et sans clé : Nominatim, **Photon**
 (`photon.komoot.io`, second recours de `searchPlaces` quand Nominatim ne rend
@@ -261,6 +261,21 @@ un oubli.
 Supabase avec synchronisation différée de 700 ms et comparaison d'empreinte, puis
 Realtime via `postgres_changes`.
 
+> **À JOUR AU 2026-09-30 (audit Pareto, A-051 et A-055).** Le chargement
+> depuis le nuage REMPLAÇAIT le voyage local, au démarrage et à chaque retour
+> dans l'app (auth-js émet `SIGNED_IN` au passage visible) : perte des
+> modifications faites hors ligne, reproduite. Désormais :
+> · une quatrième clé locale, `provo_synchro`, garde les voyages « à envoyer »
+>   et leur dernier ancêtre commun ; au chargement, `reconcilier`
+>   (`src/utils/synchro.js`) fusionne au lieu de remplacer ;
+> · rien n'est écrit vers Supabase avant la lecture du nuage (`pretRef`), et
+>   l'envoi lit le voyage au moment d'écrire ;
+> · le stockage local s'écrit 400 ms après la dernière modification, et tout
+>   de suite au passage en arrière-plan ; la synchro compare par identité.
+> Garde-fous : `verif-synchro` (hors navigateur) et `verif-synchro-demarrage`
+> (Supabase simulé). Ne pas re-remonter A-051 sur la lecture de
+> `loadFromSupabase` sans avoir déroulé `reconcilier`.
+
 Tables Supabase : `trips`, `trip_members`, `profiles`, `shared_trips`, et
 `push_subscriptions` depuis le 2026-08-06. Elles cohabitent dans le même projet
 Supabase que l'application sœur JobWatch, dont les tables sont préfixées
@@ -343,13 +358,14 @@ Ce dépôt possède déjà une mémoire d'amélioration continue. Elle prime sur
 
 ## Conventions assumées, à ne jamais signaler comme défauts
 
-- **54 erreurs et 3 avertissements ESLint sur main.** Dette connue, non bloquante.
-  Consigne : ne pas aggraver. Ne la signale que si le nombre a augmenté depuis le
-  dernier audit, en chiffrant l'écart.
-- Absence totale de tests automatisés. La vérification se fait au rendu réel, via
-  `npm run build`, `vite preview` et des scripts Playwright ponctuels en 390 × 844.
-  Ne recommande la mise en place d'une suite de tests que si un bug de régression
-  réel est identifiable dans l'historique git.
+- **Dette ESLint connue, non bloquante** : 40 erreurs et 4 avertissements au
+  2026-09-30 (47/4 le matin même). Consigne : ne pas aggraver, et c'est
+  désormais vérifié à chaque `npm run verif` par `scripts/verif-lint.mjs`
+  (plafond à abaisser quand la dette baisse, jamais à relever).
+- Pas de framework de tests : la vérification se fait au rendu réel et par des
+  scripts (`verif-*`, `/parcours`, Playwright en 390 × 844). Depuis le
+  2026-09-30 ils tournent sur chaque PR (`.github/workflows/verif.yml`, A-043).
+  Ne recommande pas de framework de tests en plus.
 - Un seul fichier CSS de près de 6 000 lignes. C'est assumé. Ne propose ni
   découpage, ni CSS Modules, ni framework de style.
 - Aucun routeur. L'état de route vit dans App.jsx. Assumé.
@@ -424,7 +440,7 @@ dépôt n'en garde aucune trace. C'est le principal angle mort du projet.
 | `trips` | `owner_all` (ALL, `owner_id = auth.uid()`), `member_select` + `member_update` (EXISTS dans `trip_members`) |
 | `trip_members` | `owner_manage_members` (ALL, `is_trip_owner`), `join_by_invite` (INSERT, `user_id = auth.uid()`), `member_read_own` (SELECT, ses propres lignes) |
 | `profiles` | `own_profile_all`, plus deux SELECT en `USING (true)` |
-| `shared_trips` | `public_read`, `public_insert`, `public_update`, tous en `true` |
+| `shared_trips` | `public_read`, `public_insert`, `public_update`, tous en `true` **(refermé le 2026-09-30, A-001 : insertion par un compte à son nom, lecture d'une copie par `lire_voyage_partage(share_id)` seulement ; voir `supabase/migrations/20260930_partage_securise.sql`)** |
 
 `anon` et `authenticated` ont les droits SELECT/INSERT/UPDATE/DELETE sur les
 quatre tables : seules les politiques RLS protègent quoi que ce soit.

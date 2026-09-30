@@ -160,7 +160,7 @@ function AppInner() {
     ? pendingVoyage.onglet : null;
 
   // Le lien d'une notification se consomme en quittant le voyage : il restait
-  // posé, et l'effet ci-dessus renvoyait aussitôt dans le voyage — l'accueil
+  // posé, et l'effet ci-dessus renvoyait aussitôt dans le voyage : l'accueil
   // devenait inatteignable jusqu'au redémarrage (audit A-042, reproduit).
   const quitterVoyage = () => {
     setPendingVoyage(null);

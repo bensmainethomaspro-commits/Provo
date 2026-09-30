@@ -106,6 +106,56 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
 
+- **Audit Pareto, 30 septembre 2026** (20 leviers, code et UX, PR #98).
+  Mesuré et reproduit avant de corriger, chaque garde-fou prouvé rouge sur
+  le code d'avant.
+  · **La synchro ne remplace plus, elle fusionne** (`src/utils/synchro.js`).
+    Le nuage écrasait les modifications locales non envoyées : au démarrage,
+    et à CHAQUE retour dans l'app, car auth-js émet `SIGNED_IN` au passage
+    visible. La file « à envoyer » et le dernier ancêtre commun vivent sous
+    `provo_synchro` ; rien n'est écrit avant la lecture du nuage ; relance
+    au retour du réseau. Garde-fous : `verif-synchro` (13 cas) et
+    `verif-synchro-demarrage` (Supabase simulé, 7 échecs sur l'ancien code).
+  · **Frappe : 239 → 33 ms** avec un billet de 1,5 Mo joint (CPU ×4). La
+    synchro compare les voyages par identité ; le stockage local s'écrit
+    400 ms après, et tout de suite au passage en arrière-plan. Les parcours
+    qui lisent le stockage attendent donc 500 ms (`t.voyage()`).
+  · **Le bandeau hors ligne dit l'état** : rien en attente, modifications
+    qui partiront, ou envoi refusé (rouge, « Réessayer »).
+  · **Premier lancement** : le service worker ne recharge plus la page s'il
+    n'y avait pas d'ancienne version (le lien d'ouverture était perdu), et
+    une nouvelle version recharge au passage en arrière-plan, jamais sous
+    les doigts.
+  · **Devises** : jamais de 1:1 inventé. Dernier taux gardé sans limite,
+    `tauxManquant` sinon (compte pour 0, converti dès que le taux arrive),
+    source de secours open.er-api.com pour ce que la BCE ne publie pas
+    (non joignable depuis le bac à sable). `enEuros()` est la seule lecture
+    d'un montant en euros.
+  · **Partage** : un seul « Partager », deux gestes, « Inviter » (le vrai
+    lien d'invitation, sorti des Paramètres) et « Envoyer une copie ».
+    `shared_trips` refermé (migration `20260930_partage_securise.sql`) ; un
+    lien de copie importe un voyage à soi et ne remplace plus rien.
+    `profiles` a `display_name`, pas `name` : les prénoms ne se publiaient
+    jamais.
+  · **Délais** : `src/utils/reseau.js` ; `verif-delais` refuse tout appel
+    réseau de `src/` sans délai.
+  · **Planning** : « 🌙 Demain » seulement à partir de 17 h (ou la veille du
+    départ) ; « 🎯 2h de libre · piocher une idée » sur la carte du jour
+    quand il reste 30 min et des idées (sinon rien). « Que faire
+    maintenant ? » reste aussi dans le menu ⋯.
+  · **Menu ⋯ : 11 entrées.** « Mode sombre » et « Recharger l'app » vivent
+    sur l'accueil seulement.
+  · **Accueil** : la carte « En voyage » montre ce qui vient, avec l'heure.
+    **Réserve** : le tri par défaut s'appelle « Mon ordre ».
+  · **CI** : `.github/workflows/verif.yml` (build, suites, dette ESLint
+    plafonnée par `verif-lint`, 87 parcours) sur chaque PR.
+  · **Service worker versionné au build** (greffon `provo-service-worker`
+    dans `vite.config.js`) : précharge toute l'app, garde la version
+    précédente, purge le reste ; cache OCR nommé d'après tesseract.js.
+  · Reste à faire à la main : la protection contre les mots de passe
+    compromis (Supabase › Authentication), peut-être réservée aux offres
+    payantes.
+
 - **Liens et complétion, 29 septembre 2026.**
   · `extract-place` lit, sans réseau, les liens Plans (Apple), OpenStreetMap,
     Waze, Bing, Yandex et Mapy ; le JSON-LD des pages (nom, adresse, point,
@@ -1077,8 +1127,11 @@ chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/c
 browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 ```
 
-Le thème se bascule **par le menu `⋯`**, pas par `localStorage` : `addInitScript`
-réécrit la clé à chaque rechargement.
+Le thème se bascule **par le bouton 🌙 de l'accueil** (il n'est plus dans le
+menu `⋯` du voyage depuis le 30 septembre 2026), pas par `localStorage` :
+`addInitScript` réécrit la clé à chaque rechargement, sauf si le script
+l'amorce une seule fois (drapeau `sessionStorage`, comme `verif-ui` le fait
+désormais pour les écrans qui préparent leur propre stockage).
 
 Puis, **avant toute livraison qui touche l'interface** :
 
@@ -1102,10 +1155,11 @@ Puis, **avant une livraison importante ou après une modification qui touche
 plusieurs écrans** :
 
 ```bash
-npm run parcours              # 50 parcours : hors ligne + services rejoués
+npm run parcours              # 87 parcours : hors ligne + services rejoués
 npm run parcours:hors-ligne   # seulement ce qui doit marcher sans réseau
 npm run parcours:reseau       # seulement les chaînes distantes
 npm run verif-carte           # la carte : cadrage, zoom, position, bulles
+npm run verif-demarrage       # la synchro au démarrage, Supabase simulé
 ```
 
 `/parcours` est le seul des trois outils qui **appuie sur les boutons**. Il

@@ -6,7 +6,7 @@
 //
 // Le nom du cache était une constante (`provo-v3`), identique d'un déploiement
 // à l'autre : les fichiers de chaque version s'y empilaient sans jamais être
-// purgés, et le moteur OCR n'était jamais renouvelé — contrairement à ce que
+// purgés, et le moteur OCR n'était jamais renouvelé, contrairement à ce que
 // disait ce fichier. Et comme `sw.js` ne changeait jamais, le téléphone ne
 // voyait même pas qu'une nouvelle version existait (audit du 30 septembre 2026).
 const VERSION = 'dev';

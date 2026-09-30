@@ -1310,7 +1310,7 @@ export function partsDeDepense(exp) {
 }
 
 /**
- * Le montant d'une dépense en euros — la seule lecture de ce chiffre.
+ * Le montant d'une dépense en euros : la seule lecture de ce chiffre.
  *
  * Une dépense saisie dans une devise dont on n'avait pas le taux porte
  * `tauxManquant` : elle compte pour 0 jusqu'à sa conversion (TripView s'en

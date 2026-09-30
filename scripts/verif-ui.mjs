@@ -596,7 +596,7 @@ for (const theme of ['light', 'dark']) {
     // Chaque écran repart du jeu de référence… sauf quand il vient de
     // préparer lui-même le stockage et recharge pour le voir (« Réserve
     // (introuvable) ») : réamorcé ici, son préparatif était effacé et l'écran
-    // n'était jamais atteint — l'outil le disait, en fin de rapport.
+    // n'était jamais atteint, et l'outil le disait en fin de rapport.
     if (sessionStorage.getItem('verif_garder')) { sessionStorage.removeItem('verif_garder'); return; }
     localStorage.setItem('provo_trips', t);
     localStorage.setItem('provo_settings', s);

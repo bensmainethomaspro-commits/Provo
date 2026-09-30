@@ -47,7 +47,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   const activeDayIdx = activeTrip ? Math.round((todayDate - new Date(activeTrip.startDate + 'T00:00:00')) / 86400000) : -1;
   // Ce qui VIENT aujourd'hui, avec l'heure : la carte listait les quatre
   // premières activités dans l'ordre, sans heure, celles déjà faites comprises
-  // — à 15 h, elle montrait encore le musée du matin. Ce qui est coché, annulé
+  // (à 15 h, elle montrait encore le musée du matin). Ce qui est coché, annulé
   // ou déjà fini sort ; ce qui reste répond à « et maintenant ? ».
   const aVenirAujourdhui = (() => {
     if (!activeTodayDay) return [];

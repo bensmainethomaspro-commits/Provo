@@ -563,7 +563,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       if (!form.participantIds.length) {
         setError(form.type === 'transfert' ? 'Pour qui ?' : 'Qui participe ?'); return;
       }
-      // Des montants par personne se comparent au total en euros — inconnu
+      // Des montants par personne se comparent au total en euros, inconnu
       // sans taux. Les parts et les pourcentages, eux, n'en ont pas besoin.
       if (tauxInconnu && form.mode === 'montants' && form.type !== 'transfert') {
         setError(`Pas encore de taux pour ${form.currency} : partage en parts ou en pourcentages.`);

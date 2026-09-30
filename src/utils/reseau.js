@@ -21,7 +21,7 @@ export const DELAI_FETCH_MS = 12000;
 export const DELAI_FONCTION_MS = 25000;
 
 /**
- * `fetch` avec un délai. Au-delà, la requête est annulée et rejette — ce que
+ * `fetch` avec un délai. Au-delà, la requête est annulée et rejette, ce que
  * le `catch` de chaque appelant sait déjà traiter.
  *
  * Un signal fourni par l'appelant (recherche à la frappe annulée par la

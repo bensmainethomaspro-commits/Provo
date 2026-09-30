@@ -82,7 +82,7 @@ const textes = [
   [{ description: 'Tajine', amount: 250, currency: 'MAD', eurAmount: null, tauxManquant: true,
     payerId: 't2', participantIds: ['t1', 't2'] },
     '👩 Léa a ajouté « Tajine » — 250 MAD',
-    'sans taux de change, la devise payée — jamais 250 € inventés'],
+    'sans taux de change, la devise payée, jamais 250 € inventés'],
 ];
 
 // `Intl` sépare le montant de son symbole par une espace insécable étroite
