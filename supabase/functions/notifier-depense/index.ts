@@ -38,10 +38,10 @@ const json = (b: unknown, s = 200) =>
 type Abo = { endpoint: string; p256dh: string; auth: string; user_id: string };
 
 /** Un montant en euros, écrit comme dans l'app. */
-function montant(valeur: number): string {
+function montant(valeur: number, devise: string = "EUR"): string {
   const rond = Number.isInteger(valeur);
   return new Intl.NumberFormat("fr-FR", {
-    style: "currency", currency: "EUR",
+    style: "currency", currency: devise,
     minimumFractionDigits: rond ? 0 : 2, maximumFractionDigits: 2,
   }).format(valeur);
 }
@@ -78,7 +78,11 @@ function doitNotifier(dep: any): boolean {
 
 /** Le titre et le corps de la notification, en une phrase qui se lit d'un œil. */
 function messageDepense(trip: any, dep: any): { titre: string; corps: string } {
-  const eur = Number(dep.eurAmount ?? dep.amount ?? 0);
+  // Une dépense sans taux de change connu n'a pas encore d'euros : on
+  // annonce ce qui a été payé, dans sa devise, plutôt qu'un 1:1 inventé.
+  const sansTaux = !!dep.tauxManquant && !!dep.currency;
+  const eur = Number((sansTaux ? dep.amount : dep.eurAmount ?? dep.amount) ?? 0);
+  const devise = sansTaux ? String(dep.currency) : "EUR";
   const qui = nomDe(trip, dep.payerId);
   const quoi = String(dep.description || "").trim() || "Dépense";
   // Un revenu est enregistré en négatif : le verbe suit le signe, sinon on
@@ -88,8 +92,8 @@ function messageDepense(trip: any, dep: any): { titre: string; corps: string } {
   return {
     titre: `${trip?.emoji || "💶"} ${trip?.name || "Voyage"}`,
     corps: dep.isSettlement
-      ? `${qui} ${verbe} ${montant(Math.abs(eur))}`
-      : `${qui} ${verbe} « ${quoi} » — ${montant(Math.abs(eur))}`,
+      ? `${qui} ${verbe} ${montant(Math.abs(eur), devise)}`
+      : `${qui} ${verbe} « ${quoi} » — ${montant(Math.abs(eur), devise)}`,
   };
 }
 

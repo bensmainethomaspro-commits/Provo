@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom';
-import { formatPrice, partEnEuros } from '../utils/helpers';
+import { formatPrice, partEnEuros, enEuros } from '../utils/helpers';
 
 export default function TravelerBalanceSheet({ traveler, travelers, expenses, debts, onClose, onDelete }) {
   // Un id technique ne se lit pas. Une dépense payée par quelqu'un qui a
@@ -10,7 +10,7 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
 
   const paid = expenses
     .filter(e => e.payerId === traveler.id)
-    .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    .reduce((s, e) => s + enEuros(e), 0);
 
   // La part vient de `partEnEuros`, pas d'une division locale : à parts
   // inégales, cette feuille afficherait sinon un chiffre différent de celui
@@ -113,7 +113,7 @@ export default function TravelerBalanceSheet({ traveler, travelers, expenses, de
             <div className="tbs__section">
               <div className="tbs__section-title">Ses dépenses</div>
               {myExpenses.map(exp => {
-                const eurAmt = exp.eurAmount ?? exp.amount;
+                const eurAmt = enEuros(exp);
                 const isPayer = exp.payerId === traveler.id;
                 return (
                   <div key={exp.id} className="tbs__exp-row">

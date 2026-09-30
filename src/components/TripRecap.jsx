@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { formatPrice, formatDateShort, getCategoryMeta, haversineKm } from '../utils/helpers';
+import { formatPrice, formatDateShort, getCategoryMeta, haversineKm, enEuros } from '../utils/helpers';
 import RecapCarte from './RecapCarte';
 
 // Bilan de voyage (« Provo Wrapped ») : chiffres clés du séjour, partageables.
@@ -19,7 +19,7 @@ export default function TripRecap({ trip, onClose }) {
   const doneCost = done.reduce((s, a) => s + (parseFloat(a.price) || 0), 0);
   const expensesTotal = (trip.expenses || [])
     .filter(e => !e.isSettlement)
-    .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    .reduce((s, e) => s + enEuros(e), 0);
   const realSpent = doneCost + expensesTotal;
 
   // Km parcourus : distances entre activités géolocalisées consécutives, par jour

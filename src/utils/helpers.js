@@ -1332,13 +1332,25 @@ export function totalDesParts(exp) {
   return Object.values(partsDeDepense(exp)).reduce((s, v) => s + v, 0);
 }
 
+/**
+ * Le montant d'une dépense en euros — la seule lecture de ce chiffre.
+ *
+ * Une dépense saisie dans une devise dont on n'avait pas le taux porte
+ * `tauxManquant` : elle compte pour 0 jusqu'à sa conversion (TripView s'en
+ * charge dès que le taux arrive), et la liste le dit. Avant, le montant était
+ * lu TEL QUEL : 10 000 ¥ pesaient 10 000 € dans les soldes (audit A-003).
+ */
+export function enEuros(exp) {
+  if (!exp || exp.tauxManquant) return 0;
+  return Number(exp.eurAmount ?? exp.amount ?? 0) || 0;
+}
+
 /** Ce que cette personne doit sur cette dépense, en euros. 0 si elle n'y est pas. */
 export function partEnEuros(exp, id) {
   const parts = partsDeDepense(exp);
   const total = Object.values(parts).reduce((s, v) => s + v, 0);
   if (!total || !parts[id]) return 0;
-  const montant = exp?.eurAmount ?? exp?.amount ?? 0;
-  return montant * parts[id] / total;
+  return enEuros(exp) * parts[id] / total;
 }
 
 /** Vrai seulement si le partage n'est PAS égal — sert à ne le dire que là. */

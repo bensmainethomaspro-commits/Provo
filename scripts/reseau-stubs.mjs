@@ -44,6 +44,7 @@ export const REPONSES = {
 
   // Frankfurter : taux de change.
   taux: { amount: 1, base: 'EUR', date: '2026-08-04', rates: { USD: 1.09, GBP: 0.84, CHF: 0.95, JPY: 172.4 } },
+  tauxSecours: { result: 'success', base_code: 'EUR', rates: { EUR: 1, USD: 1.1, JPY: 170, MAD: 10.8, AED: 4.0, EGP: 53 } },
 
   // Overpass : lieux autour d'un point.
   overpass: { elements: [{ type: 'node', id: 1, lat: 48.2085, lon: 16.3735,
@@ -217,6 +218,8 @@ export async function brancherReseau(page, base, plan = {}) {
     ['**/api.open-meteo.com/**', 'meteo', null],
     ['**/archive-api.open-meteo.com/**', 'meteo', null],
     ['**/api.frankfurter.app/**', 'taux', () => REPONSES.taux],
+    // La source de secours, pour ce que la BCE ne publie pas (dirhams, livre égyptienne…).
+    ['**/open.er-api.com/**', 'taux', () => REPONSES.tauxSecours],
     ['**/en.wikipedia.org/**', 'wikipedia', () => REPONSES.wikipedia],
     ['**/router.project-osrm.org/**', 'osrm', () => ({ routes: [{ duration: 900, distance: 3200 }] })],
     ['**/api.rss2json.com/**', 'actualites', () => ({ items: [] })],

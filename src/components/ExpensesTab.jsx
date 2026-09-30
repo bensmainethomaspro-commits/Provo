@@ -2,7 +2,7 @@ import { useState, useRef, useMemo } from 'react';
 import {
   formatPrice, formatDateShort, lireRecu, reduireImage,
   partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
-  dateLocale,
+  dateLocale, enEuros,
 } from '../utils/helpers';
 import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
@@ -79,8 +79,7 @@ function calcDebts(expenses, travelers) {
     // formé fait tomber toute la vue voyage — barre d'onglets comprise.
     const n = (exp.participantIds || []).length;
     if (!n) return;
-    const eurAmount = exp.eurAmount ?? exp.amount;
-    bal[exp.payerId] = (bal[exp.payerId] || 0) + eurAmount;
+    bal[exp.payerId] = (bal[exp.payerId] || 0) + enEuros(exp);
     // La part de chacun vient de `partEnEuros`, jamais d'une division locale :
     // un partage inégal doit donner le même chiffre ici, dans les soldes et
     // dans la feuille par voyageur. Trois copies d'un calcul d'argent finissent
@@ -118,7 +117,7 @@ function calcBalances(expenses, travelers) {
     // formé fait tomber toute la vue voyage — barre d'onglets comprise.
     const n = (exp.participantIds || []).length;
     if (!n) return;
-    bal[exp.payerId] = (bal[exp.payerId] || 0) + (exp.eurAmount ?? exp.amount);
+    bal[exp.payerId] = (bal[exp.payerId] || 0) + enEuros(exp);
     exp.participantIds.forEach(id => { bal[id] = (bal[id] || 0) - partEnEuros(exp, id); });
   });
   return bal;
@@ -309,7 +308,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // signe au point d'insertion, et lui rendre le focus juste après.
   const montantRef = useRef(null);
   const [calculOuvert, setCalculOuvert] = useState(false);
-  const { convertToEur } = useCurrencyRates();
+  const { convertToEur, ancienDu } = useCurrencyRates();
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -485,11 +484,17 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
 
   // Le total en euros, tel qu'il sera enregistré. Le champ peut porter un
   // CALCUL (« 12,50+8 ») : c'est son résultat qui compte, ici comme partout.
+  // `null` quand la devise n'a pas de taux connu : on ne l'invente pas.
   const totalEuros = useMemo(() => {
     const amt = evaluerMontant(form.amount);
     if (!amt || amt <= 0) return 0;
     return form.currency === 'EUR' ? amt : convertToEur(amt, form.currency);
   }, [form.amount, form.currency, convertToEur]);
+  const tauxInconnu = totalEuros == null;
+  // Un taux ancien se date : la personne sait sur quoi repose le chiffre
+  // (hors ligne, c'est le dernier connu qui sert).
+  const tauxAncien = form.currency !== 'EUR' && ancienDu
+    ? new Date(ancienDu).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : null;
 
   // L'aperçu « = 20,50 € », affiché pendant qu'on tape l'opération. Muet sur un
   // nombre simple — il n'apprendrait rien — et muet sur une opération
@@ -541,7 +546,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
   // LA RÉPARTITION EN DIRECT — le point de tout cet écran. Chacun voit ce
   // qu'il doit pendant qu'on tape, au lieu de le découvrir après coup.
   const { part: repartition, ecart: ecartRepartition } = useMemo(
-    () => repartir(form.mode, form.participantIds, form.valeurs, totalEuros),
+    () => repartir(form.mode, form.participantIds, form.valeurs, totalEuros ?? 0),
     [form.mode, form.participantIds, form.valeurs, totalEuros]);
 
   const handleAdd = () => {
@@ -558,11 +563,18 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       if (!form.participantIds.length) {
         setError(form.type === 'transfert' ? 'Pour qui ?' : 'Qui participe ?'); return;
       }
+      // Des montants par personne se comparent au total en euros — inconnu
+      // sans taux. Les parts et les pourcentages, eux, n'en ont pas besoin.
+      if (tauxInconnu && form.mode === 'montants' && form.type !== 'transfert') {
+        setError(`Pas encore de taux pour ${form.currency} : partage en parts ou en pourcentages.`);
+        return;
+      }
       // Un partage qui ne tombe pas juste fabrique des dettes fausses, et on
       // ne s'en aperçoit qu'à la fin du voyage. On refuse d'enregistrer.
-      if (ecartRepartition) { setError(ecartRepartition); return; }
+      if (ecartRepartition && !tauxInconnu) { setError(ecartRepartition); return; }
     }
     const eur = form.currency === 'EUR' ? amount : convertToEur(amount, form.currency);
+    const tauxManquant = eur == null;
     const signe = TYPES.find(t => t.id === form.type)?.signe ?? 1;
 
     // Les parts enregistrées sont TOUJOURS des parts, quel que soit le mode de
@@ -570,17 +582,27 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     // que ça. Un montant ou un pourcentage se convertit donc ici, une fois,
     // au lieu d'apprendre trois unités à tout le reste de l'app.
     const parts = {};
-    if (form.mode !== 'egal' && form.type !== 'transfert' && eur > 0) {
-      form.participantIds.forEach(id => {
-        // Une part est un ratio : les euros de chacun rapportés au total.
-        parts[id] = (repartition[id] || 0) / eur;
-      });
+    if (form.mode !== 'egal' && form.type !== 'transfert') {
+      if (tauxManquant) {
+        // Sans total en euros, le ratio se calcule sur un total de 1 : parts
+        // et pourcentages ne dépendent pas du montant.
+        const { part } = repartir(form.mode, form.participantIds, form.valeurs, 1);
+        form.participantIds.forEach(id => { parts[id] = part[id] || 0; });
+      } else if (eur > 0) {
+        form.participantIds.forEach(id => {
+          // Une part est un ratio : les euros de chacun rapportés au total.
+          parts[id] = (repartition[id] || 0) / eur;
+        });
+      }
     }
 
     const payload = {
       description: form.description.trim(),
       amount: signe * amount,
-      eurAmount: signe * Math.round(eur * 100) / 100,
+      // Sans taux, pas d'euros inventés : la dépense attend le sien, compte
+      // pour 0 d'ici là (`enEuros`), et TripView la convertit dès qu'il arrive.
+      eurAmount: tauxManquant ? null : signe * Math.round(eur * 100) / 100,
+      tauxManquant: tauxManquant || undefined,
       currency: form.currency,
       expenseCategory: form.expenseCategory,
       payerId: form.payerId,
@@ -620,7 +642,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     totalSpent, debts, balances, byCategory, travelerTotals,
   } = useMemo(() => {
     const reelles = expenses.filter(e => !e.isSettlement);
-    const total = reelles.reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+    const total = reelles.reduce((s, e) => s + enEuros(e), 0);
     return {
       totalSpent: total,
       debts: calcDebts(expenses, travelers),
@@ -629,12 +651,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         ...cat,
         total: reelles
           .filter(e => e.expenseCategory === cat.id)
-          .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0),
+          .reduce((s, e) => s + enEuros(e), 0),
       })).filter(c => c.total > 0),
       travelerTotals: travelers.map(t => {
         const paid = expenses
           .filter(e => e.payerId === t.id)
-          .reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+          .reduce((s, e) => s + enEuros(e), 0);
         const share = expenses.reduce((s, e) => {
           if (!(e.participantIds || []).includes(t.id)) return s;
           return s + partEnEuros(e, t.id);
@@ -812,7 +834,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             {(apercuCalcul || form.currency !== 'EUR') && form.amount && (
               <div className="currency-hint">
                 {apercuCalcul && <strong>= {apercuCalcul}</strong>}
-                {form.currency !== 'EUR' && <> ≈ {formatMontantExact(totalEuros)}</>}
+                {form.currency !== 'EUR' && (tauxInconnu
+                  ? <> Pas encore de taux pour {form.currency} : l'équivalent en euros se calculera dès qu'il arrive.</>
+                  : <> ≈ {formatMontantExact(totalEuros)}{tauxAncien && ` (taux du ${tauxAncien})`}</>)}
               </div>
             )}
           </div>
@@ -888,7 +912,8 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                         {/* Au centime, pas à l'euro : « 33 € · 33 € · 33 € »
                             pour 100 € partagés en trois se lit comme une
                             erreur de calcul. */}
-                        {dedans ? formatMontantExact(repartition[t.id] || 0) : '—'}
+                        {/* Sans taux, les euros de chacun ne sont pas encore connus. */}
+                        {dedans ? (tauxInconnu ? '…' : formatMontantExact(repartition[t.id] || 0)) : '—'}
                       </span>
                     </div>
                   );
@@ -1148,7 +1173,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
             // accès étaient restés nus : c'est la version de l'audit, gardée.
             const participants = exp.participantIds || [];
             const n = participants.length;
-            const eurAmt = exp.eurAmount ?? exp.amount;
+            const eurAmt = enEuros(exp);
             // « X €/pers. » n'a de sens QUE si le partage est égal. À parts
             // inégales il n'existe aucun montant « par personne » — et cette
             // ligne, la plus lue de l'app, annonçait la division simple pendant
@@ -1186,11 +1211,12 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
                               {exp.payerId && `${getName(exp.payerId)} a payé `}
                               <strong>
                                 {exp.currency && exp.currency !== 'EUR'
-                                  ? `${exp.amount} ${exp.currency} (≈ ${formatPrice(eurAmt)})`
+                                  ? `${exp.amount} ${exp.currency} (${exp.tauxManquant ? 'taux en attente' : `≈ ${formatPrice(eurAmt)}`})`
                                   : formatPrice(eurAmt)
                                 }
                               </strong>
-                              {n > 0 && (inegal
+                              {/* Sans taux, pas d'euros à partager : on ne dit rien plutôt que « 0 €/pers. ». */}
+                              {n > 0 && !exp.tauxManquant && (inegal
                                 ? (maPart > 0
                                   ? ` · ta part : ${formatPrice(maPart)}`
                                   : ' · à parts inégales')

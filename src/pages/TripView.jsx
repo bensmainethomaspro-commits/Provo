@@ -23,7 +23,8 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros } from '../utils/helpers';
+import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
@@ -67,6 +68,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // première activité géolocalisée : un vol au départ ancrerait tout le
   // voyage sur la ville de départ.
   const anchor = useTripAnchor(trip?.destination);
+
+  // Une dépense notée sans taux de change connu (hors ligne dans une devise
+  // jamais vue, ou devise que la source ne publie pas) attend le sien : elle
+  // se convertit dès qu'il arrive, au taux de ce jour-là. Plutôt ça que
+  // 1 € = 1 ¥, qui s'enregistrait pour toujours (audit A-003).
+  const { convertToEur } = useCurrencyRates();
+  useEffect(() => {
+    for (const e of trip?.expenses || []) {
+      if (!e.tauxManquant) continue;
+      const eur = convertToEur(Math.abs(Number(e.amount) || 0), e.currency);
+      if (eur == null) continue;
+      const signe = Number(e.amount) < 0 ? -1 : 1;
+      updateExpense(tripId, e.id, { eurAmount: signe * Math.round(eur * 100) / 100, tauxManquant: undefined });
+    }
+  }, [trip?.expenses, convertToEur, updateExpense, tripId]);
 
   // Repère les fiches douteuses. Purement géométrique : aucune requête, donc
   // ça tourne en continu, même hors ligne. Un lieu à 800 km de la destination
@@ -785,7 +801,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#35A7DD';
   const expenses = trip.expenses || [];
   // Settlements (remboursements entre voyageurs) are transfers, not spending.
-  const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + enEuros(e), 0);
   /* ─── Budget ────────────────────────────────────────────────────────────
      « Estimé » veut dire : ce que ce voyage aura coûté en tout. Il additionnait
      en réalité le prix de TOUTES les activités connues plus TOUTES les
