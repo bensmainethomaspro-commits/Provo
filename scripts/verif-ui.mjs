@@ -21,6 +21,7 @@
 import { chromium } from 'playwright';
 import { existsSync, readdirSync } from 'node:fs';
 import { trip, settings } from './ui-fixture.mjs';
+import { brancherReseau } from './reseau-stubs.mjs';
 
 // Playwright cherche une version précise du binaire ; l'environnement peut en
 // avoir une autre. Plutôt que d'exiger une variable à chaque appel, on prend
@@ -553,6 +554,140 @@ const ECRANS = [
   },
 ];
 
+// ── Les écrans du 30 septembre 2026 ─────────────────────────────────────────
+// Créés ce jour-là et mesurés d'abord à la main : le défaut de contraste de la
+// barre de messages en thème sombre (3,39:1) n'avait été vu qu'à l'œil. Un
+// écran que cet outil ne visite pas n'est pas vérifié, quel que soit le vert
+// du rapport (règle E6). Chacun remet la page en état après lui (`apres`).
+const REF_SUPABASE = 'usztistixgzdrvjzplqx';
+const sessionFactice = () => {
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  const jwt = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: 'u1', exp, role: 'authenticated', aud: 'authenticated' })}.sig`;
+  return JSON.stringify({ access_token: jwt, refresh_token: 'r', expires_at: exp, expires_in: 3600, token_type: 'bearer',
+    user: { id: 'u1', aud: 'authenticated', email: 'a@b.c', user_metadata: {} } });
+};
+const reseauCoupe = async (p) => {
+  await p.unrouteAll({ behavior: 'ignoreErrors' });
+  await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
+};
+const avecMontant = (montant) => ({ ...trip, expenses: trip.expenses.map(e => (e.id === 'e1'
+  ? { ...e, amount: montant, eurAmount: montant } : e)) });
+
+ECRANS.push(
+  {
+    nom: 'Partager',
+    repere: '.modal-overlay .modal',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('button[aria-label="Options du voyage"]').click().catch(() => {});
+      await p.waitForTimeout(300);
+      await p.locator('.trip-header-menu__item', { hasText: /Partager/ }).click().catch(() => {});
+      await p.waitForTimeout(600);
+    },
+  },
+  // Hors ligne avec des envois en attente : le bandeau, et la barre de
+  // messages qui dit qu'une action demande le réseau.
+  {
+    nom: 'Hors ligne',
+    repere: '.undo-toast--visible',
+    aller: async (p) => {
+      await p.evaluate(() => localStorage.setItem('provo_synchro', JSON.stringify({ tr1: { base: null } })));
+      await p.context().setOffline(true);
+      await ouvrirVoyage(p);
+      await p.locator('button[aria-label="Options du voyage"]').click().catch(() => {});
+      await p.waitForTimeout(300);
+      await p.locator('.trip-header-menu__item', { hasText: /Vérifier les lieux/ }).click().catch(() => {});
+      await p.waitForTimeout(700);
+    },
+    apres: async (p) => {
+      await p.context().setOffline(false);
+      await p.evaluate(() => localStorage.removeItem('provo_synchro')).catch(() => {});
+    },
+  },
+  // Une fiche de la Réserve ouverte, avec son lien : aucun autre écran n'en
+  // montrait une (le lien y était à 3,51:1 sans que rien le dise).
+  {
+    nom: 'Fiche de la Réserve',
+    repere: '.activity-card__link',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('.activity-card', { hasText: 'Café bel étage' }).first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(600);
+      // Au centre : les écrans précédents laissent la Réserve triée autrement,
+      // et le lien finissait sous la barre d'onglets, mesuré comme recouvert.
+      await p.evaluate(() => document.querySelector('.activity-card__link')?.scrollIntoView({ block: 'center' }));
+      await p.waitForTimeout(300);
+    },
+  },
+  // La barre de messages avec « Annuler » : annuler une activité du jour.
+  // (Dans la Réserve, « Nogo » ne propose pas d'annulation : c'est voulu.)
+  {
+    nom: 'Annuler',
+    repere: '.undo-toast--visible .undo-toast__btn',
+    aller: async (p) => {
+      await ouvrirVoyage(p); await onglet(p, /Planning/i);
+      await p.locator('.tl-day__open, .tl-day__header').first().click().catch(() => {});
+      await p.waitForTimeout(700);
+      await p.locator('.day-detail-overlay .activity-card').first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(500);
+      await p.locator('.day-detail-overlay .status-btn--nogo').first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(700);
+    },
+  },
+  // La complétion automatique (amélioration 3) : « ✨ N fiches complétées
+  // en ligne · Voir ». Elle part dix secondes après l'ouverture du voyage.
+  {
+    nom: 'Fiches complétées',
+    repere: '.undo-toast--visible .undo-toast__btn',
+    aller: async (p) => {
+      await brancherReseau(p, URL_BASE, { enrichPlace: 'ok' });
+      await ouvrirVoyage(p);
+      await p.locator('.undo-toast--visible .undo-toast__btn').waitFor({ timeout: 25000 }).catch(() => {});
+      await p.waitForTimeout(400);
+    },
+    apres: reseauCoupe,
+  },
+  // Modifié ailleurs en même temps (amélioration 5) : un compte connecté,
+  // un montant corrigé ici hors ligne, et le même corrigé dans le nuage.
+  {
+    nom: 'Conflits',
+    repere: '.conflit-card',
+    aller: async (p) => {
+      await p.route('**/rest/v1/**', (r) => (r.request().method() === 'GET' && r.request().url().includes('/trips')
+        ? r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'tr1', data: avecMontant(160) }]) })
+        : r.fulfill({ status: 201, contentType: 'application/json', body: '[]' })));
+      await p.evaluate(([cle, session, local, base]) => {
+        localStorage.setItem(cle, session);
+        localStorage.setItem('provo_trips', local);
+        localStorage.setItem('provo_synchro', JSON.stringify({ tr1: { base: JSON.parse(base) } }));
+        sessionStorage.setItem('verif_garder', '1');
+      }, [`sb-${REF_SUPABASE}-auth-token`, sessionFactice(), JSON.stringify([avecMontant(150)]), JSON.stringify(avecMontant(148))]);
+      await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(2500);
+      await ouvrirVoyage(p); await p.waitForTimeout(1200);
+    },
+    apres: async (p) => {
+      await p.evaluate((cle) => { localStorage.removeItem(cle); localStorage.removeItem('provo_synchro'); },
+        `sb-${REF_SUPABASE}-auth-token`).catch(() => {});
+      await reseauCoupe(p);
+    },
+  },
+  // La carte du jour avec « piocher une idée » (U2) : elle n'existe que s'il
+  // reste du temps libre. L'heure est donc fixée à 10 h, sinon l'écran
+  // disparaîtrait les soirs où l'outil tourne. En dernier : l'horloge ne se
+  // rend pas.
+  {
+    nom: 'Piocher',
+    repere: '.tl-day__piocher',
+    aller: async (p) => {
+      const d = new Date();
+      await p.clock.setFixedTime(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 10, 0));
+      await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(900);
+      await ouvrirVoyage(p); await onglet(p, /Planning/i);
+    },
+  },
+);
+
 const ouvrirVoyage = async (p) => {
   const c = p.locator('.trip-card').first();
   if (await c.count()) { await c.click(); await p.waitForTimeout(800); }
@@ -624,6 +759,7 @@ for (const theme of ['light', 'dark']) {
     rapport.push({ theme, ecran: ecran.nom, ...r, plante: plante > 0, perdu,
       repere: ecran.repere, erreurs: [...erreurs] });
     erreurs.length = 0;
+    if (ecran.apres) await ecran.apres(p).catch(() => {});
   }
   await ctx.close();
 }

@@ -509,7 +509,10 @@ body {
 .activity-card__price { font-size: var(--t-sm); color: #15803d; font-weight: 600; background: #f0fdf4; padding: 1px 6px; border-radius: var(--radius-sm); }
 [data-theme="dark"] .activity-card__price { background: #052e16; color: #4ade80; }
 .activity-card__address { font-size: var(--t-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.activity-card__link a { font-size: var(--t-sm); color: var(--blue); font-weight: 600; text-decoration: none; }
+/* `--accent-texte` et non `--blue` : 3,51:1 sur la fiche en clair, mesuré le
+   30 septembre 2026 quand /verif-ui a ouvert pour la première fois une fiche
+   qui porte un lien. */
+.activity-card__link a { font-size: var(--t-sm); color: var(--accent-texte, var(--blue)); font-weight: 600; text-decoration: none; }
 .activity-card__link a:hover { text-decoration: underline; }
 .activity-card__notes { font-size: var(--t-sm); color: var(--text-muted); margin-top: 4px; line-height: 1.4; font-style: italic; }
 
@@ -723,7 +726,11 @@ body {
 .share-section { display: flex; flex-direction: column; gap: 10px; }
 .share-section__label { display: flex; flex-direction: column; gap: 3px; }
 .share-section__badge { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 600; background: var(--surface-sunken); border-radius: var(--radius-sm); padding: 3px 8px; border: 1px solid var(--border); color: var(--text-muted); width: fit-content; }
-.share-section__badge--collab { background: rgba(53,167,221,0.12); border-color: var(--orange); color: var(--orange); }
+/* Le texte en `--accent-texte`, pas en `--orange` : la couleur de marque sur
+   son propre voile bleu tombait à 4,09:1 en clair et 2,78:1 en sombre (mesuré
+   par /verif-ui le 30 septembre 2026, la première fois qu'il a visité cette
+   feuille). */
+.share-section__badge--collab { background: rgba(53,167,221,0.12); border-color: var(--orange); color: var(--accent-texte, var(--accent)); }
 .share-section__desc { font-size: var(--t-sm); color: var(--text-muted); line-height: 1.4; }
 .share-divider { text-align: center; font-size: var(--t-sm); color: var(--text-light); position: relative; line-height: 2; }
 .share-divider::before, .share-divider::after { content: ''; position: absolute; top: 50%; width: 38%; height: 1px; background: var(--border); }
@@ -6716,6 +6723,7 @@ button.budget-inline:active { transform: scale(0.98); }
 .today-geo__toggle,
 .tool-btn,
 .budget-inline,
+.activity-card__link a,
 .btn--sm { position: relative; }
 
 .header__back::after,
@@ -6731,6 +6739,7 @@ button.budget-inline:active { transform: scale(0.98); }
 .today-geo__toggle::after,
 .tool-btn::after,
 .budget-inline::after,
+.activity-card__link a::after,
 .btn--sm::after {
   content: '';
   position: absolute;
