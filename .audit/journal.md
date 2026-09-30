@@ -74,6 +74,7 @@ Produit et UX, puis retour au début.
 <!--
 Exemple de ligne, à supprimer :
 | A-001 | 2026-08-03 | Sécurité | Route /api/export accessible sans vérification de session | Critique | CORRIGÉ |
+-->
 | A-039 | 2026-09-29 | Fiabilité | Repris de la PR #87 (non fusionnée, numéro libre ici) : `/parcours` rougissait tout seul le matin. « Que faire maintenant ? » exigeait que la randonnée de 9 h soit écartée alors qu'avant 11 h elle tient avant l'opéra de 20 h, et l'app a raison de la proposer | Majeur | CORRIGÉ |
 | A-040 | 2026-09-29 | Fiabilité | Repris de la PR #87 : la première lecture de ticket exige 4,5 Mo de moteur que rien ne précharge. Hors ligne au premier ticket, le message accuse la photo alors que c'est le moteur qui manque | Majeur | PROPOSÉ |
 | A-041 | 2026-09-29 | Performance et coûts | Repris de la PR #87 : `icon-512.png` et `apple-touch-icon.png` pèsent 673 ko chacune, plus que tout le JavaScript de l'app | Mineur | PROPOSÉ |
@@ -85,9 +86,45 @@ Exemple de ligne, à supprimer :
 | A-035 | 2026-09-29 | Sécurité | `suivreRedirections` d'`enrich-place` devient `joindre` dans `_shared/reseau.ts`, et les trois `redirect: "follow"` d'`extract-place` passent par lui. `verif-redirections.mjs` importe le module (plus de découpage du source, qui était cassé) et vérifie qu'aucune des deux fonctions ne laisse `fetch` suivre seul | Majeur | CORRIGÉ |
 | A-036 | 2026-09-29 | Performance et coûts | Le service worker ne rafraîchit plus en tâche de fond ce qui ne peut pas changer (`/assets/`, empreinte dans le nom) ni le moteur OCR (`/tesseract/`), et ne rend plus `index.html` à la place d'un script hors ligne | Majeur | CORRIGÉ |
 | A-032 | 2026-09-29 | Sécurité | Toujours ouvert : supprimer `read-receipt` dans le tableau de bord Supabase et retirer `ANTHROPIC_API_KEY`. Geste manuel du propriétaire | Majeur | PROPOSÉ |
--->
+| A-045 | 2026-09-30 | Fiabilité | Les quatre `fetch` d'`enrich.js` n'avaient aucun délai. Un appel que le navigateur ne règle jamais (bascule Wi-Fi/4G, portail captif) laissait `lookupPlace` en attente pour toujours, et comme la file `enfile` ne repart qu'une fois la place libérée, UNE requête coincée arrêtait la complétion de toute la session, sans un mot. Mesuré sur le code d'avant : 1 appel parti, 0 fiche terminée, jamais | Majeur | CORRIGÉ |
+| A-046 | 2026-09-30 | Fiabilité | Régression de #94 : `lienPartage` rend `null` au-delà de 160 caractères ou 3 lignes autour du lien, et `isUrl` ne rattrape plus que le texte SANS espace. Un lien collé en tête suivi d'une description part donc en recherche de texte libre, échoue sur « Aucun lieu trouvé, précise la ville », et le lien n'est même pas gardé dans la fiche. `ressembleAUneLegende` ne le reprend pas (`helpers.js` : `if (/^https?:\/\//.test(t)) return false`). Avant #94, `raw.startsWith('http')` suffisait. Mesuré sur quatre collages réalistes : 2 sur 4 finissent en cul-de-sac, dont un qui passait avant | Majeur | PROPOSÉ |
+| A-047 | 2026-09-30 | Fiabilité | `pickBest` (`extract-place:268`) n'exige le nom que `si (!coords || exigerNom)` : dès que la page publie des coordonnées, un résultat OSM à moins de 25 km gagne sur ses seuls attributs (nom 3, non générique 4, horaires 2, site 1, téléphone 1, numéro 1) sans porter le nom cherché, et fournit adresse, horaires, prix et catégorie. Le client, depuis #94, exige le nom et 150 km (`candidatValable`), et `project-notes` décrit la règle du client comme « un établissement du même nom à moins d'un kilomètre ». Deux règles pour le même travail, et c'est le serveur qui écrit d'abord. #94 a fait de `handleGeneric` le chemin de tout lien qui n'est ni Maps ni TikTok | Majeur | PROPOSÉ |
+| A-048 | 2026-09-30 | Dette technique | `_shared/lecture-lien.ts` est désormais dans le bundle client (`helpers.js:2`, `enrich.js`, `doublon.js`) et AUCUN contrôle ne le lit : `eslint.config.js` ignore `supabase/functions`, il n'y a pas de typecheck, `deno check` ne tourne nulle part. Démontré : `Deno.env.get` ajouté dans ce fichier laisse ESLint à 47/4, `npm run build` réussit, et `Deno.env.get` se retrouve dans `dist/assets/index-*.js`. Comme `helpers.js` l'importe, l'erreur tomberait à l'évaluation du module : l'app ne démarrerait pas | Mineur | PROPOSÉ |
+| A-049 | 2026-09-30 | Fiabilité | `isClosedOnDate` (`helpers.js:1148`) est exportée et jamais appelée (grep sur `src/` et `scripts/`), et sa première règle est `if (/\bclosed\b|fermé/i.test(raw)) return true` : un horaire contenant le mot « closed » où que ce soit rend le lieu fermé TOUS les jours. Or #94 ouvre une source d'horaires en prose (`lireJsonLd` → `horairesDe`, rangé « tel quel »). Sans effet tant qu'elle est morte ; branchée, elle contredirait `ouvertMaintenant`, qui rend `null` dans ce cas précisément pour ne jamais annoncer « fermé » à tort | Mineur | PROPOSÉ |
+| A-032 | 2026-09-30 | Sécurité | Clos. `read-receipt` n'est plus déployée — relevé au MCP ce jour : cinq fonctions ACTIVE seulement (`extract-place` v36, `enrich-place` v12, `push-tick` v6, `read-booking` v8, `notifier-depense` v4). Le retrait du secret `ANTHROPIC_API_KEY` n'est pas vérifiable par le MCP, il reste à confirmer côté tableau de bord | Majeur | CORRIGÉ |
+| A-037 | 2026-09-30 | Méthode | Lint : **47 erreurs, 4 avertissements**, contre 49/4 au 2026-09-28. Dette non aggravée, en baisse de 2 malgré +1 200 lignes. `npm run build` vert, les 15 suites hors réseau passent (293 cas). Rien à signaler | Sans objet | PASSÉ |
+| A-022 | 2026-09-30 | Méthode | `.audit/contexte.md.` (point final parasite) subsiste. Rappelé, pas re-remonté : la routine n'a pas le droit de supprimer un fichier | Mineur | PROPOSÉ |
+| A-050 | 2026-09-30 | Méthode | Le `<!--` ouvert pour la ligne d'exemple du registre n'avait jamais été refermé : douze entrées réelles (A-039 à A-044, les clôtures d'A-033 à A-036, A-032) étaient dans le commentaire, donc invisibles à la lecture du journal. Délimiteurs réparés, aucune entrée réécrite | Mineur | CORRIGÉ |
 
 ## Dernier audit effectif
+
+Date : 2026-09-30
+Type : LÉGER (le dernier audit a été fusionné la veille — moins de trois
+semaines, donc sécurité et fiabilité, pas d'axe rotatif)
+Prochain axe rotatif : **Dette technique** (toujours pas consommé)
+Référence ESLint à la date de l'audit : **47 erreurs, 4 avertissements**
+(49/4 au 2026-09-28 : la dette a baissé de 2). `npm run build` vert.
+Les 15 suites `verif-*.mjs` hors réseau passent : 293 cas.
+
+### Le contrôle de pertinence, tranché comme la dernière fois
+
+Deux commits depuis le regroupement du 2026-09-29 : `7603dd6` (#93) ne touche
+qu'un workflow, `700cb90` (#94) porte +1 222 lignes sur 12 fichiers
+applicatifs, dont un module partagé neuf de 317 lignes. À la lettre, un seul
+commit significatif, donc PASSÉ. Audit conduit quand même, en appliquant la
+règle que le passage du 2026-09-28 a écrite pour éviter de re-délibérer :
+**compter les fichiers applicatifs touchés, pas les commits, quand le dépôt
+écrase ses PR.** Quatre des cinq constats ci-dessous vivent dans ce commit.
+
+### Ce qui s'est débloqué côté production
+
+- `read-receipt` n'est plus déployée (A-032 clos). Il restait depuis le 31 août.
+- Le déploiement automatique des fonctions Edge remarche : l'`entrypoint_path`
+  des cinq fonctions pointe `/home/runner/work/Provo/Provo/…`, donc le jeton
+  `SUPABASE_ACCESS_TOKEN` a été renouvelé et le workflow repousse depuis un
+  exécuteur. Le « À FAIRE À LA MAIN » de `project-notes` est fait.
+
+### Audit précédent
 
 Date : 2026-09-28
 Type : STANDARD (28 jours écoulés, donc au-delà du seuil de trois semaines)
@@ -198,3 +235,4 @@ numéros.
 | 2026-08-31 | LÉGER | Sécurité, Fiabilité | A-027 à A-031 |
 | 2026-09-28 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-036 |
 | 2026-09-29 | Regroupement | Sécurité, Fiabilité, Performance et coûts | A-039 à A-044, clôture d'A-033 à A-036 |
+| 2026-09-30 | LÉGER | Sécurité, Fiabilité | A-045 à A-050, clôture d'A-032 |
