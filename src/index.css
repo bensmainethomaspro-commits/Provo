@@ -2240,62 +2240,6 @@ body {
 .template-pill:active { background: var(--orange); color: white; border-color: var(--orange); }
 
 /* ─── LIVE DAY CARD (Feature K) ─────────────────────────────── */
-.live-day-card {
-  margin: 0 0 12px;
-  background: linear-gradient(135deg, var(--orange) 0%, var(--yellow) 100%);
-  border-radius: var(--radius-md);
-  padding: 12px 14px;
-  color: white;
-  box-shadow: var(--shadow-md);
-}
-.live-day-card__header {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 8px;
-}
-.live-day-card__tag {
-  font-size: var(--t-xs); font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.8px; opacity: 0.9;
-}
-.live-day-card__time {
-  font-size: var(--t-sm); font-weight: 600; opacity: 0.85;
-  background: rgba(0,0,0,0.12); border-radius: var(--radius-sm); padding: 2px 8px;
-}
-.live-day-card__progress-row {
-  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
-}
-.live-day-card__track {
-  flex: 1; height: 5px; background: rgba(255,255,255,0.3); border-radius: var(--radius-xs); overflow: hidden;
-}
-.live-day-card__fill {
-  height: 100%; background: white; border-radius: var(--radius-xs); transition: width 0.4s ease; min-width: 3px;
-}
-.live-day-card__pct {
-  font-size: var(--t-sm); font-weight: 600; opacity: 0.9; flex-shrink: 0;
-}
-.live-day-card__now, .live-day-card__next {
-  padding: 7px 10px; border-radius: var(--radius-sm); margin-bottom: 6px;
-}
-.live-day-card__now { background: rgba(255,255,255,0.2); }
-.live-day-card__next { background: rgba(255,255,255,0.1); }
-.live-day-card__row-label {
-  font-size: var(--t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px;
-  opacity: 0.75; margin-bottom: 3px;
-}
-.live-day-card__row-content {
-  display: flex; align-items: center; gap: 6px;
-}
-.live-day-card__emoji { font-size: var(--t-lg); flex-shrink: 0; }
-.live-day-card__title { font-size: var(--t-md); font-weight: 600; flex: 1; }
-.live-day-card__dur { font-size: var(--t-sm); opacity: 0.8; }
-.live-day-card__done-btn {
-  flex-shrink: 0; background: white; color: var(--orange);
-  border: none; border-radius: var(--radius-md); padding: 4px 12px;
-  font-size: var(--t-sm); font-weight: 800; cursor: pointer;
-}
-.live-day-card__done-btn:active { opacity: 0.8; }
-.live-day-card__done-all {
-  font-size: var(--t-sm); opacity: 0.85; text-align: center; padding: 4px 0;
-}
 
 /* ─── AGENDA VIEW (Feature P) ───────────────────────────────── */
 .agenda-view {
@@ -2999,19 +2943,6 @@ body {
 .tab-badge--today { background: var(--green) !important; }
 
 /* ─── CONFETTI ────────────────────────────────────────────── */
-.confetti-container {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  pointer-events: none; z-index: 9999; overflow: hidden;
-}
-.confetti-piece {
-  position: absolute; top: -20px;
-  animation: confetti-fall linear forwards;
-}
-@keyframes confetti-fall {
-  0%   { transform: translateY(0)    rotate(0deg)   scaleX(1);   opacity: 1; }
-  80%  { opacity: 1; }
-  100% { transform: translateY(110vh) rotate(540deg) scaleX(0.4); opacity: 0; }
-}
 
 /* ─── COPY DAY PICKER ─────────────────────────────────────── */
 .copy-day-picker {
@@ -3891,7 +3822,6 @@ body {
 
 /* ── Summary cards ───────────────────────────────────────────────────────── */
 .trip-summary { border-radius: var(--radius-md); }
-.live-day-card { border-radius: var(--radius-md); }
 .today-act-card { border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
 .today-mode__header { border-radius: var(--radius-md); }
 .today-mode__all-done { border-radius: var(--radius-md); }

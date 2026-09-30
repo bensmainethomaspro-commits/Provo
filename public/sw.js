@@ -1,11 +1,37 @@
-const CACHE = 'provo-v3';
+// ─── Versions ─────────────────────────────────────────────────────────────
+// Ces trois lignes sont RÉÉCRITES à chaque build par le greffon
+// `provo-service-worker` (vite.config.js) : empreinte des fichiers de l'app,
+// liste à précharger, version du moteur OCR. En développement elles restent
+// telles quelles.
+//
+// Le nom du cache était une constante (`provo-v3`), identique d'un déploiement
+// à l'autre : les fichiers de chaque version s'y empilaient sans jamais être
+// purgés, et le moteur OCR n'était jamais renouvelé — contrairement à ce que
+// disait ce fichier. Et comme `sw.js` ne changeait jamais, le téléphone ne
+// voyait même pas qu'une nouvelle version existait (audit du 30 septembre 2026).
+const VERSION = 'dev';
+const PRECACHE = [];
+const VERSION_OCR = 'dev';
+
+const CACHE = `provo-app-${VERSION}`;
 const TILE_CACHE = 'provo-tiles-v1';
+// Le moteur OCR (4,5 Mo) a son cache à lui, nommé d'après sa version : il ne
+// se retélécharge que quand tesseract.js change, pas à chaque déploiement.
+const OCR_CACHE = `provo-ocr-${VERSION_OCR}`;
+// Les caches de l'app d'une version précédente : on garde la dernière, parce
+// qu'une page encore ouverte peut réclamer un fichier de SA version (un
+// morceau chargé à la demande), que le nouveau déploiement ne sert plus.
+const EST_CACHE_APP = (k) => k.startsWith('provo-app-') || k === 'provo-v3';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) =>
-      fetch('/').then((r) => c.put('/', r)).catch(() => {})
-    )
+    caches.open(CACHE).then((c) => Promise.all([
+      fetch('/').then((r) => c.put('/', r)),
+      // Toute l'app d'avance, pas seulement ce qu'on a déjà ouvert en ligne :
+      // l'écran qu'on découvre hors ligne à l'étranger doit exister. Un fichier
+      // qui échoue n'empêche pas les autres.
+      ...PRECACHE.map((u) => c.add(u)),
+    ].map((p) => p.catch(() => {}))))
   );
   // Activate the new worker right away so refreshes pick up the latest deploy.
   self.skipWaiting();
@@ -14,9 +40,13 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE && k !== TILE_CACHE).map((k) => caches.delete(k))
-      ))
+      .then((keys) => {
+        // `keys()` rend les caches dans leur ordre de création : les deux
+        // derniers caches de l'app sont la version courante et la précédente.
+        const apps = keys.filter(EST_CACHE_APP);
+        const garder = new Set([...apps.slice(-2), CACHE, TILE_CACHE, OCR_CACHE]);
+        return Promise.all(keys.filter((k) => !garder.has(k)).map((k) => caches.delete(k)));
+      })
       .then(() => self.clients.claim())
       .then(() => {
         // Tell open clients a new version is live.
@@ -77,11 +107,14 @@ self.addEventListener('fetch', (e) => {
   // cache ne peut pas être périmée. Pas pour `/tesseract/` : le moteur OCR
   // pèse 4,5 Mo, et le re-télécharger à CHAQUE lecture de ticket coûtait la
   // donnée mobile d'un séjour à l'étranger (audit A-036). Il se renouvelle
-  // avec le cache versionné, à chaque nouvelle version de l'app.
-  const fige = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/tesseract/');
+  // quand sa version change (OCR_CACHE), pas à chaque déploiement.
+  const ocr = url.pathname.startsWith('/tesseract/');
+  const fige = url.pathname.startsWith('/assets/') || ocr;
   e.respondWith(
-    caches.open(CACHE).then(async (cache) => {
-      const cached = await cache.match(e.request);
+    caches.open(ocr ? OCR_CACHE : CACHE).then(async (cache) => {
+      // Cherché dans TOUS les caches : un fichier de la version précédente,
+      // demandé par une page encore ouverte, est dans le cache d'avant.
+      const cached = await caches.match(e.request);
       if (cached && fige) return cached;
       const fetchPromise = fetch(e.request)
         .then((res) => {

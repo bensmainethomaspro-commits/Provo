@@ -9,7 +9,6 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
-import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
@@ -38,6 +37,10 @@ import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches, dejaFouillee } from
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
+// Le bilan ne sert qu'aux voyages terminés, et il embarque Leaflet (sa carte
+// du vécu) : importé d'office, il faisait précharger 149 ko de carte — le
+// sixième du JavaScript — à chaque ouverture de l'app.
+const TripRecap = lazy(() => import('../components/TripRecap'));
 // Le contrôle des lieux ne sert qu'à la demande : inutile de l'embarquer
 // dans le paquet principal.
 const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
@@ -1741,7 +1744,11 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
 
       {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} onShowAuth={onShowAuth} />}
 
-      {showRecap && <TripRecap trip={trip} onClose={() => setShowRecap(false)} />}
+      {showRecap && (
+        <Suspense fallback={null}>
+          <TripRecap trip={trip} onClose={() => setShowRecap(false)} />
+        </Suspense>
+      )}
 
       {showDeleteTrip && (
         <ConfirmDialog

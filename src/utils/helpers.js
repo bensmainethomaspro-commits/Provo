@@ -741,13 +741,6 @@ export async function fetchUrlMetadata(url) {
   }
 }
 
-export async function resolveShortUrl(url) {
-  if (!/goo\.gl|maps\.app/.test(url)) return url;
-  const cleaned = cleanGoogleMapsUrl(url);
-  const { finalUrl } = await fetchHtmlViaProxy(cleaned);
-  return finalUrl || cleaned;
-}
-
 // ── Mise en forme d'un résultat Nominatim ─────────────────────────────────
 // Partagée par la recherche à un résultat et par la recherche par adresse, qui
 // doivent classer et formater exactement de la même manière.
@@ -1188,25 +1181,6 @@ export function getSiteCategory(url) {
   return null;
 }
 
-export function nearestNeighborSort(activities) {
-  const withGeo = activities.filter(a => a.lat && a.lon && a.status !== 'nogo');
-  const other = activities.filter(a => !a.lat || !a.lon || a.status === 'nogo');
-  if (withGeo.length <= 1) return activities;
-  const result = [withGeo[0]];
-  const remaining = withGeo.slice(1);
-  while (remaining.length > 0) {
-    const last = result[result.length - 1];
-    let minDist = Infinity, minIdx = 0;
-    remaining.forEach((a, i) => {
-      const d = haversineKm(last.lat, last.lon, a.lat, a.lon);
-      if (d < minDist) { minDist = d; minIdx = i; }
-    });
-    result.push(remaining[minIdx]);
-    remaining.splice(minIdx, 1);
-  }
-  return [...result, ...other];
-}
-
 /**
  * Le premier lien d'un texte partagé.
  *
@@ -1333,10 +1307,6 @@ export function partsDeDepense(exp) {
     parts[id] = Number.isFinite(v) && v > 0 ? Math.min(Math.round(v), 99) : 1;
   }
   return parts;
-}
-
-export function totalDesParts(exp) {
-  return Object.values(partsDeDepense(exp)).reduce((s, v) => s + v, 0);
 }
 
 /**
