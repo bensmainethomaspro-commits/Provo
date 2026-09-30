@@ -21,7 +21,7 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
@@ -47,6 +47,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // La pop-up d'enrichissement n'apparaît qu'après une recherche réussie :
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
+const ConflitsSheet = lazy(() => import('../components/ConflitsSheet'));
 
 export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
   const {
@@ -62,9 +63,25 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     addDailyTemplate, removeDailyTemplate,
     userId,
     fetchTripMembers, removeTripMember,
+    conflits, oublierConflits,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
+
+  // Ce qui a changé ailleurs en même temps qu'ici (voir ConflitsSheet). Les
+  // conflits qui ne portent que sur des champs techniques ne donnent aucun
+  // groupe : ils se règlent seuls, et on les oublie.
+  const conflitsBruts = conflits?.[tripId];
+  const groupesConflits = useMemo(
+    () => (trip && conflitsBruts?.length ? regrouperConflits(trip, conflitsBruts) : []),
+    [trip, conflitsBruts]);
+  useEffect(() => {
+    if (conflitsBruts?.length && !groupesConflits.length) oublierConflits(tripId, conflitsBruts);
+  }, [conflitsBruts, groupesConflits, oublierConflits, tripId]);
+  const remettreSaVersion = (groupes) => {
+    restoreTrip(tripId, v => groupes.reduce(restaurerConflit, v));
+    oublierConflits(tripId, groupes.flatMap(g => g.conflits));
+  };
   const weather = useWeather(trip);
   // Les recherches de lieu se situent sur la DESTINATION, jamais sur la
   // première activité géolocalisée : un vol au départ ancrerait tout le
@@ -1733,6 +1750,17 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
               setEnrichProps(l => l.filter(x => x.id !== actId));
             }}
             onClose={() => setEnrichProps([])}
+          />
+        </Suspense>
+      )}
+
+      {groupesConflits.length > 0 && (
+        <Suspense fallback={null}>
+          <ConflitsSheet
+            groupes={groupesConflits}
+            onRemettre={remettreSaVersion}
+            onLaisser={(g) => oublierConflits(tripId, g.conflits)}
+            onClose={() => oublierConflits(tripId, conflitsBruts || [])}
           />
         </Suspense>
       )}

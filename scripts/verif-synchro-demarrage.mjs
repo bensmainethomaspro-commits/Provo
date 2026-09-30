@@ -12,6 +12,12 @@
  *  C · le vrai geste : écrire hors ligne dans les notes, relancer l'app avec
  *      le réseau revenu                       → la note doit arriver au nuage.
  *
+ * Et deux cas du 30 septembre 2026, soir (amélioration « conflits ») :
+ *  D · le même champ modifié ici ET ailleurs  → le serveur tranche, mais une
+ *                                              feuille le dit et laisse
+ *                                              remettre sa version ;
+ *  E · seul un champ technique diverge        → rien ne s'ouvre.
+ *
  * Demande l'aperçu lancé :  npx vite preview --port 4173
  * Usage :                   node scripts/verif-synchro-demarrage.mjs
  */
@@ -146,6 +152,48 @@ console.log('C · écrire hors ligne dans les notes, relancer avec le réseau re
     etat.nuage?.tripNotes === 'Billets du métro dans la poche avant', String(etat.nuage?.tripNotes));
   const reste = await p.evaluate(() => localStorage.getItem('provo_synchro'));
   verifier('et plus rien n’attend', !reste, reste);
+  await ctx.close();
+}
+
+// ── D ─────────────────────────────────────────────────────────────────────────
+console.log('D · le même montant corrigé ici hors ligne ET ailleurs : on le dit, on laisse choisir');
+{
+  const avec = (montant) => ({ ...base, expenses: base.expenses.map(e => e.id === 'e1'
+    ? { ...e, amount: montant, eurAmount: montant } : e) });
+  const { p, ctx, etat } = await telephone({
+    stockage: amorce(avec(150), { provo_synchro: JSON.stringify({ [base.id]: { base: avec(148) } }) }),
+    nuage: avec(160), delai: 300,
+  });
+  const montantLocal = () => p.evaluate(() =>
+    JSON.parse(localStorage.getItem('provo_trips'))[0]?.expenses.find(e => e.id === 'e1')?.amount);
+  await p.goto(U + '/'); await p.waitForTimeout(2500);
+  await p.locator('.trip-card').first().click(); await p.waitForTimeout(1200);
+  const carte = p.locator('.conflit-card');
+  verifier('une feuille montre le conflit en ouvrant le voyage', await carte.count() === 1, `${await carte.count()} carte(s)`);
+  const texte = (await carte.first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+  verifier('avec la dépense et les deux montants', /Billets de train/.test(texte) && /Ailleurs : 160 EUR/.test(texte)
+    && /Toi : 150 EUR/.test(texte), texte);
+  verifier('la version d’ailleurs est en place tant qu’on n’a rien choisi', await montantLocal() === 160, await montantLocal());
+  await p.locator('.conflit-card button', { hasText: 'Remettre la mienne' }).click();
+  await p.waitForTimeout(2000);
+  verifier('« Remettre la mienne » la remet ici', await montantLocal() === 150, await montantLocal());
+  verifier('et l’envoie au nuage', etat.nuage?.expenses?.find(e => e.id === 'e1')?.amount === 150,
+    etat.nuage?.expenses?.find(e => e.id === 'e1')?.amount);
+  verifier('la feuille se ferme', !(await p.locator('.conflit-card').count()));
+  await ctx.close();
+}
+
+// ── E ─────────────────────────────────────────────────────────────────────────
+console.log('E · seul un champ technique diverge : aucune feuille');
+{
+  const marque = (n) => ({ ...base, reserve: base.reserve.map((r, i) => (i ? r : { ...r, enrichAt: n })) });
+  const { p, ctx } = await telephone({
+    stockage: amorce(marque(2), { provo_synchro: JSON.stringify({ [base.id]: { base: marque(1) } }) }),
+    nuage: marque(3), delai: 300,
+  });
+  await p.goto(U + '/'); await p.waitForTimeout(2500);
+  await p.locator('.trip-card').first().click(); await p.waitForTimeout(1200);
+  verifier('rien ne s’ouvre pour une empreinte technique', !(await p.locator('.conflit-card').count()));
   await ctx.close();
 }
 

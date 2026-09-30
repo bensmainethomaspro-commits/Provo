@@ -1360,16 +1360,19 @@ export function partageInegal(exp) {
 const AVEC_ID = (v) => Array.isArray(v) && v.every(x => x && typeof x === 'object' && 'id' in x);
 
 /** Une valeur simple : le local ne gagne que s'il a bougé et pas le distant. */
-function fusionValeur(base, local, distant) {
+function fusionValeur(base, local, distant, conflits, chemin) {
   const b = JSON.stringify(base), l = JSON.stringify(local), d = JSON.stringify(distant);
   if (l === d) return distant;
   if (l === b) return distant;   // seul le distant a bougé
   if (d === b) return local;     // seul le local a bougé
-  return distant;                // les deux ont bougé : le serveur tranche
+  // Les deux ont bougé : le serveur tranche, mais ce qui a été tapé ici ne
+  // disparaît plus sans que l'écran le dise (voir `regrouperConflits`).
+  conflits?.push({ chemin, local, distant });
+  return distant;
 }
 
 /** Une liste d'objets identifiés. L'ordre distant d'abord, les ajouts locaux ensuite. */
-function fusionListe(base, local, distant) {
+function fusionListe(base, local, distant, conflits, chemin) {
   const carte = (l) => new Map((l || []).map(x => [x.id, x]));
   const B = carte(base), L = carte(local), D = carte(distant);
   const sortie = [];
@@ -1381,9 +1384,15 @@ function fusionListe(base, local, distant) {
     const b = B.get(id), l = L.get(id), d = D.get(id);
     // Présent des deux côtés : on fusionne champ par champ (une activité
     // renommée ici et déplacée là-bas doit garder les deux changements).
-    if (l && d) { sortie.push(fusionObjet(b || {}, l, d)); return; }
+    if (l && d) { sortie.push(fusionObjet(b || {}, l, d, conflits, conflits && [...chemin, { id }])); return; }
     // Absent d'un côté : ajout, ou suppression ? C'est `base` qui tranche.
-    if (l && !d) { if (!b) sortie.push(l); return; }   // ajouté ici
+    if (l && !d) {
+      if (!b) sortie.push(l);                          // ajouté ici
+      // Modifié ici, supprimé là-bas : la suppression l'emporte, et se dit.
+      else if (conflits && JSON.stringify(l) !== JSON.stringify(b))
+        conflits.push({ chemin, supprime: l, base: b, index: local.indexOf(l) });
+      return;
+    }
     if (d && !l) { if (!b) sortie.push(d); return; }   // ajouté là-bas
   };
 
@@ -1392,12 +1401,13 @@ function fusionListe(base, local, distant) {
   return sortie;
 }
 
-function fusionObjet(base, local, distant) {
+function fusionObjet(base, local, distant, conflits, chemin) {
   const sortie = {};
   for (const cle of new Set([...Object.keys(local || {}), ...Object.keys(distant || {})])) {
     const b = base?.[cle], l = local?.[cle], d = distant?.[cle];
-    if (AVEC_ID(l) && AVEC_ID(d)) sortie[cle] = fusionListe(b, l, d);
-    else sortie[cle] = fusionValeur(b, l, d);
+    const ici = conflits && [...chemin, cle];
+    if (AVEC_ID(l) && AVEC_ID(d)) sortie[cle] = fusionListe(b, l, d, conflits, ici);
+    else sortie[cle] = fusionValeur(b, l, d, conflits, ici);
   }
   return sortie;
 }
@@ -1407,12 +1417,164 @@ function fusionObjet(base, local, distant) {
  * `base` = la dernière version réellement synchronisée. Sans elle, on ne peut
  * pas distinguer un ajout d'une suppression : on se rabat sur le distant, ce
  * qui est l'ancien comportement — pas de régression, pas de miracle non plus.
+ *
+ * `conflits`, s'il est fourni, reçoit ce que la fusion a tranché CONTRE ce
+ * côté-ci : un champ modifié des deux côtés, ou un élément modifié ici et
+ * supprimé là-bas. Chaque entrée porte son `chemin` dans le voyage (des clés,
+ * et `{ id }` pour un élément de liste).
  */
-export function fusionnerVoyages(base, local, distant) {
+export function fusionnerVoyages(base, local, distant, conflits = null) {
   if (!local) return distant;
   if (!distant) return local;
   if (!base) return distant;
-  return fusionObjet(base, local, distant);
+  return fusionObjet(base, local, distant, conflits, []);
+}
+
+// ── Conflits : ce que la fusion a tranché contre ce téléphone ────────────────
+// La fusion ne perd plus ce qui a été AJOUTÉ des deux côtés. Mais quand les
+// deux côtés changent le MÊME champ (le montant d'une dépense corrigé ici
+// pendant qu'un autre voyageur le corrige là-bas), il faut bien un gagnant :
+// c'est le serveur. Il gagnait en silence, et la personne découvrait plus tard
+// « son » montant remplacé, sans savoir ni quand ni par qui.
+//
+// On garde la règle (le serveur tranche, rien ne clignote d'un appareil à
+// l'autre) mais on la DIT : une feuille montre les deux versions, et laisse
+// remettre la sienne. Proposer, jamais imposer (principe produit).
+//
+// Les champs techniques (empreintes de recherche, coordonnées, montant en
+// euros recalculé) ne se montrent pas : ils suivent le champ visible de leur
+// fiche quand on remet sa version, et se règlent seuls sinon.
+
+const CHAMPS_VISIBLES = {
+  name: 'Nom', title: 'Titre', destination: 'Destination', emoji: 'Emoji',
+  startDate: 'Début', endDate: 'Fin', initialBudget: 'Budget', tripNotes: 'Notes',
+  notes: 'Notes', description: 'Libellé', amount: 'Montant', currency: 'Devise',
+  payerId: 'Payé par', participantIds: 'Pour', parts: 'Partage', date: 'Date',
+  expenseCategory: 'Catégorie', category: 'Catégorie', fixedStart: 'Heure',
+  startTime: 'Début de journée', durationHours: 'Durée (h)', durationMinutes: 'Durée (min)',
+  price: 'Prix', address: 'Adresse', openingHours: 'Horaires', link: 'Lien',
+  status: 'État', mustDo: 'Incontournable', text: 'Objet', checked: 'Coché',
+};
+
+const GENRES = {
+  expenses: 'Dépense', activities: 'Activité', reserve: 'Réserve', days: 'Jour',
+  tripTravelers: 'Voyageur', packingList: 'Valise',
+};
+
+/** L'objet désigné par un chemin, ou `undefined` s'il n'existe plus. */
+function suivreChemin(racine, chemin) {
+  let o = racine;
+  for (const seg of chemin) {
+    if (o == null) return undefined;
+    o = typeof seg === 'string' ? o[seg]
+      : Array.isArray(o) ? o.find(x => x?.id === seg.id) : undefined;
+  }
+  return o;
+}
+
+const nomVoyageur = (voyage, id) =>
+  (voyage?.tripTravelers || []).find(t => t.id === id)?.name || 'voyageur retiré';
+
+/** Une valeur lisible en une ligne. Ce qui ne se lit pas se dit « modifié ». */
+function lisible(cle, v, voyage, fiche) {
+  if (v === undefined || v === null || v === '') return '(vide)';
+  if (typeof v === 'boolean') return v ? 'oui' : 'non';
+  if (cle === 'amount' && typeof v === 'number') return `${String(v).replace('.', ',')} ${fiche?.currency || 'EUR'}`;
+  if (cle === 'payerId') return nomVoyageur(voyage, v);
+  if (cle === 'participantIds' && Array.isArray(v))
+    return v.map(id => nomVoyageur(voyage, id)).join(', ') || '(personne)';
+  if (typeof v === 'number') return String(v).replace('.', ',');
+  if (typeof v === 'string') return v.length > 60 ? `${v.slice(0, 59)}…` : v;
+  return 'modifié';
+}
+
+function nomElement(el) {
+  return el?.description || el?.title || el?.name || el?.text || el?.date || '';
+}
+
+/** Vrai si un élément a changé sur un point qu'on voit à l'écran. */
+function changeVisible(avant, apres) {
+  return Object.keys({ ...(avant || {}), ...(apres || {}) }).some(k =>
+    (k in CHAMPS_VISIBLES || AVEC_ID(apres?.[k]) || AVEC_ID(avant?.[k]))
+    && JSON.stringify(avant?.[k]) !== JSON.stringify(apres?.[k]));
+}
+
+/**
+ * Les conflits bruts d'une fusion, regroupés par fiche et mis en mots.
+ * Rend `[{ cle, genre, nom, supprime, lignes: [{ champ, mien, leur }], conflits }]`.
+ * Une fiche dont seuls des champs techniques divergent n'y figure pas.
+ */
+export function regrouperConflits(voyage, conflits = []) {
+  const groupes = new Map();
+  for (const c of conflits) {
+    const supprime = !!c.supprime;
+    const cheminFiche = supprime ? [...c.chemin, { id: c.supprime.id }] : c.chemin.slice(0, -1);
+    const cle = (supprime ? 'x' : 'm') + JSON.stringify(cheminFiche);
+    if (!groupes.has(cle)) {
+      const liste = [...cheminFiche].reverse().find(seg => typeof seg === 'string' && GENRES[seg]);
+      const fiche = supprime ? c.supprime : suivreChemin(voyage, cheminFiche);
+      groupes.set(cle, {
+        cle, supprime,
+        genre: cheminFiche.length ? (GENRES[liste] || 'Élément') : 'Voyage',
+        nom: cheminFiche.length ? nomElement(fiche) : (voyage?.name || ''),
+        lignes: [], conflits: [],
+      });
+    }
+    const g = groupes.get(cle);
+    g.conflits.push(c);
+    const champ = supprime ? null : c.chemin[c.chemin.length - 1];
+    if (champ && CHAMPS_VISIBLES[champ]) {
+      const fiche = suivreChemin(voyage, c.chemin.slice(0, -1));
+      g.lignes.push({
+        champ: CHAMPS_VISIBLES[champ],
+        mien: lisible(champ, c.local, voyage, fiche),
+        leur: lisible(champ, c.distant, voyage, fiche),
+      });
+    }
+  }
+  return [...groupes.values()].filter(g =>
+    g.supprime ? changeVisible(g.conflits[0].base, g.conflits[0].supprime) : g.lignes.length > 0);
+}
+
+/** Applique `f` à l'objet au bout du chemin, sans rien muter. Chemin mort : rien ne change. */
+function modifierA(o, chemin, f) {
+  if (!chemin.length) return f(o);
+  const [seg, ...reste] = chemin;
+  if (typeof seg === 'string') {
+    if (!o || typeof o !== 'object') return o;
+    if (reste.length && o[seg] == null) return o;
+    return { ...o, [seg]: modifierA(o[seg], reste, f) };
+  }
+  if (!Array.isArray(o) || !o.some(x => x?.id === seg.id)) return o;
+  return o.map(x => (x?.id === seg.id ? modifierA(x, reste, f) : x));
+}
+
+/**
+ * Remet la version de ce téléphone pour un groupe de `regrouperConflits` :
+ * chaque champ repris, ou l'élément supprimé là-bas rendu à sa place.
+ */
+export function restaurerConflit(voyage, groupe) {
+  let v = voyage;
+  for (const c of groupe.conflits) {
+    if (c.supprime) {
+      v = modifierA(v, c.chemin, (liste) => {
+        const l = Array.isArray(liste) ? liste : [];
+        if (l.some(x => x?.id === c.supprime.id)) return liste;
+        const i = c.index >= 0 ? Math.min(c.index, l.length) : l.length;
+        return [...l.slice(0, i), c.supprime, ...l.slice(i)];
+      });
+    } else {
+      const cle = c.chemin[c.chemin.length - 1];
+      v = modifierA(v, c.chemin.slice(0, -1), (fiche) => {
+        if (!fiche || typeof fiche !== 'object') return fiche;
+        const n = { ...fiche };
+        if (c.local === undefined) delete n[cle];
+        else n[cle] = c.local;
+        return n;
+      });
+    }
+  }
+  return v;
 }
 
 /**

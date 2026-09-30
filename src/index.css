@@ -6836,6 +6836,16 @@ button.budget-inline:active { transform: scale(0.98); }
   color: var(--text); font-weight: 600; overflow-wrap: anywhere;
 }
 
+/* Modifié ailleurs en même temps : les deux versions l'une sous l'autre,
+   la sienne en gras. Pas de barré : rien n'est retiré tant qu'on n'a pas
+   choisi. */
+.conflit-card__lignes { margin: 0 0 12px; display: grid; gap: 8px; }
+.conflit-card__ligne { display: flex; gap: 10px; align-items: baseline; font-size: var(--t-sm); }
+.conflit-card__ligne dt { flex-shrink: 0; width: 76px; color: var(--text-muted); font-weight: 600; }
+.conflit-card__ligne dd { margin: 0; flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
+.conflit-card__leur { color: var(--text-muted); }
+.conflit-card__mien { color: var(--text); font-weight: 600; }
+
 /* Reprise complète : un choix, pas le comportement par défaut. Discret, car
    la plupart du temps il n'y a aucune raison de tout repasser. */
 .check-recheck {

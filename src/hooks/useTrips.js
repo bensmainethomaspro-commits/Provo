@@ -98,6 +98,10 @@ export function useTrips() {
   // Ce que l'écran dit de la synchro : combien de voyages attendent un envoi,
   // et si le serveur vient d'en refuser un alors qu'on avait du réseau.
   const [synchro, setSynchro] = useState({ aEnvoyer: Object.keys(depart.attente).length, refus: false });
+  // Ce que la fusion a tranché contre ce téléphone, par voyage : un champ
+  // modifié ici ET ailleurs, ou une fiche modifiée ici et supprimée ailleurs.
+  // L'écran du voyage le montre et laisse remettre sa version (helpers.js).
+  const [conflits, setConflits] = useState({});
   const syncedHashRef = useRef({});
   // La dernière version réellement synchronisée, en entier. L'empreinte seule
   // dit QUE ça a changé, jamais CE QU'IL Y AVAIT — et sans ça une fusion ne
@@ -180,6 +184,28 @@ export function useTrips() {
     }
   }, []);
 
+  // Un même champ en conflit deux fois de suite : seule la dernière version
+  // d'ici compte, c'est celle que la personne a tapée en dernier.
+  const signalerConflits = useCallback((tripId, liste) => {
+    if (!liste?.length) return;
+    const cle = (c) => (c.supprime ? `x${c.supprime.id}` : '') + JSON.stringify(c.chemin);
+    const nouvelles = new Set(liste.map(cle));
+    setConflits(tous => ({
+      ...tous,
+      [tripId]: [...(tous[tripId] || []).filter(c => !nouvelles.has(cle(c))), ...liste],
+    }));
+  }, []);
+
+  const oublierConflits = useCallback((tripId, liste) => {
+    setConflits(tous => {
+      const restants = (tous[tripId] || []).filter(c => !liste.includes(c));
+      const suite = { ...tous };
+      if (restants.length) suite[tripId] = restants;
+      else delete suite[tripId];
+      return suite;
+    });
+  }, []);
+
   // ── Envoi vers Supabase ───────────────────────────────────────────────────
   // Lit le voyage AU MOMENT d'écrire, jamais celui du moment où l'envoi a été
   // programmé : c'était la version périmée qui partait après un chargement.
@@ -248,6 +274,20 @@ export function useTrips() {
     // Photographiées AVANT de toucher aux références : la fusion a besoin de
     // l'ancêtre commun d'avant ce chargement, pas du nuage qu'on vient de lire.
     const attentes = { ...attenteRef.current };
+    // Un nuage identique à ce que CE téléphone vient d'envoyer n'apporte rien
+    // d'ailleurs (réponse de l'écriture perdue en route) : il devient la base,
+    // et ce qui a été tapé depuis l'emporte au lieu de passer pour un conflit.
+    for (const t of cloudTrips) {
+      if (attentes[t.id] && syncedHashRef.current[t.id] === JSON.stringify(t)) attentes[t.id] = { base: t };
+    }
+    const conflitsLus = {};
+    for (const c of cloudTrips) {
+      const local = tripsRef.current.find(t => t.id === c.id);
+      if (!local || !attentes[c.id]?.base) continue;
+      const liste = [];
+      fusionnerVoyages(attentes[c.id].base, local, c, liste);
+      if (liste.length) conflitsLus[c.id] = liste;
+    }
     cloudTrips.forEach(t => {
       remoteIdsRef.current.add(t.id);
       syncedHashRef.current[t.id] = JSON.stringify(t);
@@ -264,10 +304,11 @@ export function useTrips() {
       // Les voyages qui n'existent qu'ici partent à la création via `relancer`.
       return migrateMeals([...gardes, ...prev.filter(t => !cloudIds.has(t.id))]);
     });
+    Object.entries(conflitsLus).forEach(([id, liste]) => signalerConflits(id, liste));
     pretRef.current = true;
     relancer();
     return true;
-  }, [relancer]);
+  }, [relancer, signalerConflits]);
 
   // Un seul chargement à la fois, et pas deux fois de suite pour rien : la
   // bibliothèque d'authentification émet `SIGNED_IN` à chaque retour dans
@@ -414,6 +455,15 @@ export function useTrips() {
         if (!remoteTrip || !tripId) return;
         const remoteHash = JSON.stringify(remoteTrip);
         remoteIdsRef.current.add(tripId);
+        // Notre propre écriture qui revient, parfois AVANT la réponse de
+        // l'envoi : elle n'apporte rien d'ailleurs. Sans ce garde, ce qui a
+        // été tapé entre-temps était écrasé par sa propre version précédente.
+        const echo = syncedHashRef.current[tripId] === remoteHash;
+        // Relevés hors de la mise à jour d'état, qui doit rester pure : React
+        // peut la rejouer, et un conflit se dirait deux fois.
+        const conflitsRecus = [];
+        const local = tripsRef.current.find(t => t.id === tripId);
+        if (!echo && local) fusionnerVoyages(baseFusionRef.current[tripId], local, remoteTrip, conflitsRecus);
         setTrips(prev => {
           const existing = prev.find(t => t.id === tripId);
           if (!existing) {
@@ -422,9 +472,9 @@ export function useTrips() {
             depuisNuageRef.current.add(remoteTrip);
             return [...prev, remoteTrip];
           }
-          if (JSON.stringify(existing) === remoteHash) {
+          if (echo || JSON.stringify(existing) === remoteHash) {
             syncedHashRef.current[tripId] = remoteHash;
-            baseFusionRef.current[tripId] = existing;
+            baseFusionRef.current[tripId] = echo ? remoteTrip : existing;
             return prev;
           }
           // FUSIONNER, ne pas remplacer. Le remplacement effaçait la dépense
@@ -445,6 +495,7 @@ export function useTrips() {
           } else delete syncedHashRef.current[tripId];
           return prev.map(t => t.id === tripId ? fusionne : t);
         });
+        signalerConflits(tripId, conflitsRecus);
         // Ce qui attendait ici est peut-être arrivé avec cette version : un
         // envoi à vide le constatera et videra la file.
         if (attenteRef.current[tripId]) planifier(tripId);
@@ -467,7 +518,7 @@ export function useTrips() {
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [userId, planifier, retirerAttente]);
+  }, [userId, planifier, retirerAttente, signalerConflits]);
 
   // ── Auth helpers ──────────────────────────────────────────────────────────
   const signIn = useCallback(async (email, password) => {
@@ -884,8 +935,10 @@ export function useTrips() {
     }));
   }, []);
 
+  // `snapshot` peut être une fonction du voyage courant : remettre plusieurs
+  // versions d'un coup ne doit pas repartir d'un voyage périmé.
   const restoreTrip = useCallback((tripId, snapshot) => {
-    setTrips(p => p.map(t => t.id !== tripId ? t : snapshot));
+    setTrips(p => p.map(t => t.id !== tripId ? t : (typeof snapshot === 'function' ? snapshot(t) : snapshot)));
   }, []);
 
   const addTravelBlock = useCallback((tripId, dayId, afterActivityId, durationMin) => {
@@ -1103,6 +1156,7 @@ export function useTrips() {
     aEnvoyer: synchro.aEnvoyer,
     envoiRefuse: synchro.refus,
     renvoyer,
+    conflits, oublierConflits,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
     signIn, signUp, signOut, resetPassword,
