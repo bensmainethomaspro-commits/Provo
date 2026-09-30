@@ -123,6 +123,11 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     résultat le mieux renseigné, sans nom, jusqu'à 500 km.
   · Un partage collé avec du texte autour se lit (`lienColle.js`), comme les
     adresses `geo:`.
+- **« Cherché, rien trouvé »** (30 septembre 2026, proposé par l'audit) : une
+  fiche déjà fouillée en ligne, telle qu'elle est, dans les trois dernières
+  semaines (`dejaFouillee`, deepEnrich.js) affiche « horaires, prix
+  introuvables en ligne » en gris ; le geste ouvre la fiche pour remplir à la
+  main. « N infos à compléter » ne reste que sur ce qui n'a jamais été cherché.
 - **Repère de distances** (idée tirée de Tripsy) : un lieu ou l'hôtel, commun
   à la Carte (cercles de 1, 2, 3 km) et à la Réserve (tri « 📍 Depuis… »).
 - **Doublon signalé à l'ajout**, sans bloquer (`doublon.js`) : même lien, même
