@@ -7,14 +7,15 @@
  * échec, avec son nom.
  *
  * Hors de cette liste, parce qu'elles demandent l'aperçu lancé
- * (`npx vite preview --port 4173`) : verif-ui, verif-carte, parcours.
+ * (`npx vite preview --port 4173`) : verif-ui, verif-carte, verif-synchro-demarrage,
+ * parcours.
  *
  * Usage :  npm run verif
  */
 import { readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const AVEC_SERVEUR = new Set(['verif-ui.mjs', 'verif-carte.mjs', 'verif-tout.mjs']);
+const AVEC_SERVEUR = new Set(['verif-ui.mjs', 'verif-carte.mjs', 'verif-tout.mjs', 'verif-synchro-demarrage.mjs']);
 const suites = readdirSync(new URL('.', import.meta.url))
   .filter(f => /^verif-.*\.mjs$/.test(f) && !AVEC_SERVEUR.has(f))
   .sort();

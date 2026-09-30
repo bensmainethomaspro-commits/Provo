@@ -107,11 +107,18 @@ function outils(p, journal) {
     visible: async (sel) => (await p.locator(sel).count()) > 0
       && await p.locator(sel).first().isVisible().catch(() => false),
 
-    /** Le voyage tel qu'il est réellement enregistré. La source de vérité. */
-    voyage: () => p.evaluate(() => {
-      try { return JSON.parse(localStorage.getItem('provo_trips') || '[]')[0] || null; }
-      catch { return null; }
-    }),
+    /**
+     * Le voyage tel qu'il est réellement enregistré. La source de vérité.
+     * L'app écrit son stockage 400 ms après la dernière modification (elle le
+     * réécrivait à chaque frappe) : on laisse passer ce délai avant de lire.
+     */
+    voyage: async () => {
+      await p.waitForTimeout(500);
+      return p.evaluate(() => {
+        try { return JSON.parse(localStorage.getItem('provo_trips') || '[]')[0] || null; }
+        catch { return null; }
+      });
+    },
 
     async ouvrirVoyage() {
       await t.clic('.trip-card', { delai: 800 });
@@ -887,6 +894,49 @@ const PARCOURS = [
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
     } },
 
+  { groupe: 'Dépenses', nom: 'Une devise sans taux ne compte jamais 1 pour 1', depart: 'voyage',
+    intention: "Payer 10 000 ¥ hors ligne sans avoir jamais chargé de taux : la dépense "
+      + "est notée, mais elle ne pèse pas 10 000 € dans les comptes.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      const txt0 = await t.texte();
+      await t.clic('.expenses-add-top, button:has-text("Ajouter une dépense")', { delai: 700 });
+      await t.saisir('.ef__ligne-titre input.form-input', 'Ramen');
+      await t.p.locator('.ef__montant').first().fill('10000');
+      await t.p.locator('select.ef__devise').selectOption('JPY');
+      await t.p.waitForTimeout(300);
+      const indice = await t.p.locator('.currency-hint').first().innerText().catch(() => '');
+      t.verifier('le formulaire dit que le taux manque', /Pas encore de taux/i.test(indice), indice || '(rien)');
+      await t.clic('button', { texte: /^Ajouter$/, delai: 1000 });
+      const dep = ((await t.voyage()).expenses || []).find(e => e.description === 'Ramen');
+      t.verifier('la dépense est enregistrée', !!dep);
+      t.verifier("sans montant en euros inventé", dep?.eurAmount == null && dep?.tauxManquant === true,
+        JSON.stringify({ eurAmount: dep?.eurAmount, tauxManquant: dep?.tauxManquant }));
+      const txt = await t.texte();
+      t.verifier('la liste le dit', /taux en attente/i.test(txt));
+      const total = (s) => s.match(/Total dépensé\s*([\d\s ]+)\s*€/)?.[1]?.replace(/\s/g, '');
+      t.verifier('le total dépensé n’a pas pris 10 000 €', total(txt) === total(txt0),
+        `${total(txt0)} → ${total(txt)}`);
+    } },
+
+  { groupe: 'Réseau', nom: 'Une dépense en attente de taux se convertit quand il arrive', depart: {
+      ...TRIP, expenses: [...(TRIP.expenses || []), { id: 'jpy', description: 'Ramen', amount: 10000,
+        eurAmount: null, tauxManquant: true, currency: 'JPY', expenseCategory: 'repas',
+        payerId: 't1', participantIds: ['t1', 't2'], date: jour(0) }] },
+    reseau: { taux: 'ok' },
+    intention: "Retrouver le réseau et voir la dépense notée sans taux prendre sa vraie "
+      + "valeur, sans rien retaper.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.p.waitForTimeout(1500);
+      const dep = ((await t.voyage()).expenses || []).find(e => e.id === 'jpy');
+      // Le taux rejoué est de 172,4 ¥ pour 1 € : 10 000 ¥ font 58 €.
+      t.verifier('elle a pris sa valeur en euros', Math.abs((dep?.eurAmount ?? 0) - 58) < 0.5,
+        String(dep?.eurAmount));
+      t.verifier("elle n'attend plus", !dep?.tauxManquant);
+    } },
+
   { groupe: 'Dépenses', nom: 'La notification ouvre les dépenses du bon voyage', depart: 'voyage',
     intention: "Recevoir « Léa a ajouté « Dîner » — 52 € » et arriver directement "
       + "sur les dépenses, sans chercher le voyage puis l'onglet.",
@@ -907,6 +957,69 @@ const PARCOURS = [
       t.verifier("l'adresse est remise à plat",
         !(await t.p.evaluate(() => window.location.search)).includes('voyage'),
         await t.p.evaluate(() => window.location.search) || '(vide)');
+
+      // Le lien restait posé : « ← » ramenait aussitôt dans le voyage, et
+      // l'accueil devenait inatteignable (audit A-042, reproduit).
+      await t.clic('.header__back', { delai: 1000 });
+      t.verifier("« ← » ramène bien à l'accueil", (await t.combien('.trip-card')) > 0
+        && (await t.combien('.trip-view')) === 0);
+    } },
+
+  { groupe: 'Partage', nom: 'Partager dit ce que fait chaque lien, sans bouton mort', depart: 'voyage',
+    intention: "Vouloir partager le voyage sans compte : comprendre ce qu'on peut faire, "
+      + "et envoyer au moins une copie.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Partager/);
+      const txt = await t.texte();
+      t.verifier("plus de promesse de « temps réel » d'une photo figée", !/temps réel/i.test(txt));
+      t.verifier('inviter sans compte : la raison et le geste qui débloque',
+        /Il faut un compte/i.test(txt) && (await t.combien('button:has-text("Se connecter")')) > 0);
+      await t.clic('button', { texte: /Envoyer une copie/, delai: 800 });
+      t.verifier('la copie est prête, et ça se dit', /Copie prête/i.test(await t.texte()));
+    } },
+
+  { groupe: 'Réseau', nom: 'Ouvrir une copie reçue ne remplace aucun voyage', depart: 'voyage',
+    reseau: { copie: 'ok' },
+    intention: "Rouvrir un lien de copie, même le sien : on obtient une copie à part, et "
+      + "le voyage qu'on a déjà n'est jamais écrasé par la photo du jour du partage.",
+    async faire(t) {
+      const lien = `${URL_BASE}/?share=3f0c1f4e-7b1a-4c7e-9d7e-2a8b5c1d9e01`;
+      await t.p.goto(lien, { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(2500);
+      t.verifier('la copie est lue par la fonction SQL', (t.appels().copie || 0) > 0,
+        `${t.appels().copie || 0} appels`);
+      const tous = () => t.p.evaluate(() => JSON.parse(localStorage.getItem('provo_trips') || '[]'));
+      await t.p.waitForTimeout(500);
+      let v = await tous();
+      const origine = v.find(x => x.id === TRIP.id);
+      const copie = v.find(x => x.copieDe);
+      t.verifier("le voyage d'origine est intact", origine?.name === TRIP.name, origine?.name);
+      t.verifier('la copie est un voyage à part', !!copie && copie.id !== TRIP.id,
+        copie ? `${copie.id} · ${copie.name}` : '(aucune)');
+      await t.p.goto(lien, { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(2500);
+      v = await tous();
+      t.verifier('rouvrir le même lien ne la duplique pas', v.filter(x => x.copieDe).length === 1,
+        `${v.filter(x => x.copieDe).length} copies`);
+    } },
+
+  { groupe: 'Accueil', nom: 'Un lien ouvre le voyage dès le tout premier lancement', depart: 'voyage',
+    intention: "Recevoir une invitation ou une notification sur un téléphone où Provo "
+      + "n'a jamais tourné, et arriver là où le lien mène, pas sur un accueil muet.",
+    async faire(t) {
+      // Revenir à l'état « jamais lancé » : aucun service worker aux commandes.
+      // Au premier lancement, sa prise de contrôle faisait recharger la page, et
+      // l'app avait déjà retiré le lien de l'adresse : il était perdu.
+      await t.p.evaluate(async () => {
+        for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      });
+      await t.p.goto(`${URL_BASE}/?voyage=${encodeURIComponent(TRIP.id)}&onglet=depenses`,
+        { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(3500);
+      t.verifier('le voyage est ouvert', (await t.combien('.trip-view')) > 0);
+      const actif = await t.p.locator('.tab-btn--active').first().innerText().catch(() => '');
+      t.verifier("sur l'onglet que le lien demande", /Dépenses/i.test(actif), actif || '(aucun)');
     } },
 
   { groupe: 'Dépenses', nom: 'Le montant se calcule dans le champ', depart: 'voyage',
@@ -1320,8 +1433,10 @@ const PARCOURS = [
   { groupe: 'Transverse', nom: 'Le mode sombre s\'applique partout', depart: 'voyage',
     intention: "Basculer en sombre le soir sans écran illisible.",
     async faire(t) {
+      // Le bouton vit sur l'accueil : le menu ⋯ du voyage le répétait, il ne
+      // le fait plus (13 entrées, c'était trop pour un menu ouvert en marchant).
+      await t.clic('button[aria-label^="Passer en mode"]', { delai: 400 });
       await t.ouvrirVoyage();
-      await t.menu(/Mode sombre|Mode clair/);
       const theme = await t.p.evaluate(() => document.documentElement.getAttribute('data-theme'));
       t.verifier('le thème change', !!theme, theme);
       const clairsEnSombre = await t.p.evaluate(() => {
@@ -2210,6 +2325,36 @@ const PARCOURS = [
           return [...document.querySelectorAll('.trip-header-menu__item')]
             .some(b => /Que faire maintenant/i.test(b.innerText));
         }));
+    } },
+
+  // L'heure est FIXÉE (horloge simulée) : un parcours ne dépend jamais de
+  // l'heure qu'il est vraiment : sinon il rougit à midi et passe le matin.
+  { groupe: 'Planning', nom: "À 11 h le jour J, le Planning parle d'aujourd'hui", depart: 'voyage',
+    intention: "Ouvrir le Planning en pleine journée : voir de quoi est fait AUJOURD'HUI, "
+      + "et pouvoir piocher une idée dans le temps libre, d'un geste.",
+    async faire(t) {
+      await t.p.clock.setFixedTime(new Date(`${jour(0)}T11:00:00`));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      t.verifier('pas de brief de demain en tête du Planning', !(await t.visible('.tomorrow-banner')));
+      const piocher = t.p.locator('.tl-day__piocher');
+      const texte = (await piocher.first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('la carte du jour propose de piocher, temps libre chiffré',
+        /de libre/.test(texte), texte || '(absent)');
+      await t.clic('.tl-day__piocher', { delai: 700 });
+      t.verifier('la pioche s’ouvre, pas le détail du jour',
+        (await t.visible('.sheet--pioche')) && !(await t.visible('.day-detail-overlay')));
+    } },
+
+  { groupe: 'Planning', nom: 'Le soir, le brief de demain revient', depart: 'voyage',
+    intention: "Préparer le lendemain en fin de journée : combien d'activités, départ à quelle heure.",
+    async faire(t) {
+      await t.p.clock.setFixedTime(new Date(`${jour(0)}T18:30:00`));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      t.verifier('le brief de demain est là', await t.visible('.tomorrow-banner'));
     } },
 
 ];

@@ -23,6 +23,8 @@
     "verif-reservation": "node scripts/verif-reservation.mjs",
     "verif-legende": "node scripts/verif-legende.mjs",
     "verif-ticket": "node scripts/verif-ticket.mjs",
+    "verif-synchro": "node scripts/verif-synchro.mjs",
+    "verif-demarrage": "node scripts/verif-synchro-demarrage.mjs",
     "perf": "node scripts/perf.mjs",
     "sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
@@ -50,6 +52,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "playwright": "1.56.1",
     "sharp": "^0.35.2",
     "vite": "^8.0.12"
   }

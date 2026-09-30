@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { fusionnerVoyages, dateLocale } from '../utils/helpers';
+import { lireAttente, ecrireAttente, reconcilier } from '../utils/synchro';
+import { DELAI_FONCTION_MS } from '../utils/reseau';
 
 const STORAGE_KEY = 'provo_trips';
 
@@ -25,8 +27,14 @@ function ensureMeals(day) {
   return { ...day, activities: [...day.activities, ...extras] };
 }
 
+// Garde l'objet tel quel quand aucun repas ne manque : la synchro compare les
+// voyages par identité, et un objet recréé pour rien passerait pour une
+// modification à renvoyer.
 function migrateMeals(trips) {
-  return trips.map(t => ({ ...t, days: t.days.map(ensureMeals) }));
+  return trips.map(t => {
+    const days = t.days.map(ensureMeals);
+    return days.every((d, i) => d === t.days[i]) ? t : { ...t, days };
+  });
 }
 
 function buildDays(startDate, endDate) {
@@ -60,7 +68,17 @@ function generateUUID() {
 }
 
 export function useTrips() {
-  const [trips, setTrips] = useState(() => migrateMeals(load()));
+  // Le point de départ, lu une seule fois : les voyages du téléphone, ceux qui
+  // portent des modifications jamais envoyées, et pour chacun la dernière
+  // version connue des deux côtés. Un voyage qui n'est pas en attente a été
+  // écrit tel quel la dernière fois : sa version locale EST cette base.
+  const [depart] = useState(() => {
+    const voyages = migrateMeals(load());
+    const attente = lireAttente(localStorage);
+    const base = Object.fromEntries(voyages.map(t => [t.id, attente[t.id] ? attente[t.id].base : t]));
+    return { voyages, attente, base };
+  });
+  const [trips, setTrips] = useState(depart.voyages);
   const [userId, setUserId] = useState(null);
   // `addToReserve` est mémoïsé sur une liste de dépendances vide : sans ref, il
   // capturerait l'identifiant du premier rendu, c'est-à-dire `null`.
@@ -77,12 +95,32 @@ export function useTrips() {
   // à chaque sauvegarde — donc à chaque frappe. On ne rend l'information à
   // React qu'au moment où elle change vraiment.
   const pleinRef = useRef(false);
+  // Ce que l'écran dit de la synchro : combien de voyages attendent un envoi,
+  // et si le serveur vient d'en refuser un alors qu'on avait du réseau.
+  const [synchro, setSynchro] = useState({ aEnvoyer: Object.keys(depart.attente).length, refus: false });
   const syncedHashRef = useRef({});
   // La dernière version réellement synchronisée, en entier. L'empreinte seule
   // dit QUE ça a changé, jamais CE QU'IL Y AVAIT — et sans ça une fusion ne
   // peut pas distinguer « ajouté ici » de « supprimé là-bas ».
-  const baseFusionRef = useRef({});
+  const baseFusionRef = useRef(depart.base);
+  // Les voyages modifiés ici et pas encore acceptés par Supabase, avec leur
+  // base. Recopiés dans le stockage local à chaque changement : c'est ce qui
+  // permet, au redémarrage, de fusionner au lieu de laisser le nuage écraser.
+  const attenteRef = useRef(depart.attente);
   const syncTimeouts = useRef({});
+  // Le dernier objet vu par l'effet de synchro, par voyage. Les mises à jour
+  // sont immuables : un objet inchangé est un voyage inchangé, et on ne le
+  // resérialise pas. C'était le coût de chaque frappe (239 ms mesurées avec un
+  // billet de 1,5 Mo joint, processeur bridé).
+  const vuRef = useRef(Object.fromEntries(depart.voyages.map(t => [t.id, t])));
+  // Les objets posés tels que le nuage les a rendus : ils ne sont pas une
+  // modification locale, rien à renvoyer.
+  const depuisNuageRef = useRef(new WeakSet());
+  // Vrai une fois le nuage lu pour ce compte. Avant, on n'écrit RIEN : c'est
+  // l'écriture partie avant la lecture qui réécrivait le nuage avec une
+  // version périmée.
+  const pretRef = useRef(false);
+  const chargementRef = useRef({ uid: null, at: 0, enCours: null });
   // Les dépenses dont il reste à prévenir les autres voyageurs. La notification
   // était tirée AVANT l'écriture qu'elle annonce : hors ligne, l'appel partait
   // dans le vide, et la fonction Edge — qui relit la dépense en base — n'avait
@@ -92,96 +130,26 @@ export function useTrips() {
   const tripsRef = useRef(trips);
   useEffect(() => { tripsRef.current = trips; }, [trips]);
 
-  // ── Charger depuis Supabase (appelé directement à la connexion) ───────────
-  const loadFromSupabase = useCallback(async (uid) => {
-    const { data, error } = await supabase
-      .from('trips')
-      .select('id, data')
-      .order('updated_at', { ascending: false });
-    if (error || !data) return;
-
-    const cloudTrips = data.map(r => r.data).filter(Boolean);
-    cloudTrips.forEach(t => {
-      remoteIdsRef.current.add(t.id);
-      syncedHashRef.current[t.id] = JSON.stringify(t);
-      baseFusionRef.current[t.id] = JSON.parse(JSON.stringify(t));
-    });
-
-    setTrips(prev => {
-      const cloudIds = new Set(cloudTrips.map(t => t.id));
-      const localOnly = prev.filter(t => !cloudIds.has(t.id));
-      localOnly.forEach(trip => {
-        supabase.from('trips').insert({
-          id: trip.id, owner_id: uid,
-          data: trip, updated_at: new Date().toISOString(),
-        }).then(({ error: e }) => { if (!e) remoteIdsRef.current.add(trip.id); });
-      });
-      return migrateMeals([...cloudTrips, ...localOnly]);
-    });
+  // ── Ce qui attend un envoi ────────────────────────────────────────────────
+  const persisterAttente = useCallback(() => {
+    ecrireAttente(localStorage, attenteRef.current);
+    const n = Object.keys(attenteRef.current).length;
+    setSynchro(s => (s.aEnvoyer === n ? s : { ...s, aEnvoyer: n }));
   }, []);
 
-  const applySession = useCallback((session) => {
-    const uid = session?.user?.id ?? null;
-    const meta = session?.user?.user_metadata || {};
-    setUserId(uid);
-    setUserEmail(session?.user?.email ?? null);
-    setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
-    // Sync display_name to profiles table so other trip members can see it
-    if (uid && meta.display_name) {
-      supabase.from('profiles')
-        .upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' })
-        .then(({ error }) => {
-          // Sans cette ligne, les autres membres du voyage voient un identifiant
-          // à la place du prénom, sans qu'aucune erreur ne le signale.
-          if (error) console.error('[Provo] Publication du profil refusée :', error.message);
-        });
-    }
-  }, []);
+  // La base gardée est celle d'AVANT la première modification non envoyée :
+  // c'est le dernier ancêtre commun, et il le reste jusqu'à un envoi accepté.
+  const marquerEnAttente = useCallback((id) => {
+    if (attenteRef.current[id]) return;
+    attenteRef.current[id] = { base: baseFusionRef.current[id] ?? null };
+    persisterAttente();
+  }, [persisterAttente]);
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      applySession(session);
-      setAuthLoading(false);
-      if (session?.user?.id) loadFromSupabase(session.user.id);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      applySession(session);
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user?.id) loadFromSupabase(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        setTrips([]);
-        remoteIdsRef.current = new Set();
-        syncedHashRef.current = {};
-        baseFusionRef.current = {};
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [loadFromSupabase, applySession]);
-
-  // ── Cache localStorage (toujours) ─────────────────────────────────────────
-  // Vrai dès qu'une écriture locale échoue : le voyage ne tient plus.
-  // Synchroniser React avec un système extérieur (le stockage du navigateur)
-  // est exactement ce à quoi un effet sert ; l'écriture ne se produit qu'au
-  // changement d'état. (La règle `set-state-in-effect` ne se déclenche plus
-  // ici : la directive qui la taisait était devenue morte.)
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
-      if (pleinRef.current) { pleinRef.current = false; setStockagePlein(false); }
-    } catch (e) {
-      // Photos de couverture, captures et PDF sont stockés en base64 dans le
-      // voyage : le stockage local tient 5,1 Mo — mesuré — et il se dépasse
-      // vite. L'écriture échoue alors pour TOUT le reste aussi, et ce qui n'est
-      // pas encore parti vers Supabase disparaît au rechargement.
-      //
-      // C'est la pire panne possible : silencieuse, et elle mange le travail.
-      // Elle se dit maintenant à l'écran, pas dans une console que personne
-      // n'ouvre sur un téléphone.
-      console.error('[Provo] Sauvegarde locale impossible :', e?.name || e);
-      if (!pleinRef.current) { pleinRef.current = true; setStockagePlein(true); }
-    }
-  }, [trips]);
+  const retirerAttente = useCallback((id) => {
+    if (!attenteRef.current[id]) return;
+    delete attenteRef.current[id];
+    persisterAttente();
+  }, [persisterAttente]);
 
   /**
    * Prévenir les autres voyageurs qu'une dépense commune vient d'être notée.
@@ -207,55 +175,233 @@ export function useTrips() {
     delete notifsEnAttente.current[tripId];
     for (const expenseId of enAttente) {
       supabase.functions
-        .invoke('notifier-depense', { body: { tripId, expenseId } })
+        .invoke('notifier-depense', { body: { tripId, expenseId }, timeout: DELAI_FONCTION_MS })
         .catch(() => {});
     }
   }, []);
 
-  // ── Sync vers Supabase (debounced, 700ms) ────────────────────────────────
-  useEffect(() => {
-    if (!userId) return;
-    trips.forEach(trip => {
-      const hash = JSON.stringify(trip);
-      if (syncedHashRef.current[trip.id] === hash) return;
-      clearTimeout(syncTimeouts.current[trip.id]);
-      syncTimeouts.current[trip.id] = setTimeout(async () => {
-        // L'empreinte est posée avant l'écriture pour qu'un rendu intermédiaire
-        // ne relance pas la même requête. Mais si l'écriture échoue (hors ligne,
-        // RLS), la garder revient à déclarer synchronisé ce qui ne l'est pas :
-        // la modification ne repart jamais, et le nuage — resté en arrière —
-        // l'écrase au prochain chargement. On la retire donc en cas d'échec,
-        // pour que la prochaine modification du voyage la remonte avec elle.
-        syncedHashRef.current[trip.id] = hash;
-        if (remoteIdsRef.current.has(trip.id)) {
-          const { error } = await supabase.from('trips')
-            .update({ data: trip, updated_at: new Date().toISOString() })
-            .eq('id', trip.id);
-          if (error) {
-            delete syncedHashRef.current[trip.id];
-            console.error('[Provo] Écriture du voyage refusée :', error.message);
-          } else {
-            // Écriture acceptée : c'est désormais ce que les deux côtés savent.
-            baseFusionRef.current[trip.id] = JSON.parse(hash);
-            viderLesNotifs(trip.id);
-          }
-        } else {
-          const { error } = await supabase.from('trips').insert({
-            id: trip.id, owner_id: userId,
-            data: trip, updated_at: new Date().toISOString(),
-          });
-          if (error) {
-            delete syncedHashRef.current[trip.id];
-            console.error('[Provo] Création du voyage refusée :', error.message);
-          } else {
-            remoteIdsRef.current.add(trip.id);
-            baseFusionRef.current[trip.id] = JSON.parse(hash);
-            viderLesNotifs(trip.id);
-          }
-        }
-      }, 700);
+  // ── Envoi vers Supabase ───────────────────────────────────────────────────
+  // Lit le voyage AU MOMENT d'écrire, jamais celui du moment où l'envoi a été
+  // programmé : c'était la version périmée qui partait après un chargement.
+  const envoyer = useCallback(async (id) => {
+    const trip = tripsRef.current.find(t => t.id === id);
+    const uid = userIdRef.current;
+    if (!trip) { retirerAttente(id); return; }
+    if (!uid || !pretRef.current) return;
+    const hash = JSON.stringify(trip);
+    if (syncedHashRef.current[id] === hash) { retirerAttente(id); return; }
+    // Posée avant l'écriture pour qu'un second envoi ne parte pas en double ;
+    // retirée si l'écriture échoue, sinon on déclarerait synchronisé ce qui ne
+    // l'est pas et la modification ne repartirait jamais (audit A-002).
+    syncedHashRef.current[id] = hash;
+    const maintenant = new Date().toISOString();
+    const existe = remoteIdsRef.current.has(id);
+    let { data, error } = existe
+      // `.select('id')` : une mise à jour refusée par les droits (RLS) ne rend
+      // PAS d'erreur, seulement zéro ligne. Sans ce retour, un refus passait
+      // pour un succès.
+      ? await supabase.from('trips').update({ data: trip, updated_at: maintenant }).eq('id', id).select('id')
+      : await supabase.from('trips').insert({ id, owner_id: uid, data: trip, updated_at: maintenant }).select('id');
+    if (!error && !data?.length) error = { message: 'aucune ligne écrite (droits insuffisants ?)' };
+    if (error) {
+      delete syncedHashRef.current[id];
+      console.error(`[Provo] ${existe ? 'Écriture' : 'Création'} du voyage refusée :`, error.message);
+      // Hors ligne, l'échec est attendu et le bandeau le dit déjà.
+      if (navigator.onLine) setSynchro(s => (s.refus ? s : { ...s, refus: true }));
+      return;
+    }
+    remoteIdsRef.current.add(id);
+    // Écriture acceptée : c'est désormais ce que les deux côtés savent.
+    baseFusionRef.current[id] = trip;
+    if (tripsRef.current.find(t => t.id === id) === trip) retirerAttente(id);
+    else if (attenteRef.current[id]) { attenteRef.current[id] = { base: trip }; persisterAttente(); }
+    setSynchro(s => (s.refus ? { ...s, refus: false } : s));
+    viderLesNotifs(id);
+  }, [retirerAttente, persisterAttente, viderLesNotifs]);
+
+  const planifier = useCallback((id, delai = 700) => {
+    clearTimeout(syncTimeouts.current[id]);
+    syncTimeouts.current[id] = setTimeout(() => envoyer(id), delai);
+  }, [envoyer]);
+
+  // Tout ce qui attend, plus ce qui n'a jamais été écrit (voyage créé hors ligne).
+  const relancer = useCallback(() => {
+    if (!pretRef.current) return;
+    const ids = new Set(Object.keys(attenteRef.current));
+    tripsRef.current.forEach(t => { if (!syncedHashRef.current[t.id]) ids.add(t.id); });
+    ids.forEach(id => planifier(id));
+  }, [planifier]);
+
+  // ── Charger depuis Supabase ───────────────────────────────────────────────
+  // FUSIONNE avec ce qui attend ici au lieu de le remplacer (voir synchro.js).
+  const loadFromSupabase = useCallback(async (uid) => {
+    const { data, error } = await supabase
+      .from('trips')
+      .select('id, data')
+      .order('updated_at', { ascending: false });
+    if (error || !data) return false;
+    // Le compte a changé pendant la requête : ce résultat n'est plus le sien.
+    if (userIdRef.current && userIdRef.current !== uid) return false;
+
+    const cloudTrips = data.map(r => r.data).filter(Boolean);
+    const cloudIds = new Set(cloudTrips.map(t => t.id));
+    // Photographiées AVANT de toucher aux références : la fusion a besoin de
+    // l'ancêtre commun d'avant ce chargement, pas du nuage qu'on vient de lire.
+    const attentes = { ...attenteRef.current };
+    cloudTrips.forEach(t => {
+      remoteIdsRef.current.add(t.id);
+      syncedHashRef.current[t.id] = JSON.stringify(t);
+      baseFusionRef.current[t.id] = t;
     });
-  }, [trips, userId, viderLesNotifs]);
+
+    setTrips(prev => {
+      const locaux = new Map(prev.map(t => [t.id, t]));
+      const gardes = cloudTrips.map(c => {
+        const garde = reconcilier(locaux.get(c.id), c, attentes[c.id], fusionnerVoyages);
+        if (garde === c) depuisNuageRef.current.add(c);
+        return garde;
+      });
+      // Les voyages qui n'existent qu'ici partent à la création via `relancer`.
+      return migrateMeals([...gardes, ...prev.filter(t => !cloudIds.has(t.id))]);
+    });
+    pretRef.current = true;
+    relancer();
+    return true;
+  }, [relancer]);
+
+  // Un seul chargement à la fois, et pas deux fois de suite pour rien : la
+  // bibliothèque d'authentification émet `SIGNED_IN` à chaque retour dans
+  // l'app. Sans danger depuis la fusion, mais ce n'est pas une raison pour
+  // retélécharger tous les voyages à chaque coup d'œil.
+  const charger = useCallback((uid, { force = false } = {}) => {
+    const c = chargementRef.current;
+    if (c.enCours && c.uid === uid) return c.enCours;
+    if (!force && c.uid === uid && Date.now() - c.at < 30_000) return Promise.resolve(true);
+    const enCours = loadFromSupabase(uid).then(ok => {
+      chargementRef.current = { uid, at: ok ? Date.now() : 0, enCours: null };
+      return ok;
+    });
+    chargementRef.current = { uid, at: c.uid === uid ? c.at : 0, enCours };
+    return enCours;
+  }, [loadFromSupabase]);
+
+  const applySession = useCallback((session) => {
+    const uid = session?.user?.id ?? null;
+    const meta = session?.user?.user_metadata || {};
+    setUserId(uid);
+    setUserEmail(session?.user?.email ?? null);
+    setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
+    // Publie le prénom pour que les autres membres du voyage le voient. La
+    // colonne s'appelle `display_name` : l'app écrivait `name`, qui n'existe
+    // pas, et chaque publication échouait (vu le 30 septembre 2026).
+    if (uid && meta.display_name) {
+      supabase.from('profiles')
+        .upsert({ id: uid, display_name: meta.display_name }, { onConflict: 'id' })
+        .then(({ error }) => {
+          // Sans cette ligne, les autres membres du voyage voient un identifiant
+          // à la place du prénom, sans qu'aucune erreur ne le signale.
+          if (error) console.error('[Provo] Publication du profil refusée :', error.message);
+        });
+    }
+  }, []);
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      applySession(session);
+      setAuthLoading(false);
+      if (session?.user?.id) charger(session.user.id);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      applySession(session);
+      // Plus de rechargement sur TOKEN_REFRESHED : le jeton qui se renouvelle
+      // ne dit rien des voyages.
+      if (event === 'SIGNED_IN') {
+        if (session?.user?.id) charger(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        Object.values(syncTimeouts.current).forEach(clearTimeout);
+        syncTimeouts.current = {};
+        setTrips([]);
+        remoteIdsRef.current = new Set();
+        syncedHashRef.current = {};
+        baseFusionRef.current = {};
+        vuRef.current = {};
+        attenteRef.current = {};
+        persisterAttente();
+        pretRef.current = false;
+        chargementRef.current = { uid: null, at: 0, enCours: null };
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [charger, applySession, persisterAttente]);
+
+  // « Réessayer », depuis le bandeau : relire, fusionner, renvoyer.
+  const renvoyer = useCallback(() => {
+    setSynchro(s => (s.refus ? { ...s, refus: false } : s));
+    if (userIdRef.current) charger(userIdRef.current, { force: true });
+  }, [charger]);
+
+  // Le réseau revient : relire le nuage (les autres ont pu avancer pendant
+  // l'absence, et le temps réel ne rejoue rien), fusionner, renvoyer. Avant,
+  // une écriture échouée hors ligne ne repartait qu'à la modification suivante.
+  useEffect(() => {
+    const auRetour = () => { if (userIdRef.current) charger(userIdRef.current, { force: true }); };
+    window.addEventListener('online', auRetour);
+    return () => window.removeEventListener('online', auRetour);
+  }, [charger]);
+
+  // ── Cache localStorage (toujours) ─────────────────────────────────────────
+  // Écrit 400 ms après la dernière modification, et tout de suite quand l'app
+  // passe en arrière-plan. Il était réécrit EN ENTIER à chaque frappe.
+  const ecritureRef = useRef(null);
+  const ecrireLocal = useCallback(() => {
+    clearTimeout(ecritureRef.current);
+    ecritureRef.current = null;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tripsRef.current));
+      if (pleinRef.current) { pleinRef.current = false; setStockagePlein(false); }
+    } catch (e) {
+      // Photos de couverture, captures et PDF sont stockés en base64 dans le
+      // voyage : le stockage local tient 5,1 Mo — mesuré — et il se dépasse
+      // vite. L'écriture échoue alors pour TOUT le reste aussi, et ce qui n'est
+      // pas encore parti vers Supabase disparaît au rechargement.
+      //
+      // C'est la pire panne possible : silencieuse, et elle mange le travail.
+      // Elle se dit maintenant à l'écran, pas dans une console que personne
+      // n'ouvre sur un téléphone.
+      console.error('[Provo] Sauvegarde locale impossible :', e?.name || e);
+      if (!pleinRef.current) { pleinRef.current = true; setStockagePlein(true); }
+    }
+  }, []);
+
+  useEffect(() => {
+    clearTimeout(ecritureRef.current);
+    ecritureRef.current = setTimeout(ecrireLocal, 400);
+  }, [trips, ecrireLocal]);
+
+  useEffect(() => {
+    const vider = () => { if (ecritureRef.current) ecrireLocal(); };
+    const siCachee = () => { if (document.visibilityState === 'hidden') vider(); };
+    window.addEventListener('pagehide', vider);
+    document.addEventListener('visibilitychange', siCachee);
+    return () => {
+      window.removeEventListener('pagehide', vider);
+      document.removeEventListener('visibilitychange', siCachee);
+    };
+  }, [ecrireLocal]);
+
+  // ── Ce qui a changé ici part vers Supabase ────────────────────────────────
+  // Une comparaison d'identité par voyage, rien d'autre à chaque rendu : la
+  // sérialisation n'a lieu qu'au moment d'envoyer.
+  useEffect(() => {
+    for (const trip of trips) {
+      if (vuRef.current[trip.id] === trip) continue;
+      vuRef.current[trip.id] = trip;
+      if (!userId || depuisNuageRef.current.has(trip)) continue;
+      marquerEnAttente(trip.id);
+      planifier(trip.id);
+    }
+  }, [trips, userId, marquerEnAttente, planifier]);
 
   // ── Realtime : recevoir les changements des collaborateurs ────────────────
   useEffect(() => {
@@ -267,10 +413,20 @@ export function useTrips() {
         const tripId = payload.new?.id;
         if (!remoteTrip || !tripId) return;
         const remoteHash = JSON.stringify(remoteTrip);
+        remoteIdsRef.current.add(tripId);
         setTrips(prev => {
           const existing = prev.find(t => t.id === tripId);
-          if (!existing) return [...prev, remoteTrip];
-          if (JSON.stringify(existing) === remoteHash) return prev;
+          if (!existing) {
+            syncedHashRef.current[tripId] = remoteHash;
+            baseFusionRef.current[tripId] = remoteTrip;
+            depuisNuageRef.current.add(remoteTrip);
+            return [...prev, remoteTrip];
+          }
+          if (JSON.stringify(existing) === remoteHash) {
+            syncedHashRef.current[tripId] = remoteHash;
+            baseFusionRef.current[tripId] = existing;
+            return prev;
+          }
           // FUSIONNER, ne pas remplacer. Le remplacement effaçait la dépense
           // qu'on venait de saisir et que le débounce n'avait pas encore
           // envoyée : deux appareils sur le même compte se volaient leurs
@@ -278,16 +434,20 @@ export function useTrips() {
           // connaissaient — c'est elle qui distingue un ajout d'ici d'une
           // suppression de là-bas.
           const fusionne = fusionnerVoyages(baseFusionRef.current[tripId], existing, remoteTrip);
-          const fusionneHash = JSON.stringify(fusionne);
           // La base avance jusqu'au distant : c'est ce que le serveur porte.
-          baseFusionRef.current[tripId] = JSON.parse(remoteHash);
+          baseFusionRef.current[tripId] = remoteTrip;
           // Si la fusion a gardé quelque chose que le serveur n'a pas, il ne
           // faut PAS marquer le voyage comme synchronisé : l'effet d'écriture
           // doit repartir pour y renvoyer ce qui manque.
-          if (fusionneHash === remoteHash) syncedHashRef.current[tripId] = remoteHash;
-          else delete syncedHashRef.current[tripId];
+          if (JSON.stringify(fusionne) === remoteHash) {
+            syncedHashRef.current[tripId] = remoteHash;
+            depuisNuageRef.current.add(fusionne);
+          } else delete syncedHashRef.current[tripId];
           return prev.map(t => t.id === tripId ? fusionne : t);
         });
+        // Ce qui attendait ici est peut-être arrivé avec cette version : un
+        // envoi à vide le constatera et videra la file.
+        if (attenteRef.current[tripId]) planifier(tripId);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'trips' }, (payload) => {
         const newTrip = payload.new?.data;
@@ -295,16 +455,19 @@ export function useTrips() {
         if (!newTrip || !tripId) return;
         remoteIdsRef.current.add(tripId);
         syncedHashRef.current[tripId] = JSON.stringify(newTrip);
-        baseFusionRef.current[tripId] = JSON.parse(JSON.stringify(newTrip));
+        baseFusionRef.current[tripId] = newTrip;
+        depuisNuageRef.current.add(newTrip);
         setTrips(prev => prev.find(t => t.id === tripId) ? prev : [newTrip, ...prev]);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'trips' }, (payload) => {
         const tripId = payload.old?.id;
-        if (tripId) setTrips(prev => prev.filter(t => t.id !== tripId));
+        if (!tripId) return;
+        retirerAttente(tripId);
+        setTrips(prev => prev.filter(t => t.id !== tripId));
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [userId]);
+  }, [userId, planifier, retirerAttente]);
 
   // ── Auth helpers ──────────────────────────────────────────────────────────
   const signIn = useCallback(async (email, password) => {
@@ -359,7 +522,8 @@ export function useTrips() {
     if (tripData) {
       remoteIdsRef.current.add(data.trip_id);
       syncedHashRef.current[data.trip_id] = JSON.stringify(tripData);
-      baseFusionRef.current[data.trip_id] = JSON.parse(JSON.stringify(tripData));
+      baseFusionRef.current[data.trip_id] = tripData;
+      depuisNuageRef.current.add(tripData);
       setTrips(prev => prev.find(t => t.id === data.trip_id) ? prev : [tripData, ...prev]);
     }
     return { tripId: data?.trip_id };
@@ -406,6 +570,8 @@ export function useTrips() {
   }, []);
 
   const deleteTrip = useCallback((tripId) => {
+    clearTimeout(syncTimeouts.current[tripId]);
+    retirerAttente(tripId);
     setTrips(p => p.filter(t => t.id !== tripId));
     // Seul le propriétaire a le droit de supprimer : pour un collaborateur la
     // requête est refusée en silence, le voyage disparaît de l'écran puis
@@ -415,7 +581,7 @@ export function useTrips() {
         if (error) console.error('[Provo] Suppression du voyage refusée :', error.message);
       });
     }
-  }, [userId]);
+  }, [userId, retirerAttente]);
 
   const getTripById = useCallback((id) => trips.find(t => t.id === id), [trips]);
 
@@ -752,32 +918,44 @@ export function useTrips() {
     return id;
   }, []);
 
-  // Partage legacy (shared_trips) — conservé pour compatibilité
-  const enableSharing = useCallback(async (tripId) => {
+  // ── Envoyer une COPIE ─────────────────────────────────────────────────────
+  // Un instantané du voyage, lisible par qui a le lien, qui ne se synchronise
+  // pas : l'ami modifie SA copie, jamais le voyage d'origine. (Pour modifier
+  // ensemble, c'est l'invitation : `enableCollaboration`.)
+  //
+  // Ce que ça remplace : un « partage collaboratif » qui promettait le temps
+  // réel et n'était qu'une photo figée, dans une table que n'importe qui
+  // pouvait lister et réécrire (audit A-001). Et rouvrir son propre lien
+  // REMPLAÇAIT le voyage par cette photo : tout ce qui avait été modifié
+  // depuis était perdu, puis la synchro l'écrivait dans le nuage.
+  const creerCopiePartagee = useCallback(async (tripId) => {
     const trip = tripsRef.current.find(t => t.id === tripId);
-    if (!trip) throw new Error('Trip not found');
-    if (trip.shareId) return trip.shareId;
-    const shareId = generateUUID();
-    const tripWithShare = { ...trip, shareId };
-    const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: tripWithShare });
+    if (!trip) throw new Error('Voyage introuvable');
+    // L'identifiant est tiré ici : la table ne se relit plus après écriture
+    // (aucune lecture en liste n'est permise), il faut donc le connaître.
+    const shareId = globalThis.crypto?.randomUUID?.() || generateUUID();
+    const donnees = { ...trip };
+    delete donnees.shareId;
+    delete donnees.copieDe;
+    const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: donnees });
     if (error) throw error;
-    syncedHashRef.current[shareId] = JSON.stringify(tripWithShare);
-    setTrips(p => p.map(t => t.id !== tripId ? t : tripWithShare));
     return shareId;
   }, []);
 
+  // Ouvrir le lien d'une copie : on l'importe comme un voyage À SOI (nouvel
+  // identifiant), et on ne touche jamais à un voyage existant. Rouvrir le même
+  // lien rouvre la même copie au lieu d'en créer une deuxième.
   const loadSharedTrip = useCallback(async (shareId) => {
-    const { data, error } = await supabase.from('shared_trips').select('data').eq('share_id', shareId).single();
+    const { data, error } = await supabase.rpc('lire_voyage_partage', { p_share_id: shareId });
     if (error) throw error;
-    const remoteTrip = data.data;
-    if (!remoteTrip) throw new Error('Empty trip data');
-    syncedHashRef.current[shareId] = JSON.stringify(remoteTrip);
-    setTrips(p => {
-      const exists = p.find(t => t.shareId === shareId);
-      if (exists) return p.map(t => t.shareId === shareId ? remoteTrip : t);
-      return [remoteTrip, ...p];
-    });
-    return remoteTrip.id;
+    if (!data) throw new Error('Copie introuvable');
+    const deja = tripsRef.current.find(t => t.copieDe === shareId);
+    if (deja) return deja.id;
+    const id = genId();
+    const copie = { ...data, id, copieDe: shareId, createdAt: new Date().toISOString() };
+    delete copie.shareId;
+    setTrips(p => [copie, ...p]);
+    return id;
   }, []);
 
   const addExpense = useCallback((tripId, expense) => {
@@ -874,10 +1052,10 @@ export function useTrips() {
     const userIds = members.map(m => m.user_id);
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, name')
+      .select('id, display_name')
       .in('id', userIds);
     return members.map(m => {
-      const profileName = (profiles || []).find(p => p.id === m.user_id)?.name || null;
+      const profileName = (profiles || []).find(p => p.id === m.user_id)?.display_name || null;
       // Fallback to local auth metadata for the current user (in case profiles UPDATE is blocked by RLS)
       const name = profileName || (m.user_id === userId ? (userProfileRef.current?.name || null) : null);
       return { userId: m.user_id, role: m.role, name };
@@ -899,8 +1077,12 @@ export function useTrips() {
     if (emoji !== undefined) meta.profile_emoji = emoji;
     const { error } = await supabase.auth.updateUser({ data: meta });
     if (error) return { error: error.message };
-    if (name !== undefined && userId) {
-      await supabase.from('profiles').upsert({ id: userId, name }, { onConflict: 'id' });
+    if (userId && (name !== undefined || emoji !== undefined)) {
+      await supabase.from('profiles').upsert({
+        id: userId,
+        ...(name !== undefined ? { display_name: name } : {}),
+        ...(emoji !== undefined ? { avatar_emoji: emoji } : {}),
+      }, { onConflict: 'id' });
     }
     setUserProfile(prev => ({
       name: name !== undefined ? name : prev.name,
@@ -917,6 +1099,10 @@ export function useTrips() {
     updateProfile,
     authLoading,
     stockagePlein,
+    // Pour le bandeau : ce qui n'est pas encore parti, et un refus du serveur.
+    aEnvoyer: synchro.aEnvoyer,
+    envoiRefuse: synchro.refus,
+    renvoyer,
     currentTrips: trips.filter(t => !isPast(t.endDate)),
     pastTrips: trips.filter(t => isPast(t.endDate)).sort((a, b) => new Date(b.endDate) - new Date(a.endDate)),
     signIn, signUp, signOut, resetPassword,
@@ -931,7 +1117,7 @@ export function useTrips() {
     addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
-    enableSharing, loadSharedTrip,
+    creerCopiePartagee, loadSharedTrip,
     reorderDay, addToAllDays,
     addExpense, updateExpense, deleteExpense,
     copyDay, sortDayByTime,

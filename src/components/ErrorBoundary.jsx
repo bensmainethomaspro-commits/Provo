@@ -52,9 +52,18 @@ export default class ErrorBoundary extends Component {
             <button className="btn btn--primary btn--full" onClick={this.handleReload}>
               🔄 Recharger l'application
             </button>
-            <button className="btn btn--secondary btn--full" onClick={this.handleHardReset}>
-              🧹 Vider le cache et recharger
-            </button>
+            {/* Hors ligne, vider le cache et désinscrire le service worker rend
+                l'app inlançable jusqu'au retour du réseau : c'est lui qui la
+                sert sans connexion. Le geste n'est proposé qu'en ligne. */}
+            {navigator.onLine ? (
+              <button className="btn btn--secondary btn--full" onClick={this.handleHardReset}>
+                🧹 Vider le cache et recharger
+              </button>
+            ) : (
+              <p className="error-screen__text">
+                Hors ligne : si recharger ne suffit pas, attends d'avoir du réseau pour vider le cache.
+              </p>
+            )}
           </div>
           <details className="error-screen__details">
             <summary>Détails techniques</summary>

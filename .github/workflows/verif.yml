@@ -1,0 +1,80 @@
+# Vérifier chaque PR avant qu'elle n'arrive sur main.
+#
+# Rien ne tournait sur une PR (audit A-043) : les suites existaient, mais ne se
+# lançaient qu'à la main, le jour où le correctif était écrit, et plus jamais.
+# Deux régressions du journal d'audit (A-046, A-047) sont arrivées par des PR
+# fusionnées sans que personne ne relise.
+#
+# Deux travaux en parallèle :
+#  · suites : build, puis les suites sans réseau ni navigateur (npm run verif),
+#    dont la dette ESLint qui ne doit plus monter. Une à deux minutes ;
+#  · parcours : l'app construite, servie par `vite preview`, et les 87 parcours
+#    qui appuient vraiment sur les boutons (services distants rejoués), plus la
+#    synchro au démarrage. Une dizaine de minutes.
+#
+# `verif-ui` n'est pas ici : il rougit par construction sur les 52 points
+# assumés de la carte (marqueurs Leaflet de 32 px). Il reste à lancer à la main
+# avant une livraison d'interface.
+name: Vérifier la PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: verif-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    name: Build et suites hors réseau
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Build
+        run: npm run build
+      - name: Suites (npm run verif)
+        run: npm run verif
+
+  parcours:
+    name: Parcours dans un vrai navigateur
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Aperçu de l'app
+        run: |
+          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4173/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "L'aperçu n'a pas démarré :"; cat preview.log; exit 1
+      - name: Parcours (npm run parcours)
+        run: npm run parcours
+      - name: Synchro au démarrage (npm run verif-demarrage)
+        run: npm run verif-demarrage

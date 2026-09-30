@@ -9,8 +9,6 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
-import { forceRefreshApp } from '../components/RefreshButton';
-import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
@@ -23,7 +21,8 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros } from '../utils/helpers';
+import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
@@ -38,6 +37,10 @@ import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches, dejaFouillee } from
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
+// Le bilan ne sert qu'aux voyages terminés, et il embarque Leaflet (sa carte
+// du vécu) : importé d'office, il faisait précharger 149 ko de carte, le
+// sixième du JavaScript, à chaque ouverture de l'app.
+const TripRecap = lazy(() => import('../components/TripRecap'));
 // Le contrôle des lieux ne sert qu'à la demande : inutile de l'embarquer
 // dans le paquet principal.
 const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
@@ -45,7 +48,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme, ongletInitial }) {
+export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -57,7 +60,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     reorderDay, addToAllDays,
     addExpense, updateExpense, deleteExpense,
     addDailyTemplate, removeDailyTemplate,
-    enableCollaboration, userId,
+    userId,
     fetchTripMembers, removeTripMember,
   } = useTripsContext();
 
@@ -67,6 +70,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // première activité géolocalisée : un vol au départ ancrerait tout le
   // voyage sur la ville de départ.
   const anchor = useTripAnchor(trip?.destination);
+
+  // Une dépense notée sans taux de change connu (hors ligne dans une devise
+  // jamais vue, ou devise que la source ne publie pas) attend le sien : elle
+  // se convertit dès qu'il arrive, au taux de ce jour-là. Plutôt ça que
+  // 1 € = 1 ¥, qui s'enregistrait pour toujours (audit A-003).
+  const { convertToEur } = useCurrencyRates();
+  useEffect(() => {
+    for (const e of trip?.expenses || []) {
+      if (!e.tauxManquant) continue;
+      const eur = convertToEur(Math.abs(Number(e.amount) || 0), e.currency);
+      if (eur == null) continue;
+      const signe = Number(e.amount) < 0 ? -1 : 1;
+      updateExpense(tripId, e.id, { eurAmount: signe * Math.round(eur * 100) / 100, tauxManquant: undefined });
+    }
+  }, [trip?.expenses, convertToEur, updateExpense, tripId]);
 
   // Repère les fiches douteuses. Purement géométrique : aucune requête, donc
   // ça tourne en continu, même hors ligne. Un lieu à 800 km de la destination
@@ -183,6 +201,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
+  // Un message sans action à annuler (« demande le réseau »…).
+  const [undoInfo, setUndoInfo] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
   // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
@@ -270,6 +290,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     undoRef.current = snapshot;
     setUndoMsg(msg);
     setUndoDone(false);
+    setUndoInfo(false);
     setUndoVisible(true);
     clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => { setUndoVisible(false); undoRef.current = null; }, 6000);
@@ -296,6 +317,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     setUndoMsg('Action annulée');
     clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setUndoVisible(false), 1800);
+  };
+
+  const informer = (msg) => {
+    undoRef.current = null;
+    setUndoMsg(msg);
+    setUndoDone(true);
+    setUndoInfo(true);
+    setUndoVisible(true);
+    clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoVisible(false), 3500);
   };
 
   const dismissUndo = () => {
@@ -426,16 +457,33 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     return trip.days.find(d => d.date === todayStr) || null;
   })();
 
+  // « Que faire maintenant ? » : du menu ⋯, et de la carte du jour quand il
+  // reste du temps libre (TimelineView). Une seule fonction pour les deux.
+  const piocherMaintenant = () => {
+    if (!todayDay) return;
+    setPioche(piocheGuidee(trip, todayDay, {
+      position: geoReserve.position,
+      meteoCode: weather?.byDate?.[todayDay.date]?.code,
+    }));
+  };
+
   // Compte à rebours avant le départ, et brief de la veille pour la journée
   // de demain (activités, heure de départ, pluie éventuelle).
   const { daysUntil, tomorrow } = (() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const maintenant = new Date();
+    const now = new Date(maintenant); now.setHours(0, 0, 0, 0);
     const start = new Date(trip.startDate + 'T00:00:00');
     const diff = Math.round((start - now) / 86400000);
     const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
     const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
     const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
-    return { daysUntil: isPast ? -1 : diff, tomorrow: day };
+    // Le brief de demain occupait le haut du Planning TOUTE la journée : au
+    // jour 1 à 11 h, le premier bloc de l'écran qui doit répondre « qu'est-ce
+    // que je fais maintenant ? » parlait du lendemain. Il revient le soir (le
+    // rappel « c'est demain » part à 18 h), ou toute la veille du départ,
+    // quand aujourd'hui n'est pas encore un jour du voyage.
+    const veille = !todayDay || maintenant.getHours() >= 17;
+    return { daysUntil: isPast ? -1 : diff, tomorrow: veille ? day : null };
   })();
 
   // ─── Itinéraire optimisé ──────────────────────────────────────────────────
@@ -655,7 +703,23 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // L'agent ne travaillait qu'à l'ajout. Or une information se périme : un
   // restaurant change ses horaires, un musée ses tarifs. On repasse donc sur
   // l'existant — à la demande, et jamais sans montrer ce qu'on a trouvé.
+  // Compléter les fiches et vérifier les lieux interrogent des services en
+  // ligne. Lancés hors ligne, ils affichaient une progression normale
+  // (« Vérification de… 2/8 ») pendant que chaque recherche échouait. La
+  // raison, d'une phrase, dans la barre de messages qui existe déjà (A8).
+  const demandeLeReseau = (quoi) => {
+    if (navigator.onLine) return false;
+    informer(`📡 ${quoi} demande le réseau : réessaie une fois connecté.`);
+    return true;
+  };
+
+  const ouvrirControleLieux = () => {
+    if (demandeLeReseau('Vérifier les lieux')) return;
+    setShowPlaceCheck(true);
+  };
+
   const fouiller = async () => {
+    if (demandeLeReseau('Compléter les fiches')) return;
     const liste = aEnrichir(tripRef.current);
     if (!liste.length) return;
     const ctrl = new AbortController();
@@ -785,7 +849,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const tripAccent = trip.color || detectCountryTheme(trip.destination) || '#35A7DD';
   const expenses = trip.expenses || [];
   // Settlements (remboursements entre voyageurs) are transfers, not spending.
-  const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + (e.eurAmount ?? e.amount), 0);
+  const totalExpenses = expenses.filter(e => !e.isSettlement).reduce((s, e) => s + enEuros(e), 0);
   /* ─── Budget ────────────────────────────────────────────────────────────
      « Estimé » veut dire : ce que ce voyage aura coûté en tout. Il additionnait
      en réalité le prix de TOUTES les activités connues plus TOUTES les
@@ -876,13 +940,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 <button className="trip-header-menu__item" onClick={() => { setShowSearch(true); setTripMenuOpen(false); }}>
                   🔍 Rechercher dans le voyage
                 </button>
-                <div className="trip-header-menu__divider" />
-                <button className="trip-header-menu__item" onClick={() => { onToggleDark(); setTripMenuOpen(false); }}>
-                  {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
-                </button>
-                <button className="trip-header-menu__item" onClick={() => { forceRefreshApp(); }}>
-                  🔄 Recharger l'app
-                </button>
+                {/* « Mode sombre » et « Recharger l'app » vivent sur l'accueil, à
+                    un geste d'ici : les répéter dans le menu du voyage en faisait
+                    13 entrées pour un menu qu'on ouvre en marchant (règle A2). */}
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
                   📝 Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
@@ -901,10 +961,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 {todayDay && (
                   <button className="trip-header-menu__item" onClick={() => {
                     setTripMenuOpen(false);
-                    setPioche(piocheGuidee(trip, todayDay, {
-                      position: geoReserve.position,
-                      meteoCode: weather?.byDate?.[todayDay.date]?.code,
-                    }));
+                    piocherMaintenant();
                   }}>
                     🎯 Que faire maintenant ?
                   </button>
@@ -915,7 +972,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     <span className="trip-header-menu__count">{ficheseIncompletes}</span>
                   )}
                 </button>
-                <button className="trip-header-menu__item" onClick={() => { setShowPlaceCheck(true); setTripMenuOpen(false); }}>
+                <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); ouvrirControleLieux(); }}>
                   📍 Vérifier les lieux
                   {analysePlaces.nouveaux > 0 && (
                     <span className="trip-header-menu__count">{analysePlaces.nouveaux}</span>
@@ -1053,7 +1110,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                   </strong>
                   <span>Loin de {trip.destination || 'la destination'} — sans doute une erreur d'import.</span>
                 </div>
-                <button className="place-alert__cta" onClick={() => setShowPlaceCheck(true)}>
+                <button className="place-alert__cta" onClick={ouvrirControleLieux}>
                   Vérifier
                 </button>
                 <button
@@ -1126,6 +1183,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
                 onDeplacerEntreJours={deplacerEntreJours}
+                onPiocher={todayDay ? piocherMaintenant : null}
+                ideesEnReserve={trip.reserve.length}
               />
             )}
 
@@ -1246,7 +1305,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
                         onChange={e => choisirTri(e.target.value)}>
-                        <option value="default">Ajout</option>
+                        {/* L'ordre de la liste, celui qu'on règle au doigt. « Ajout »
+                            se lisait comme le bouton « ajouter ». */}
+                        <option value="default">Mon ordre</option>
                         <option value="alpha">A–Z</option>
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
@@ -1681,9 +1742,13 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
         />
       )}
 
-      {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} />}
+      {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} onShowAuth={onShowAuth} />}
 
-      {showRecap && <TripRecap trip={trip} onClose={() => setShowRecap(false)} />}
+      {showRecap && (
+        <Suspense fallback={null}>
+          <TripRecap trip={trip} onClose={() => setShowRecap(false)} />
+        </Suspense>
+      )}
 
       {showDeleteTrip && (
         <ConfirmDialog
@@ -1724,7 +1789,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
         setSetting={setSetting}
         onAddDailyTemplate={addDailyTemplate}
         onRemoveDailyTemplate={removeDailyTemplate}
-        enableCollaboration={enableCollaboration}
         userId={userId}
         tripMembers={tripMembers}
         currentUserId={userId}
@@ -1743,8 +1807,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
       {/* Le pop-up de proposition porte déjà « Annuler l'ajout » : laisser le
           bandeau derrière afficherait deux fois la même sortie. */}
-      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
-        <span className="undo-toast__msg">{undoDone ? '↩ ' : ''}{undoMsg}</span>
+      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}${undoInfo ? ' undo-toast--info' : ''}`} role="status">
+        <span className="undo-toast__msg">{undoDone && !undoInfo ? '↩ ' : ''}{undoMsg}</span>
         {!undoDone && (
           <>
             <button className="undo-toast__btn" onClick={handleUndo}>↩ Annuler</button>

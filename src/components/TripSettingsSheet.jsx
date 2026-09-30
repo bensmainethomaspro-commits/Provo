@@ -1,5 +1,5 @@
 import { voyageSansVoyageur } from '../utils/helpers';
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { localiserHebergement } from '../utils/geocodeLodging';
 
 const TRIP_COLORS = [
@@ -22,7 +22,7 @@ const RECURRING_PRESETS = [
   { emoji: '🚗', title: 'Trajet du jour', category: 'trajet', durationHours: 1, durationMinutes: 0 },
 ];
 
-export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate, enableCollaboration, userId, tripMembers, currentUserId, onRemoveMember }) {
+export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip, settings, setSetting, onAddDailyTemplate, onRemoveDailyTemplate, userId, tripMembers, currentUserId, onRemoveMember }) {
   const [newName, setNewName] = useState('');
   // État de la localisation de l'hébergement : null tant qu'on n'a rien tenté,
   // puis 'recherche' | 'ok' | 'introuvable'.
@@ -49,42 +49,9 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
     setEtatLieu('ok');
   };
   const [newEmoji, setNewEmoji] = useState('😀');
-  const [inviteCode, setInviteCode] = useState(null);
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [linkingTravelerId, setLinkingTravelerId] = useState(null);
   const travelers = trip.tripTravelers || [];
   const dailyTemplates = trip.dailyTemplates || [];
-
-  const handleEnableCollaboration = useCallback(async () => {
-    if (!enableCollaboration) return;
-    setInviteLoading(true);
-    const code = await enableCollaboration(trip.id);
-    setInviteLoading(false);
-    if (code) setInviteCode(code);
-  }, [enableCollaboration, trip.id]);
-
-  const inviteLink = inviteCode ? `${window.location.origin}?invite=${inviteCode}` : null;
-
-  const handleCopy = async () => {
-    if (!inviteLink) return;
-    try {
-      await navigator.clipboard.writeText(inviteLink);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* fallback: share sheet */
-    }
-  };
-
-  const handleShare = () => {
-    if (!inviteLink) return;
-    if (navigator.share) {
-      navigator.share({ title: `Rejoins mon voyage "${trip.name}"`, url: inviteLink });
-    } else {
-      handleCopy();
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -205,7 +172,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                         <div className="traveler-chip-link-picker">
                           {availableMembers.length === 0 ? (
                             <span className="traveler-chip-link-picker__empty">
-                              Tous les comptes sont déjà associés — invitez d'autres membres via le lien de collaboration.
+                              Tous les comptes sont déjà associés. Pour en inviter d'autres : menu ⋯ › Partager.
                             </span>
                           ) : (
                             <select
@@ -258,36 +225,9 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
             </div>
           </div>
 
-          {/* Collaboration */}
-          {userId && (
-            <div className="settings-section">
-              <div className="settings-section__title">Collaboration</div>
-              <div className="settings-section__desc">Invite des amis à voir et modifier ce voyage en temps réel.</div>
-              {!inviteCode ? (
-                <button
-                  className="btn btn--primary btn--sm"
-                  onClick={handleEnableCollaboration}
-                  disabled={inviteLoading}
-                  style={{ marginTop: 8 }}
-                >
-                  {inviteLoading ? '…' : '🔗 Générer un lien d\'invitation'}
-                </button>
-              ) : (
-                <div className="collab-invite">
-                  <div className="collab-invite__link">{inviteLink}</div>
-                  <div className="collab-invite__actions">
-                    <button className="btn btn--primary btn--sm" onClick={handleShare}>
-                      📤 Partager
-                    </button>
-                    <button className="btn btn--secondary btn--sm" onClick={handleCopy}>
-                      {copied ? '✅ Copié !' : '📋 Copier'}
-                    </button>
-                  </div>
-                  <p className="collab-invite__note">Ce lien permet à n'importe qui de rejoindre ce voyage. Partage-le uniquement avec des personnes de confiance.</p>
-                </div>
-              )}
-            </div>
-          )}
+          {/* L'invitation vit dans « Partager » (menu ⋯) : un seul endroit pour une
+              seule intention. La liste des membres, elle, reste ici, avec les
+              voyageurs qu'elle sert à associer. */}
 
           {/* Color */}
           <div className="settings-section">

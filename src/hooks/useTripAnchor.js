@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { avecDelai, DELAI_FETCH_MS } from '../utils/reseau';
 
 // Point d'ancrage géographique d'un voyage : les coordonnées de sa DESTINATION.
 //
@@ -42,9 +43,10 @@ export async function geocodeDestination(destination) {
   if (cache[q]) { memory.set(q, cache[q]); return cache[q]; }
 
   try {
-    const r = await fetch(
+    const r = await avecDelai(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
       + `&format=json&limit=1&addressdetails=1`,
+      DELAI_FETCH_MS,
       { headers: { 'Accept-Language': 'fr' } }
     );
     if (!r.ok) return null;

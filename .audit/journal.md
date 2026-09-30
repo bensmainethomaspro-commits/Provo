@@ -104,6 +104,22 @@ Exemple de ligne, à supprimer :
 | A-048 | 2026-09-30 | Dette technique | Clos le jour même. `verif-lecture-lien.mjs` vérifie que le module partagé n'a ni `Deno.`, ni import, ni `fetch` : c'est le contrôle qui manquait, puisque le lint l'ignore. Et `npm run verif` enchaîne désormais les 15 suites hors réseau | Mineur | CORRIGÉ |
 | A-049 | 2026-09-30 | Fiabilité | Clos le jour même. `isClosedOnDate`, `expandDayRange` et `DAY_MAP` retirés de `helpers.js` : morts ensemble (grep), et `ouvertMaintenant` reste la seule lecture des horaires | Mineur | CORRIGÉ |
 | A-022 | 2026-09-30 | Méthode | Clos. `.audit/contexte.md.` supprimé à la main (la routine n'en a pas le droit) : copie ancienne de 176 lignes, dépassée par `contexte.md` | Mineur | CORRIGÉ |
+| A-051 | 2026-09-30 | Fiabilité | **Perte de données, reproduite.** `loadFromSupabase` REMPLAÇAIT chaque voyage local par la version du nuage, et il tourne au démarrage, sur `TOKEN_REFRESHED` et sur `SIGNED_IN`, qu'auth-js émet à chaque retour dans l'app (`_onVisibilityChanged` → `_recoverAndRefresh`). Une modification faite hors ligne était perdue au premier aller-retour par une autre app ; dans l'autre sens, l'écriture différée partie avant la lecture réécrivait le nuage avec une version périmée | Critique | CORRIGÉ |
+| A-052 | 2026-09-30 | Fiabilité | Au premier lancement, `clients.claim()` déclenchait `controllerchange`, donc un rechargement, alors que l'app avait déjà retiré de l'adresse le lien qui l'avait ouverte : `?invite=`, `?share=`, `?voyage=`, `?ajout=` perdus pour quiconque ouvrait Provo pour la première fois. Reproduit | Majeur | CORRIGÉ |
+| A-053 | 2026-09-30 | Fiabilité | `profiles` n'a pas de colonne `name` mais `display_name` : chaque publication du prénom échouait (`[Provo] Publication du profil refusée`), et `fetchTripMembers` ne rendait jamais le prénom des autres membres | Majeur | CORRIGÉ |
+| A-054 | 2026-09-30 | Fiabilité | `shared_trips` « collaboratif » était un instantané figé présenté comme « temps réel », et rouvrir son propre lien REMPLAÇAIT le voyage par cet instantané (perte de tout ce qui avait changé depuis, puis écrite dans le nuage) | Majeur | CORRIGÉ |
+| A-055 | 2026-09-30 | Performance et coûts | Chaque frappe resérialisait tous les voyages et réécrivait tout le stockage local : mesuré 239 ms par frappe (CPU ×4) avec un billet de 1,5 Mo joint, 33 ms après | Majeur | CORRIGÉ |
+| A-056 | 2026-09-30 | Performance et coûts | Service worker au nom de cache constant (`provo-v3`) : versions empilées sans purge, moteur OCR jamais renouvelé, `sw.js` identique d'un déploiement à l'autre. Et « Vider le cache » de l'écran d'erreur, hors ligne, rendait l'app inlançable | Mineur | CORRIGÉ |
+| A-057 | 2026-09-30 | Produit et UX | Barre de messages en thème sombre : texte à 3,39:1 (`--accent-deep` n'est pas un jeton de texte). Jamais mesuré : la barre n'est sur aucun écran de `/verif-ui` | Mineur | CORRIGÉ |
+| A-001 | 2026-09-30 | Sécurité | Clos. Migration `20260930_partage_securise.sql` appliquée et vérifiée en jouant `anon` et `authenticated` : plus de lecture en liste ni de réécriture, une copie se lit par son lien via `lire_voyage_partage` | Critique | CORRIGÉ |
+| A-003 | 2026-09-30 | Fiabilité | Clos. Dernier taux gardé sans limite ; sans taux, `eurAmount: null` + `tauxManquant`, converti à l'arrivée du taux ; source de secours pour les devises hors BCE ; `enEuros()` seule lecture. Deux parcours, rouges sur l'ancien code | Majeur | CORRIGÉ |
+| A-004 | 2026-09-30 | Sécurité | Clos. Seul le code du propriétaire fait entrer, et il change quand un membre est retiré (déclencheur `renouveler_invitation`) | Majeur | CORRIGÉ |
+| A-007 | 2026-09-30 | Sécurité | Clos. Déclencheur `garder_proprietaire` : `owner_id` ne change plus, vérifié (refus en 42501) | Mineur | CORRIGÉ |
+| A-012 | 2026-09-30 | Fiabilité | Clos côté client : `timeout` de 25 s sur les quatre `functions.invoke`, et `scripts/verif-delais.mjs` refuse tout appel réseau de `src/` sans délai. Le budget global côté fonction Edge reste ouvert | Majeur | CORRIGÉ (client) / PROPOSÉ (serveur) |
+| A-041 | 2026-09-30 | Performance et coûts | Clos. Icônes recompressées en palette : 1,3 Mo → 280 ko, écart moyen 1,6/255 par canal | Mineur | CORRIGÉ |
+| A-042 | 2026-09-30 | Fiabilité | Clos. Reproduit puis corrigé : le lien d'une notification se consomme en quittant le voyage | Majeur | CORRIGÉ |
+| A-043 | 2026-09-30 | Fiabilité | Clos. `.github/workflows/verif.yml` : build, suites, dette ESLint plafonnée, 87 parcours, sur chaque PR | Majeur | CORRIGÉ |
+| A-044 | 2026-09-30 | Sécurité | Toujours ouvert : la protection contre les mots de passe compromis est un réglage du tableau de bord (Authentication › Providers › Email), pas du SQL. Peut-être réservée aux offres payantes : à vérifier | Mineur | PROPOSÉ |
 
 ## Dernier audit effectif
 
@@ -245,3 +261,4 @@ numéros.
 | 2026-09-28 | STANDARD | Sécurité, Fiabilité, Performance et coûts | A-032 à A-036 |
 | 2026-09-29 | Regroupement | Sécurité, Fiabilité, Performance et coûts | A-039 à A-044, clôture d'A-033 à A-036 |
 | 2026-09-30 | LÉGER | Sécurité, Fiabilité | A-045 à A-050, clôture d'A-032 |
+| 2026-09-30 | Audit Pareto (session) | Tous axes, code et UX/UI | A-051 à A-057 ; clôture d'A-001, A-003, A-004, A-007, A-012 (client), A-041 à A-043 |

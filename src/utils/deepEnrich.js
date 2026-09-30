@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { DELAI_FONCTION_MS } from './reseau';
 
 /**
  * Enrichissement approfondi : ce que le site du lieu dit et qu'aucune base
@@ -98,6 +99,7 @@ async function appeler(activite) {
       website: activite.link || '',
       category: activite.category || '',
     },
+    timeout: DELAI_FONCTION_MS,
   });
   if (error) throw error;
   return data;

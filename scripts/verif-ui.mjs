@@ -450,6 +450,7 @@ const ECRANS = [
         f.enrichSig = `${f.title.trim().toLowerCase()}|${f.lat.toFixed(4)}|${f.lon.toFixed(4)}`;
         f.enrichAt = new Date().toISOString();
         localStorage.setItem('provo_trips', JSON.stringify(t));
+        sessionStorage.setItem('verif_garder', '1');
       });
       await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(900);
       await ouvrirVoyage(p); await onglet(p, /Réserve/i);
@@ -592,6 +593,11 @@ for (const theme of ['light', 'dark']) {
   // que deux exécutions donnent le même résultat.
   await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
   await p.addInitScript(([t, s, th]) => {
+    // Chaque écran repart du jeu de référence… sauf quand il vient de
+    // préparer lui-même le stockage et recharge pour le voir (« Réserve
+    // (introuvable) ») : réamorcé ici, son préparatif était effacé et l'écran
+    // n'était jamais atteint, et l'outil le disait en fin de rapport.
+    if (sessionStorage.getItem('verif_garder')) { sessionStorage.removeItem('verif_garder'); return; }
     localStorage.setItem('provo_trips', t);
     localStorage.setItem('provo_settings', s);
     localStorage.setItem('provo_theme', th);

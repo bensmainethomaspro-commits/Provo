@@ -17,6 +17,7 @@
  *    un forfait, c'est son affaire : l'app propose, chiffre le coût, et se tait
  *    si on refuse.
  */
+import { avecDelai, DELAI_FETCH_MS } from './reseau';
 
 const CACHE = 'provo-tiles-v1';
 const MODELE = (z, x, y) => `https://a.tile.openstreetmap.org/${z}/${x}/${y}.png`;
@@ -116,7 +117,7 @@ export async function telecharger(urls, { onProgres, arret } = {}) {
     await Promise.all(salve.map(async (u) => {
       try {
         if (await cache.match(u)) { obtenues++; return; }
-        const r = await fetch(u, { mode: 'cors' });
+        const r = await avecDelai(u, DELAI_FETCH_MS, { mode: 'cors' });
         if (r.ok) { await cache.put(u, r.clone()); obtenues++; }
       } catch { /* une tuile manquante ne casse rien */ }
     }));

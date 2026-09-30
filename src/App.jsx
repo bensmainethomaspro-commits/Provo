@@ -13,7 +13,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 const ONGLETS = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
 function AppInner() {
-  const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein } = useTripsContext();
+  const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein, aEnvoyer, envoiRefuse, renvoyer } = useTripsContext();
   const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
@@ -62,7 +62,7 @@ function AppInner() {
   // Une notification ouvre l'écran dont elle parle. Sans ça, « Léa a ajouté
   // « Dîner » — 52 € » ramenait à l'accueil, et il fallait retrouver soi-même
   // le voyage puis l'onglet : trois gestes pour lire une phrase de six mots.
-  const [pendingVoyage] = useState(() => {
+  const [pendingVoyage, setPendingVoyage] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const id = p.get('voyage');
     if (!id) return null;
@@ -126,7 +126,9 @@ function AppInner() {
     if (!pendingShareId) return;
     loadSharedTrip(pendingShareId)
       .then(tripId => navigate('trip', tripId))
-      .catch(() => alert('Voyage introuvable ou lien expiré.'));
+      // Dans le bandeau d'erreur de l'app, pas dans une alerte système qui
+      // bloque l'écran et ne dit pas quoi faire.
+      .catch(() => setInviteError('Cette copie de voyage est introuvable : demande un nouveau lien.'));
   }, []);
 
   // Gérer le lien d'invitation collaboration
@@ -157,6 +159,14 @@ function AppInner() {
   const ongletInitial = route.tripId && route.tripId === pendingVoyage?.id
     ? pendingVoyage.onglet : null;
 
+  // Le lien d'une notification se consomme en quittant le voyage : il restait
+  // posé, et l'effet ci-dessus renvoyait aussitôt dans le voyage : l'accueil
+  // devenait inatteignable jusqu'au redémarrage (audit A-042, reproduit).
+  const quitterVoyage = () => {
+    setPendingVoyage(null);
+    navigate('dashboard');
+  };
+
   const voyagesOuverts = (currentTrips || []);
 
   const handleImport = () => {
@@ -186,8 +196,23 @@ function AppInner() {
           ❌ {inviteError} <button onClick={() => setInviteError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
         </div>
       )}
-      {!isOnline && (
-        <div className="offline-banner">📡 Hors ligne — données sauvegardées localement</div>
+      {/* L'état de la synchro, dans le bandeau qui existait déjà (règle A7).
+          Il promettait « données sauvegardées localement » sans jamais dire
+          si elles étaient parties ; et un envoi refusé par le serveur ne
+          laissait qu'une trace dans la console. En ligne et sans refus, rien :
+          quelques centaines de millisecondes d'attente ne méritent pas un
+          bandeau qui clignote à chaque frappe. */}
+      {!isOnline ? (
+        <div className="offline-banner" role="status">
+          {aEnvoyer > 0
+            ? '📡 Hors ligne · tes modifications partiront au retour du réseau'
+            : '📡 Hors ligne · tout est gardé sur ce téléphone'}
+        </div>
+      ) : envoiRefuse && (
+        <div className="offline-banner offline-banner--alerte" role="alert">
+          ⚠️ Envoi refusé par le serveur · tes modifications restent sur ce téléphone
+          <button className="offline-banner__action" onClick={renvoyer}>Réessayer</button>
+        </div>
       )}
       {/* La pire panne possible : l'écriture locale échoue, et tout ce qui n'est
           pas encore parti chez Supabase disparaîtra au rechargement. Elle était
@@ -226,9 +251,9 @@ function AppInner() {
       )}
       {route.page === 'dashboard'
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
-        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
+        : <TripView tripId={route.tripId} onBack={quitterVoyage}
             lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)}
-            ongletInitial={ongletInitial} />
+            ongletInitial={ongletInitial} onShowAuth={() => setShowAuth(true)} />
       }
     </div>
   );

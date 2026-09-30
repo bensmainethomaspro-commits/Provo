@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { avecDelai } from '../utils/reseau';
 
 const WMO = {
   0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
@@ -49,7 +50,7 @@ export function useWeather(trip) {
 
       if ((!lat || !lon) && trip.destination?.trim()) {
         try {
-          const r = await fetch(
+          const r = await avecDelai(
             `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trip.destination)}&format=json&limit=1`
           );
           const d = await r.json();
@@ -79,7 +80,7 @@ export function useWeather(trip) {
           timezone: 'auto',
           start_date: trip.startDate, end_date: trip.endDate,
         });
-        const r = await fetch(`${base}?${params}`);
+        const r = await avecDelai(`${base}?${params}`);
         if (!r.ok || cancelled) return;
         const d = await r.json();
         if (!d.daily?.time) return;

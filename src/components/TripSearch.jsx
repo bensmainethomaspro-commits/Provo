@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { getCategoryMeta, getDayLabel, formatDateShort, formatPrice } from '../utils/helpers';
+import { getCategoryMeta, getDayLabel, formatDateShort, formatPrice, enEuros } from '../utils/helpers';
 
 // Recherche dans tout le voyage : activités des jours, réserve, dépenses, notes
 // et valise. Quand le planning est long, on retrouve une idée par son nom au
@@ -149,7 +149,7 @@ export default function TripSearch({ trip, onClose, onOpenDay, onOpenReserve, on
                 <span className="trip-search__row-emoji">💸</span>
                 <span className="trip-search__row-text">
                   <span className="trip-search__row-title">{e.description}</span>
-                  <span className="trip-search__row-sub">{formatPrice(e.eurAmount ?? e.amount)}</span>
+                  <span className="trip-search__row-sub">{e.tauxManquant ? `${e.amount} ${e.currency}` : formatPrice(enEuros(e))}</span>
                 </span>
                 <span className="trip-search__row-go" aria-hidden="true">›</span>
               </button>

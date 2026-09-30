@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useReorderDrag } from '../hooks/useReorderDrag';
+import { tempsRestant } from '../utils/piocheGuidee';
 import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts, nomDeLieu } from '../utils/helpers';
 
 // Déplacer une activité : UNE poignée ⠿ (réordonner dans le jour et changer de
@@ -116,7 +117,7 @@ function TlActivity({
   );
 }
 
-function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onEdit, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weather, passe, aujourdhui, refJour, onReordonner, reorder }) {
+function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserve, onEdit, onOpenDetail, onDrop, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weather, passe, aujourdhui, refJour, onReordonner, reorder, onPiocher, ideesEnReserve }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const active = day.activities.filter(a => a.status !== 'nogo');
   const slots = getTimeSlots(day.activities, day.startTime || '09:00');
@@ -126,6 +127,12 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
   // météo et les notes : un glyphe de plus, pas un bandeau.
   const soucis = getLogicAlerts(day.activities, slots)
     .filter(a => a.type === 'overload' || a.type === 'conflict');
+
+  // Le geste du voyage (piocher dans la Réserve au lieu de chercher), posé
+  // sur la carte d'aujourd'hui, là où l'on regarde, et seulement quand il a un
+  // sens : du temps libre (au moins une demi-heure) et des idées en Réserve.
+  // Sinon rien (règle D3). Il n'était que la 7e entrée d'un menu ⋯ de 13.
+  const libre = aujourdhui && onPiocher && ideesEnReserve > 0 && !compareMode ? tempsRestant(day) : 0;
 
   const handleDragOver = (e) => {
     if (compareMode) return;
@@ -213,11 +220,19 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
           ))
         )}
       </div>
+      {libre >= 30 && (
+        <button
+          className="tl-day__piocher"
+          onClick={(e) => { e.stopPropagation(); onPiocher(); }}
+        >
+          🎯 {formatDuration(libre)} de libre · piocher une idée
+        </button>
+      )}
     </div>
   );
 }
 
-export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, onEdit, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weatherByDate, onReordonner, onDeplacerEntreJours }) {
+export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, onMoveToReserve, onEdit, compareMode, compareSelectedIds, onToggleCompare, enVoiture, weatherByDate, onReordonner, onDeplacerEntreJours, onPiocher, ideesEnReserve = 0 }) {
   const wrapRef = useRef(null);
   // Un seul glissement pour toute la frise : borné à une journée, il ne pouvait
   // pas traverser, et déplacer une activité au lendemain passait par un menu.
@@ -272,6 +287,8 @@ export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, 
           refJour={i === idxAuj ? aujRef : undefined}
           onReordonner={onReordonner}
           reorder={reorder}
+          onPiocher={i === idxAuj ? onPiocher : null}
+          ideesEnReserve={ideesEnReserve}
         />
       ))}
     </div>

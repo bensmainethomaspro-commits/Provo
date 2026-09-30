@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { avecDelai } from '../utils/reseau';
 
 const CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -40,7 +41,7 @@ export function useLocalNews(destination, enabled = true) {
     const rssUrl = encodeURIComponent(
       `https://news.google.com/rss/search?q=${q}&hl=fr&gl=FR&ceid=FR:fr`
     );
-    fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}&count=6`)
+    avecDelai(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}&count=6`)
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (data?.status === 'ok' && data.items?.length) {
