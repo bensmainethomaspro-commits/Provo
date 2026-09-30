@@ -25,9 +25,44 @@ const PAUSE_MS = 1100;
 const pause = (ms) => new Promise(r => setTimeout(r, ms));
 let queue = Promise.resolve();
 
+// Aucun des trois appels de ce fichier n'avait de délai. Un `fetch` que le
+// navigateur ne règle jamais — bascule Wi-Fi/4G, portail captif d'hôtel, ce que
+// cette app rencontre en voyage — laissait donc `lookupPlace` en attente pour
+// toujours. Et comme la file n'avance qu'une fois la place libérée, UNE requête
+// coincée arrêtait la complétion automatique de TOUT le reste de la session,
+// sans un mot : les fiches ajoutées ensuite restaient vides. Le contrôle des
+// lieux, lui, restait figé sur « n / total », son bouton d'arrêt sans effet —
+// il n'est lu qu'entre deux fiches.
+//
+// Les budgets sont ceux que la fonction Edge applique déjà aux mêmes trois
+// services (`extract-place` : 9 s, 8 s ; Overpass annonce `timeout:20`).
+const DELAIS = { nominatim: 9000, photon: 8000, overpass: 20000 };
+
+// Au-delà, la requête est considérée comme perdue — ce que le `catch` de chaque
+// fonction fait déjà de toute réponse qui n'arrive pas.
+async function avecDelai(url, ms, init = {}) {
+  const ctrl = new AbortController();
+  const minuteur = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(minuteur);
+  }
+}
+
+// Ceinture et bretelles : si un appel échappait encore au délai, la file ne
+// doit pas rester bloquée pour la session. Le plafond ne coupe pas la requête
+// en cours — elle rendra son résultat à son propre appelant — il rend seulement
+// la place au suivant.
+const PLAFOND_FILE = 30000;
+
 function enfile(run) {
   const result = queue.then(run, run);
-  queue = result.then(() => pause(PAUSE_MS), () => pause(PAUSE_MS));
+  queue = new Promise((libere) => {
+    const minuteur = setTimeout(libere, PLAFOND_FILE);
+    const fini = () => { clearTimeout(minuteur); libere(); };
+    result.then(fini, fini);
+  }).then(() => pause(PAUSE_MS));
   return result;
 }
 
@@ -87,7 +122,7 @@ async function searchNominatim(query, lat = null, lon = null, nom = '') {
   try {
     const url = `${NOMINATIM}?q=${encodeURIComponent(query)}`
       + '&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5';
-    const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+    const res = await avecDelai(url, DELAIS.nominatim, { headers: { 'Accept-Language': 'fr' } });
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) return null;
@@ -135,7 +170,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '') {
   try {
     let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=fr`;
     if (lat != null && lon != null) url += `&lat=${lat}&lon=${lon}`;
-    const res = await fetch(url);
+    const res = await avecDelai(url, DELAIS.photon);
     if (!res.ok) return null;
     const data = await res.json();
     let p = null, best = -Infinity;
@@ -175,7 +210,7 @@ async function searchOverpass(name, lat, lon) {
   const safe = name.replace(/["\\]/g, ' ').replace(/[.*+?^${}()|[\]]/g, '.');
   const q = `[out:json][timeout:20];nwr["name"~"${safe}",i](around:25000,${lat},${lon});out tags center 8;`;
   try {
-    const res = await fetch(`${OVERPASS}?data=${encodeURIComponent(q)}`);
+    const res = await avecDelai(`${OVERPASS}?data=${encodeURIComponent(q)}`, DELAIS.overpass);
     if (!res.ok) return null;
     const data = await res.json();
     // Le premier élément rendu n'est pas le meilleur : on prend celui qui porte
@@ -241,7 +276,7 @@ export async function poiAtCoords(lat, lon, radius = 60) {
 
   const run = async () => {
     try {
-      const res = await fetch(`${OVERPASS}?data=${encodeURIComponent(q)}`);
+      const res = await avecDelai(`${OVERPASS}?data=${encodeURIComponent(q)}`, DELAIS.overpass);
       if (!res.ok) return null;
       const data = await res.json();
       const els = (data?.elements || []).filter(e => e.tags?.name);
