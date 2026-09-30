@@ -11,6 +11,7 @@
  * Tout est mis en cache localement : un jour férié ne change pas, et l'app
  * doit pouvoir le dire hors ligne, sur place, sans réseau.
  */
+import { avecDelai } from './reseau';
 
 const CLE = 'provo_feries';
 const BASE = 'https://date.nager.at/api/v3/PublicHolidays';
@@ -44,7 +45,7 @@ export async function chargerFeries(pays, annee) {
 
   const p = (async () => {
     try {
-      const r = await fetch(`${BASE}/${annee}/${code}`);
+      const r = await avecDelai(`${BASE}/${annee}/${code}`);
       if (!r.ok) return {};
       const d = await r.json();
       if (!Array.isArray(d)) return {};

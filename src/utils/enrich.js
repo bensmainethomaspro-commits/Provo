@@ -9,6 +9,7 @@
 // d'API, pas de fonction serveur à déployer.
 
 import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-lien.ts';
+import { avecDelai } from './reseau';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
@@ -41,16 +42,8 @@ let queue = Promise.resolve();
 const DELAIS = { nominatim: 9000, photon: 8000, overpass: 20000 };
 
 // Au-delà, la requête est considérée comme perdue — ce que le `catch` de chaque
-// fonction fait déjà de toute réponse qui n'arrive pas.
-async function avecDelai(url, ms, init = {}) {
-  const ctrl = new AbortController();
-  const minuteur = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
-  } finally {
-    clearTimeout(minuteur);
-  }
-}
+// fonction fait déjà de toute réponse qui n'arrive pas. `avecDelai` vivait ici
+// seulement ; il est dans `reseau.js`, et tout `src/` passe par lui.
 
 // Ceinture et bretelles : si un appel échappait encore au délai, la file ne
 // doit pas rester bloquée pour la session. Le plafond ne coupe pas la requête

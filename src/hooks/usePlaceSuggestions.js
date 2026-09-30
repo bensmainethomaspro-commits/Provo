@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { avecDelai } from '../utils/reseau';
 
 const cache = {};
 
@@ -22,7 +23,8 @@ export function usePlaceSuggestions(lat, lon, enabled = true) {
 
     const q = `[out:json][timeout:10];(node(around:3000,${lat},${lon})[tourism~"^(attraction|museum|viewpoint|gallery|artwork|theme_park|zoo|aquarium)$"];node(around:3000,${lat},${lon})[amenity~"^(restaurant|cafe|bar|theatre|cinema|nightclub)$"];);out 20;`;
 
-    fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`)
+    // Overpass est lent quand il est chargé : 20 s, comme dans enrich.js.
+    avecDelai(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`, 20000)
       .then(r => r.json())
       .then(data => {
         const places = (data.elements || [])

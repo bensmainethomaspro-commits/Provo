@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
+import { avecDelai, DELAI_FETCH_MS, DELAI_FONCTION_MS } from './reseau';
 
 // Server-side extractor (Supabase Edge Function "extract-place").
 // Resolves short links (TikTok / Google Maps) and returns structured place
@@ -12,6 +13,10 @@ export async function extractViaEdge(url, destination = '') {
       // lieu à partir du seul lien. Facultative : sans elle il cherche quand
       // même, il tranche juste moins bien.
       body: { url, ...(destination ? { destination } : {}) },
+      // Au pire, la fonction enchaîne plus d'une minute d'appels (audit
+      // A-012) : au-delà de 25 s on rend la main, et la fiche se complète à
+      // la main ou plus tard.
+      timeout: DELAI_FONCTION_MS,
     });
     if (error) return null;
     if (data?.ok && data.result && (data.result.title || data.result.lat != null)) {
@@ -42,6 +47,7 @@ export async function lireLegende(texte, destination = '') {
       // Même raison que pour un lien : le lieu lu dans la légende se cherche
       // autour de la destination, pas n'importe où dans le monde.
       body: { texte, ...(destination ? { destination } : {}) },
+      timeout: DELAI_FONCTION_MS,
     });
     if (error || !data?.ok || !data.result?.title) return null;
     const autres = Array.isArray(data.autres) ? data.autres.filter(a => a?.title) : [];
@@ -148,7 +154,7 @@ function _hashtagCandidates(caption) {
 // Géocodage strict (vraies villes / régions / sites uniquement) pour les hashtags.
 async function _geocodeStrict(query) {
   try {
-    const r = await fetch(
+    const r = await avecDelai(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&limit=1`
     );
     if (!r.ok) return null;
@@ -180,7 +186,7 @@ export async function extractPlaceClient(url) {
     }
     let caption = '', author = '', thumb = '';
     try {
-      const r = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(target)}`);
+      const r = await avecDelai(`https://www.tiktok.com/oembed?url=${encodeURIComponent(target)}`);
       if (r.ok) { const d = await r.json(); caption = d.title || ''; author = d.author_name || ''; thumb = d.thumbnail_url || ''; }
     } catch { /* ignore */ }
     const loc = _locationHint(caption);
@@ -504,7 +510,7 @@ function extractCoordsFromHtml(html) {
 }
 
 async function reverseGeocode(lat, lon) {
-  const r = await fetch(
+  const r = await avecDelai(
     `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&extratags=1`
   );
   if (!r.ok) return null;
@@ -538,7 +544,7 @@ async function reverseGeocode(lat, lon) {
   const wikiKey = wikiLangMatch ? wikiRaw.slice(wikiLangMatch[0].length) : wikiRaw;
   if (wikiKey) {
     try {
-      const wRes = await fetch(`https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`);
+      const wRes = await avecDelai(`https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`);
       if (wRes.ok) { const w = await wRes.json(); photoUrl = w.thumbnail?.source?.replace(/\/\d+px-/, '/600px-') || null; }
     } catch {}
   }
@@ -908,7 +914,7 @@ export async function searchPlaces(query, { limit = 5, lat = null, lon = null } 
   try {
     let purl = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}&lang=fr`;
     if (situe) purl += `&lat=${lat}&lon=${lon}`;
-    const res = await fetch(purl);
+    const res = await avecDelai(purl);
     if (res.ok) {
       const data = await res.json();
       out = (data?.features || []).map(_shapePhoton).filter(r => r.title);
@@ -928,7 +934,7 @@ export async function searchPlaces(query, { limit = 5, lat = null, lon = null } 
       url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
     }
     try {
-      const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+      const res = await avecDelai(url, DELAI_FETCH_MS, { headers: { 'Accept-Language': 'fr' } });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) out = [...data.map(_shapeNominatim), ...out];
@@ -948,7 +954,7 @@ export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
     const d = 0.7;
     url += `&viewbox=${lon - d},${lat + d},${lon + d},${lat - d}`;
   }
-  const res = await fetch(url, { headers: { 'Accept-Language': 'fr' } });
+  const res = await avecDelai(url, DELAI_FETCH_MS, { headers: { 'Accept-Language': 'fr' } });
   // Nominatim limite à une requête par seconde et répond alors 429 avec un
   // corps qui n'est pas du JSON : sans ce contrôle, `res.json()` lève et
   // l'échec ressort en exception au lieu du `null` que tous les appelants
@@ -977,7 +983,7 @@ export async function fetchPlaceData(query, { lat = null, lon = null } = {}) {
   const wikiKey = wikiLangMatch ? wikiRaw.slice(wikiLangMatch[0].length) : wikiRaw;
   if (wikiKey) {
     try {
-      const wRes = await fetch(
+      const wRes = await avecDelai(
         `https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiKey)}`
       );
       if (wRes.ok) {
@@ -1257,6 +1263,7 @@ export async function lireReservation(texte) {
   try {
     const { data, error } = await supabase.functions.invoke('read-booking', {
       body: { texte },
+      timeout: DELAI_FONCTION_MS,
     });
     if (error) return { error: 'appel_impossible' };
     return data || { error: 'reponse_vide' };
