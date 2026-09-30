@@ -1679,6 +1679,16 @@ const PARCOURS = [
       const appelsDeux = t.appels().enrichPlace || 0;
       t.verifier('le second passage ne redépense rien', appelsDeux === appelsUn,
         `${appelsUn} puis ${appelsDeux}`);
+      // Et la Réserve le dit : « introuvable en ligne », plus « à compléter »
+      // sur une fiche qu'on vient de chercher en vain.
+      await t.onglet(/Réserve/i);
+      await t.p.waitForTimeout(600);
+      const vue = await t.p.evaluate(() => document.querySelector('.tab-content')?.innerText || '');
+      t.verifier('la Réserve dit « introuvable en ligne »', /introuvables? en ligne/.test(vue));
+      const reserveMarquee = v.reserve.filter(a => a?.enrichAt).length;
+      const aCompleter = (vue.match(/infos? à compléter/g) || []).length;
+      t.verifier('« à compléter » ne reste que sur les fiches jamais cherchées',
+        aCompleter <= v.reserve.length - reserveMarquee, `${aCompleter} restant(s), ${reserveMarquee} fouillée(s)`);
     } },
 
   { groupe: 'Réseau', nom: "Compléter hors ligne ne marque rien", depart: 'voyage',

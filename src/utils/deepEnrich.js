@@ -45,6 +45,15 @@ function aRevoir(a, maintenant) {
 }
 
 /**
+ * Cette fiche a-t-elle déjà été cherchée en ligne, récemment, telle qu'elle
+ * est ? Si oui, ce qui lui manque encore n'existe pas en ligne : le dire,
+ * plutôt que d'offrir une recherche qui retrouvera le même vide.
+ */
+export function dejaFouillee(a, maintenant = Date.now()) {
+  return !!a && !aRevoir(a, maintenant);
+}
+
+/**
  * Les fiches qui gagneraient à être fouillées : il leur manque quelque chose,
  * et on ne l'a pas déjà cherché récemment. Aucune requête — c'est du tri local.
  *

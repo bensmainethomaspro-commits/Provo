@@ -34,7 +34,7 @@ import TripDocuments from '../components/TripDocuments';
 import { aProposer as carteAProposer, telecharger as telechargerCarte } from '../utils/carteHorsLigne';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
-import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches } from '../utils/deepEnrich';
+import { enrichirEnProfondeur, aEnrichir, fouillerLesFiches, dejaFouillee } from '../utils/deepEnrich';
 
 // Leaflet (~150 KB) is only fetched when the Carte tab is actually opened.
 const MapView = lazy(() => import('../components/MapView'));
@@ -1429,7 +1429,21 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                                 {auteurDe(activity.proposePar)}
                               </span>
                             )}
-                            {m.length > 0 && (
+                            {/* Déjà cherché, rien trouvé : relancer la
+                                recherche retrouverait le même vide. On le
+                                dit, et le geste ouvre la fiche pour remplir
+                                à la main. */}
+                            {m.length > 0 && dejaFouillee(activity) && !completionEnCours.has(activity.id) && (
+                              <button
+                                type="button"
+                                className="reserve-etat__manque reserve-etat__manque--introuvable"
+                                title="Déjà cherché en ligne sans résultat — toucher pour compléter à la main"
+                                onClick={(e) => { e.stopPropagation(); setEditingActivity({ activity, location: { type: 'reserve' } }); }}
+                              >
+                                {`${m.join(', ')} introuvable${m.length > 1 ? 's' : ''} en ligne`}
+                              </button>
+                            )}
+                            {m.length > 0 && (!dejaFouillee(activity) || completionEnCours.has(activity.id)) && (
                               <button
                                 type="button"
                                 className="reserve-etat__manque"

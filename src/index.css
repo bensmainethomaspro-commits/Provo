@@ -7157,6 +7157,13 @@ button.budget-inline:active { transform: scale(0.98); }
    point de séparation, qui se lit alors comme une coquille. */
 .activity-card__meta > .activity-card__address,
 .activity-card__meta > .reserve-etat__manque { flex-basis: 100%; }
+/* Cherché, rien trouvé : une information, pas un appel à l'action. */
+.reserve-etat__manque--introuvable {
+  font-style: italic; text-decoration: none; color: var(--text-muted);
+  /* Une phrase de plusieurs mots : elle se lit à gauche, comme l'adresse,
+     et peut passer à la ligne. */
+  white-space: normal; text-align: left; margin-left: 0; justify-content: flex-start;
+}
 
 /* Pas de point de séparation devant les mentions d'état : la ligne de méta est
    étroite, elles passent souvent à la ligne suivante, et le point se

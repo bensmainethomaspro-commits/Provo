@@ -438,6 +438,26 @@ const ECRANS = [
   { nom: 'Carte', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Carte/i); await p.waitForTimeout(1200); } },
   // Le repère des distances (septembre 2026) : le sélecteur de la Réserve,
   // et les cercles de 1, 2 et 3 km avec leur bandeau sur la Carte.
+  // « Cherché, rien trouvé » (septembre 2026) : une fiche déjà fouillée dit
+  // ce qui est introuvable en ligne, en gris, au lieu de « à compléter ».
+  {
+    nom: 'Réserve (introuvable)',
+    repere: '.reserve-etat__manque--introuvable',
+    aller: async (p) => {
+      await p.evaluate(() => {
+        const t = JSON.parse(localStorage.getItem('provo_trips'));
+        const f = t[0].reserve.find(a => a.id === 'r2');
+        f.enrichSig = `${f.title.trim().toLowerCase()}|${f.lat.toFixed(4)}|${f.lon.toFixed(4)}`;
+        f.enrichAt = new Date().toISOString();
+        localStorage.setItem('provo_trips', JSON.stringify(t));
+      });
+      await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(900);
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('[aria-label="Afficher en liste, réordonnable"]').first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(500);
+      await p.locator('.reserve-etat__manque--introuvable').first().scrollIntoViewIfNeeded().catch(() => {});
+    },
+  },
   {
     nom: 'Réserve (depuis)',
     repere: '.reserve-depuis',
