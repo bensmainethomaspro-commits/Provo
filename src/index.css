@@ -1230,6 +1230,18 @@ body {
   font-size: var(--t-sm); padding: 16px 0;
 }
 
+/* « 2h30 de libre · piocher une idée » : la seule action de la carte du jour.
+   Fond plein en --accent-deep, qui reçoit du blanc (--accent ne porte aucun
+   texte : 2,72:1). 44 px, pleine largeur, sous la dernière activité. */
+.tl-day__piocher {
+  display: block; width: calc(100% - 16px); margin: 4px 8px 8px;
+  min-height: 44px; padding: 0 12px;
+  border: 0; border-radius: var(--radius-md);
+  background: var(--accent-deep); color: #fff;
+  font: inherit; font-size: var(--t-sm); font-weight: 600;
+  cursor: pointer;
+}
+
 .tl-activity {
   border-left: 3px solid var(--cat-color, var(--orange));
   border-radius: var(--radius-xs);
@@ -4709,6 +4721,12 @@ body {
   -webkit-backdrop-filter: blur(6px);
 }
 .today-act__emoji { font-size: var(--t-md); flex-shrink: 0; }
+/* L'heure d'abord : c'est elle qui dit « et maintenant ? ». Chiffres de
+   largeur égale, pour que les titres s'alignent. */
+.today-act__heure {
+  font-size: var(--t-sm); font-weight: 600; flex-shrink: 0;
+  font-variant-numeric: tabular-nums; min-width: 3.1em;
+}
 .today-act__title {
   font-size: var(--t-sm);
   font-weight: 600;
@@ -6276,7 +6294,12 @@ button.budget-inline:active { transform: scale(0.98); }
   padding: 4px 2px; flex-shrink: 0; line-height: 1;
 }
 .undo-toast--done { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.undo-toast--done .undo-toast__msg { color: var(--accent-deep, var(--accent)); font-weight: 600; }
+/* --accent-texte, pas --accent-deep : ce dernier reçoit du blanc, il n'est pas
+   du texte. Sur le fond sombre de la barre, il tombait à 3,39:1 (mesuré). */
+.undo-toast--done .undo-toast__msg { color: var(--accent-texte, var(--accent-deep)); font-weight: 600; }
+/* Un message d'information est une phrase, pas « Action annulée » : il passe
+   à la ligne dans la largeur de l'écran au lieu de déborder des deux côtés. */
+.undo-toast--info { white-space: normal; width: calc(100% - 32px); max-width: 448px; text-align: center; }
 
 /* ─── TIMELINE : déplacer vers un autre jour ─────────────── */
 /* Le glisser reste possible (appui long), mais choisir un jour d'un tap ne

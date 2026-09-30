@@ -9,7 +9,6 @@ import CompareModal from '../components/CompareModal';
 import TimelineView from '../components/TimelineView';
 import AgendaView from '../components/AgendaView';
 import PackingList from '../components/PackingList';
-import { forceRefreshApp } from '../components/RefreshButton';
 import TripRecap from '../components/TripRecap';
 import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
@@ -46,7 +45,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
+export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -199,6 +198,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
+  // Un message sans action à annuler (« demande le réseau »…).
+  const [undoInfo, setUndoInfo] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
   // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
@@ -286,6 +287,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     undoRef.current = snapshot;
     setUndoMsg(msg);
     setUndoDone(false);
+    setUndoInfo(false);
     setUndoVisible(true);
     clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => { setUndoVisible(false); undoRef.current = null; }, 6000);
@@ -312,6 +314,16 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     setUndoMsg('Action annulée');
     clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setUndoVisible(false), 1800);
+  };
+
+  const informer = (msg) => {
+    undoRef.current = null;
+    setUndoMsg(msg);
+    setUndoDone(true);
+    setUndoInfo(true);
+    setUndoVisible(true);
+    clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoVisible(false), 3500);
   };
 
   const dismissUndo = () => {
@@ -442,16 +454,33 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     return trip.days.find(d => d.date === todayStr) || null;
   })();
 
+  // « Que faire maintenant ? » : du menu ⋯, et de la carte du jour quand il
+  // reste du temps libre (TimelineView). Une seule fonction pour les deux.
+  const piocherMaintenant = () => {
+    if (!todayDay) return;
+    setPioche(piocheGuidee(trip, todayDay, {
+      position: geoReserve.position,
+      meteoCode: weather?.byDate?.[todayDay.date]?.code,
+    }));
+  };
+
   // Compte à rebours avant le départ, et brief de la veille pour la journée
   // de demain (activités, heure de départ, pluie éventuelle).
   const { daysUntil, tomorrow } = (() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const maintenant = new Date();
+    const now = new Date(maintenant); now.setHours(0, 0, 0, 0);
     const start = new Date(trip.startDate + 'T00:00:00');
     const diff = Math.round((start - now) / 86400000);
     const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
     const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
     const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
-    return { daysUntil: isPast ? -1 : diff, tomorrow: day };
+    // Le brief de demain occupait le haut du Planning TOUTE la journée — au
+    // jour 1 à 11 h, le premier bloc de l'écran qui doit répondre « qu'est-ce
+    // que je fais maintenant ? » parlait du lendemain. Il revient le soir (le
+    // rappel « c'est demain » part à 18 h), ou toute la veille du départ,
+    // quand aujourd'hui n'est pas encore un jour du voyage.
+    const veille = !todayDay || maintenant.getHours() >= 17;
+    return { daysUntil: isPast ? -1 : diff, tomorrow: veille ? day : null };
   })();
 
   // ─── Itinéraire optimisé ──────────────────────────────────────────────────
@@ -671,7 +700,23 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
   // L'agent ne travaillait qu'à l'ajout. Or une information se périme : un
   // restaurant change ses horaires, un musée ses tarifs. On repasse donc sur
   // l'existant — à la demande, et jamais sans montrer ce qu'on a trouvé.
+  // Compléter les fiches et vérifier les lieux interrogent des services en
+  // ligne. Lancés hors ligne, ils affichaient une progression normale
+  // (« Vérification de… 2/8 ») pendant que chaque recherche échouait. La
+  // raison, d'une phrase, dans la barre de messages qui existe déjà (A8).
+  const demandeLeReseau = (quoi) => {
+    if (navigator.onLine) return false;
+    informer(`📡 ${quoi} demande le réseau : réessaie une fois connecté.`);
+    return true;
+  };
+
+  const ouvrirControleLieux = () => {
+    if (demandeLeReseau('Vérifier les lieux')) return;
+    setShowPlaceCheck(true);
+  };
+
   const fouiller = async () => {
+    if (demandeLeReseau('Compléter les fiches')) return;
     const liste = aEnrichir(tripRef.current);
     if (!liste.length) return;
     const ctrl = new AbortController();
@@ -892,13 +937,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 <button className="trip-header-menu__item" onClick={() => { setShowSearch(true); setTripMenuOpen(false); }}>
                   🔍 Rechercher dans le voyage
                 </button>
-                <div className="trip-header-menu__divider" />
-                <button className="trip-header-menu__item" onClick={() => { onToggleDark(); setTripMenuOpen(false); }}>
-                  {darkMode ? '☀️ Mode clair' : '🌙 Mode sombre'}
-                </button>
-                <button className="trip-header-menu__item" onClick={() => { forceRefreshApp(); }}>
-                  🔄 Recharger l'app
-                </button>
+                {/* « Mode sombre » et « Recharger l'app » vivent sur l'accueil, à
+                    un geste d'ici : les répéter dans le menu du voyage en faisait
+                    13 entrées pour un menu qu'on ouvre en marchant (règle A2). */}
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
                   📝 Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
@@ -917,10 +958,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 {todayDay && (
                   <button className="trip-header-menu__item" onClick={() => {
                     setTripMenuOpen(false);
-                    setPioche(piocheGuidee(trip, todayDay, {
-                      position: geoReserve.position,
-                      meteoCode: weather?.byDate?.[todayDay.date]?.code,
-                    }));
+                    piocherMaintenant();
                   }}>
                     🎯 Que faire maintenant ?
                   </button>
@@ -931,7 +969,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                     <span className="trip-header-menu__count">{ficheseIncompletes}</span>
                   )}
                 </button>
-                <button className="trip-header-menu__item" onClick={() => { setShowPlaceCheck(true); setTripMenuOpen(false); }}>
+                <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); ouvrirControleLieux(); }}>
                   📍 Vérifier les lieux
                   {analysePlaces.nouveaux > 0 && (
                     <span className="trip-header-menu__count">{analysePlaces.nouveaux}</span>
@@ -1069,7 +1107,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                   </strong>
                   <span>Loin de {trip.destination || 'la destination'} — sans doute une erreur d'import.</span>
                 </div>
-                <button className="place-alert__cta" onClick={() => setShowPlaceCheck(true)}>
+                <button className="place-alert__cta" onClick={ouvrirControleLieux}>
                   Vérifier
                 </button>
                 <button
@@ -1142,6 +1180,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                 weatherByDate={weather?.byDate}
                 onReordonner={reordonnerJour}
                 onDeplacerEntreJours={deplacerEntreJours}
+                onPiocher={todayDay ? piocherMaintenant : null}
+                ideesEnReserve={trip.reserve.length}
               />
             )}
 
@@ -1262,7 +1302,9 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
                         onChange={e => choisirTri(e.target.value)}>
-                        <option value="default">Ajout</option>
+                        {/* L'ordre de la liste, celui qu'on règle au doigt. « Ajout »
+                            se lisait comme le bouton « ajouter ». */}
+                        <option value="default">Mon ordre</option>
                         <option value="alpha">A–Z</option>
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
@@ -1758,8 +1800,8 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
 
       {/* Le pop-up de proposition porte déjà « Annuler l'ajout » : laisser le
           bandeau derrière afficherait deux fois la même sortie. */}
-      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}`} role="status">
-        <span className="undo-toast__msg">{undoDone ? '↩ ' : ''}{undoMsg}</span>
+      <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}${undoInfo ? ' undo-toast--info' : ''}`} role="status">
+        <span className="undo-toast__msg">{undoDone && !undoInfo ? '↩ ' : ''}{undoMsg}</span>
         {!undoDone && (
           <>
             <button className="undo-toast__btn" onClick={handleUndo}>↩ Annuler</button>

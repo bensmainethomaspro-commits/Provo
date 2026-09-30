@@ -1433,8 +1433,10 @@ const PARCOURS = [
   { groupe: 'Transverse', nom: 'Le mode sombre s\'applique partout', depart: 'voyage',
     intention: "Basculer en sombre le soir sans écran illisible.",
     async faire(t) {
+      // Le bouton vit sur l'accueil : le menu ⋯ du voyage le répétait, il ne
+      // le fait plus (13 entrées, c'était trop pour un menu ouvert en marchant).
+      await t.clic('button[aria-label^="Passer en mode"]', { delai: 400 });
       await t.ouvrirVoyage();
-      await t.menu(/Mode sombre|Mode clair/);
       const theme = await t.p.evaluate(() => document.documentElement.getAttribute('data-theme'));
       t.verifier('le thème change', !!theme, theme);
       const clairsEnSombre = await t.p.evaluate(() => {
@@ -2323,6 +2325,36 @@ const PARCOURS = [
           return [...document.querySelectorAll('.trip-header-menu__item')]
             .some(b => /Que faire maintenant/i.test(b.innerText));
         }));
+    } },
+
+  // L'heure est FIXÉE (horloge simulée) : un parcours ne dépend jamais de
+  // l'heure qu'il est vraiment — sinon il rougit à midi et passe le matin.
+  { groupe: 'Planning', nom: "À 11 h le jour J, le Planning parle d'aujourd'hui", depart: 'voyage',
+    intention: "Ouvrir le Planning en pleine journée : voir de quoi est fait AUJOURD'HUI, "
+      + "et pouvoir piocher une idée dans le temps libre, d'un geste.",
+    async faire(t) {
+      await t.p.clock.setFixedTime(new Date(`${jour(0)}T11:00:00`));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      t.verifier('pas de brief de demain en tête du Planning', !(await t.visible('.tomorrow-banner')));
+      const piocher = t.p.locator('.tl-day__piocher');
+      const texte = (await piocher.first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('la carte du jour propose de piocher, temps libre chiffré',
+        /de libre/.test(texte), texte || '(absent)');
+      await t.clic('.tl-day__piocher', { delai: 700 });
+      t.verifier('la pioche s’ouvre, pas le détail du jour',
+        (await t.visible('.sheet--pioche')) && !(await t.visible('.day-detail-overlay')));
+    } },
+
+  { groupe: 'Planning', nom: 'Le soir, le brief de demain revient', depart: 'voyage',
+    intention: "Préparer le lendemain en fin de journée : combien d'activités, départ à quelle heure.",
+    async faire(t) {
+      await t.p.clock.setFixedTime(new Date(`${jour(0)}T18:30:00`));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      t.verifier('le brief de demain est là', await t.visible('.tomorrow-banner'));
     } },
 
 ];

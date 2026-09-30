@@ -251,7 +251,7 @@ function AppInner() {
       )}
       {route.page === 'dashboard'
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
-        : <TripView tripId={route.tripId} onBack={quitterVoyage} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
+        : <TripView tripId={route.tripId} onBack={quitterVoyage}
             lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)}
             ongletInitial={ongletInitial} onShowAuth={() => setShowAuth(true)} />
       }

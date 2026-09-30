@@ -6,7 +6,7 @@ import TripPreviewSheet from '../components/TripPreviewSheet';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AccountSheet from '../components/AccountSheet';
-import { getCategoryMeta, formatDate } from '../utils/helpers';
+import { getCategoryMeta, formatDate, getTimeSlots } from '../utils/helpers';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 function todayStr() {
@@ -45,6 +45,20 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   });
   const activeTodayDay = activeTrip?.days.find(d => d.date === today);
   const activeDayIdx = activeTrip ? Math.round((todayDate - new Date(activeTrip.startDate + 'T00:00:00')) / 86400000) : -1;
+  // Ce qui VIENT aujourd'hui, avec l'heure : la carte listait les quatre
+  // premières activités dans l'ordre, sans heure, celles déjà faites comprises
+  // — à 15 h, elle montrait encore le musée du matin. Ce qui est coché, annulé
+  // ou déjà fini sort ; ce qui reste répond à « et maintenant ? ».
+  const aVenirAujourdhui = (() => {
+    if (!activeTodayDay) return [];
+    const slots = getTimeSlots(activeTodayDay.activities, activeTodayDay.startTime || '09:00');
+    const h = new Date();
+    const maintenant = `${String(h.getHours()).padStart(2, '0')}:${String(h.getMinutes()).padStart(2, '0')}`;
+    return activeTodayDay.activities
+      .filter(a => a.status !== 'done' && a.status !== 'nogo')
+      .filter(a => !slots[a.id]?.end || slots[a.id].end > maintenant)
+      .map(a => ({ a, debut: slots[a.id]?.start || null }));
+  })();
 
   const isEmpty = currentTrips.length === 0 && pastTrips.length === 0;
 
@@ -108,7 +122,8 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
         <div className="dashboard__search">
           <input
             className="dashboard__search-input"
-            placeholder="🔍 Rechercher un voyage ou une activité…"
+            placeholder="🔍 Voyage ou activité…"
+            aria-label="Rechercher un voyage ou une activité"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -131,20 +146,21 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
             <div className="today-hero__activities">
               {activeTodayDay.activities.length === 0
                 ? <span className="today-hero__empty">Aucune activité planifiée aujourd'hui</span>
-                : activeTodayDay.activities.slice(0, 4).map(a => {
-                    const meta = getCategoryMeta(a.category);
-                    return (
-                      <div key={a.id} className={`today-act today-act--${a.status}`}>
-                        <span className="today-act__emoji">{meta.emoji}</span>
-                        <span className="today-act__title">{a.title}</span>
-                        {a.status === 'done' && <span className="today-act__done">✅</span>}
-                        {a.status === 'nogo' && <span className="today-act__done">❌</span>}
-                      </div>
-                    );
-                  })
+                : aVenirAujourdhui.length === 0
+                  ? <span className="today-hero__empty">🎉 Plus rien au programme aujourd'hui</span>
+                  : aVenirAujourdhui.slice(0, 4).map(({ a, debut }) => {
+                      const meta = getCategoryMeta(a.category);
+                      return (
+                        <div key={a.id} className={`today-act today-act--${a.status}`}>
+                          {debut && <span className="today-act__heure">{debut}</span>}
+                          <span className="today-act__emoji">{meta.emoji}</span>
+                          <span className="today-act__title">{a.title}</span>
+                        </div>
+                      );
+                    })
               }
-              {activeTodayDay.activities.length > 4 && (
-                <div className="today-hero__more">+{activeTodayDay.activities.length - 4} autres →</div>
+              {aVenirAujourdhui.length > 4 && (
+                <div className="today-hero__more">+{aVenirAujourdhui.length - 4} autres →</div>
               )}
             </div>
           </div>
