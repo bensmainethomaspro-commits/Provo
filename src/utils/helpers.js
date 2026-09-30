@@ -1142,60 +1142,6 @@ export function detectCountryTheme(destination) {
   return null;
 }
 
-// ─── Opening hours check ──────────────────────────────────
-const DAY_MAP = { mo: 1, tu: 2, we: 3, th: 4, fr: 5, sa: 6, su: 0, ph: null };
-
-export function isClosedOnDate(openingHours, dateStr) {
-  if (!openingHours) return false;
-  try {
-    const date = new Date(dateStr + 'T00:00:00');
-    const dow = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
-    const raw = openingHours.toLowerCase();
-    // Check for "closed" keyword
-    if (/\bclosed\b|fermé/i.test(raw)) return true;
-    // Parse "Tu-Su 10:00-18:00" or "Mo,We,Fr 09:00-17:00"
-    const rules = raw.split(';').map(r => r.trim()).filter(Boolean);
-    for (const rule of rules) {
-      // Day range like "Mo-Fr" or single "Sa"
-      const parts = rule.split(/\s+/);
-      const dayPart = parts[0];
-      const timePart = parts.slice(1).join('');
-      if (!timePart || /off|closed/.test(timePart)) {
-        // Check if this day is marked off
-        const days = expandDayRange(dayPart);
-        if (days.includes(dow)) return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function expandDayRange(dayPart) {
-  const days = [];
-  const segments = dayPart.split(',');
-  for (const seg of segments) {
-    const rangeParts = seg.trim().split('-');
-    if (rangeParts.length === 2) {
-      const start = DAY_MAP[rangeParts[0].trim()];
-      const end = DAY_MAP[rangeParts[1].trim()];
-      if (start != null && end != null) {
-        // Walk through the range (Mo=1..Su=0 wrapping)
-        const order = [1,2,3,4,5,6,0];
-        const si = order.indexOf(start);
-        const ei = order.indexOf(end);
-        if (si <= ei) days.push(...order.slice(si, ei + 1));
-        else days.push(...order.slice(si), ...order.slice(0, ei + 1));
-      }
-    } else {
-      const d = DAY_MAP[seg.trim()];
-      if (d != null) days.push(d);
-    }
-  }
-  return days;
-}
-
 // ─── Site-specific URL parsers ────────────────────────────
 function parseBookingUrl(url) {
   try {

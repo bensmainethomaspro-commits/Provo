@@ -93,5 +93,13 @@ reponses = {
 r = await lookupPlace('Demel', 'Vienne', VIENNE);
 v('Demel avec ses horaires', r?.openingHours === 'Mo-Su 09:00-19:00' && r.address.startsWith('14 Kohlmarkt'), J(r));
 
+console.log('\n7 · Un échec est retenu dix minutes : pas sept appels de plus');
+reponses = {};
+r = await lookupPlace('Lieu Introuvable Xyz', 'Vienne', VIENNE);
+const avant = appels.length;
+const r2 = await lookupPlace('Lieu Introuvable Xyz', 'Vienne', VIENNE);
+v('rien trouvé la première fois', r === null);
+v('la seconde demande ne rappelle aucun service', r2 === null && appels.length === avant, `${appels.length - avant} appel(s)`);
+
 console.log(`\n${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);

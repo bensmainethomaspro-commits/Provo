@@ -332,7 +332,11 @@ async function resolvePlace(
   if (name) {
     const queries = city ? [`${name}, ${city}`, name] : [name];
     for (const q of queries) {
-      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords });
+      // Le résultat doit porter le nom lu dans le lien, même quand le lien
+      // donne un point : sans cette exigence, le voisin le mieux renseigné à
+      // moins de 25 km fournissait adresse et horaires (A-047). C'est la règle
+      // que le client applique déjà (`candidatValable`, enrich.js).
+      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords, exigerNom: true });
       if (best) return shapePlace(best);
     }
   }

@@ -13,6 +13,8 @@ import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
 const cache = new Map();
+const echecs = new Map();
+const ECHEC_MS = 10 * 60 * 1000;
 
 // Nominatim demande un usage raisonnable : une requête à la fois, en série.
 //
@@ -348,6 +350,12 @@ export async function lookupPlace(title, near, coords = {}) {
   const query = near ? `${name}, ${near}` : name;
   const key = `${query}|${coords.lat ?? ''}`.toLowerCase();
   if (cache.has(key)) return cache.get(key);
+  // Un lieu absent d'OpenStreetMap coûte jusqu'à sept appels et plus de trois
+  // secondes de pauses, dans une file partagée avec le contrôle des lieux. On
+  // retient l'échec dix minutes, pas plus : un échec peut venir d'une coupure
+  // réseau, et la connexion revient.
+  const echec = echecs.get(key);
+  if (echec && Date.now() - echec < ECHEC_MS) return null;
 
   const run = async () => {
     // « Acropole (billets coupe-file) », « Sagrada Família - visite guidée » :
@@ -379,6 +387,7 @@ export async function lookupPlace(title, near, coords = {}) {
       found = merge(found, viaOsm);
     }
     if (found) cache.set(key, found);
+    else echecs.set(key, Date.now());
     return found;
   };
 

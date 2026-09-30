@@ -128,5 +128,20 @@ console.log('\n5 · Comparer des noms dans toutes les écritures');
     && accordNom('Restaurante Botín', ['Sobrino de Botín']) === 'faible');
 }
 
+console.log('\n6 · Le module reste importable par le navigateur (A-048)');
+{
+  // Il vit dans supabase/functions/_shared, que le lint ignore, mais l'app
+  // l'importe (helpers.js, enrich.js, doublon.js). Un `Deno.env` ajouté ici
+  // passerait le lint et la construction, puis ferait tomber l'app au
+  // chargement. Ce banc est donc le seul garde-fou : pas de Deno, pas
+  // d'import, pas de réseau.
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../supabase/functions/_shared/lecture-lien.ts', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  verifier('aucun appel à Deno', !/\bDeno\./.test(src));
+  verifier('aucun import', !/^\s*import\s/m.test(src));
+  verifier('aucun accès réseau', !/\bfetch\s*\(/.test(src));
+}
+
 console.log(`\n${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);
