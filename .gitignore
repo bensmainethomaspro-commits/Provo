@@ -34,3 +34,6 @@ android/.gradle/
 android/build/
 *.keystore
 *.jks
+
+# Copie temporaire écrite puis effacée par scripts/verif-budget.mjs
+supabase/functions/*/_verif_budget_tmp.ts
