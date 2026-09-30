@@ -132,8 +132,9 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   à la Carte (cercles de 1, 2, 3 km) et à la Réserve (tri « 📍 Depuis… »).
 - **Doublon signalé à l'ajout**, sans bloquer (`doublon.js`) : même lien, même
   point sous un nom apparenté, ou même nom.
-- **Proposées depuis Tripsy et pas retenues pour l'instant** : le ＋ à portée
-  du pouce, la bande horizontale des jours. Non écartées : pas encore choisies.
+- **Tripsy : on s'arrête là** (30 septembre 2026). Seuls le repère de
+  distances et l'avertissement de doublon sont repris ; voir « Écarté
+  sciemment ».
 
 - **Les fonctions Edge n'étaient plus déployées depuis le 31 août** (constaté
   le 28 septembre 2026). `deploy-edge-functions.yml` échoue à chaque fusion
@@ -1046,6 +1047,9 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   modèles de voyage, checklist administrative, export du bilan en image** —
   proposés, non retenus. Ne pas les reproposer.
 - **Champ « notes » supplémentaire** — refusé explicitement.
+- **Autres fonctionnalités inspirées de Tripsy** (le ＋ à portée du pouce, la
+  bande horizontale des jours, et tout ce qui viendrait encore de cette app) —
+  refusé explicitement le 30 septembre 2026. Ne pas les reproposer.
 
 ## Points ouverts
 
