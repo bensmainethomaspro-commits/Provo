@@ -465,6 +465,28 @@ const PARCOURS = [
         `${await t.combien('.tl-activity')} activités`);
     } },
 
+  // Le plantage du 30 septembre 2026 : annuler une activité d'AUJOURD'HUI
+  // faisait tomber l'app entière (créneau `null` lu par la carte du jour).
+  // Aucun parcours n'annulait rien ; /verif-ui l'a trouvé en mesurant la
+  // barre « Annuler ».
+  { groupe: 'Planning', nom: "Annuler une activité du jour, puis se raviser", depart: 'voyage',
+    intention: "Une activité d'aujourd'hui tombe à l'eau : la marquer « Nogo », puis revenir en arrière.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.tl-day__open, .tl-day__header', { delai: 700 });
+      await t.clic('.day-detail-overlay .activity-card', { delai: 500 });
+      await t.clic('.day-detail-overlay .status-btn--nogo', { delai: 900 });
+      t.verifier("l'app tient debout", !(await t.visible('.error-screen')));
+      const v = await t.voyage();
+      const annulee = v.days[0].activities.find(a => a.status === 'nogo');
+      t.verifier("l'activité est annulée", !!annulee, JSON.stringify(v.days[0].activities.map(a => a.status)));
+      const msg = await t.p.locator('.undo-toast--visible').first().innerText({ timeout: 500 }).catch(() => '');
+      t.verifier('la barre propose de revenir en arrière', /Annuler/.test(msg), msg || '(rien)');
+      await t.clic('.undo-toast--visible .undo-toast__btn', { texte: /Annuler/, delai: 700 });
+      const apres = (await t.voyage()).days[0].activities.find(a => a.id === annulee?.id);
+      t.verifier('« Annuler » la remet comme avant', apres && apres.status !== 'nogo', apres?.status);
+    } },
+
   { groupe: 'Planning', nom: 'Ajouter une activité à un jour', depart: 'voyage',
     intention: "Poser une visite dans le programme d'un jour précis.",
     async faire(t) {

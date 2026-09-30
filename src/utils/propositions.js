@@ -96,7 +96,8 @@ export function signauxAjout(activite, jour, { maintenant = new Date(), feries =
   // ── Ça ne rentre pas ──────────────────────────────────────────────────────
   const avec = [...autres, activite];
   const slots = getTimeSlots(avec, jour.startTime || '09:00');
-  const fins = Object.values(slots).map(s => timeToMin(s.end)).filter(Number.isFinite);
+  // Une activité annulée a un créneau `null` (même défaut que piocheGuidee.js).
+  const fins = Object.values(slots).filter(Boolean).map(s => timeToMin(s.end)).filter(Number.isFinite);
   const fin = fins.length ? Math.max(...fins) : null;
   if (fin != null && fin > FIN_DE_JOURNEE) {
     out.push({
