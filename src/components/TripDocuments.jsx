@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import { reduireImage } from '../utils/helpers';
+import { enPiece, estRef, ouvrirPiece } from '../utils/pieces';
+import ImagePiece from './ImagePiece';
 
 /**
  * Les papiers du voyage : billets, réservations, attestations.
@@ -10,11 +12,14 @@ import { reduireImage } from '../utils/helpers';
  * onglet, la même intention (« ce qu'il me faut sous la main »), aucune
  * navigation nouvelle à apprendre.
  *
- * Tout est stocké dans le voyage, donc **hors ligne par construction** — c'est
- * tout l'intérêt : le réseau d'un aéroport étranger n'est pas une hypothèse.
- * En contrepartie, le voyage entier tient dans un seul enregistrement local :
- * les images sont réduites, les PDF au-delà d'une limite sont refusés avec la
- * raison, jamais avalés silencieusement.
+ * Tout est gardé sur le téléphone, donc **hors ligne par construction** —
+ * c'est tout l'intérêt : le réseau d'un aéroport étranger n'est pas une
+ * hypothèse. Depuis le 30 septembre 2026, chaque papier est rangé À CÔTÉ du
+ * voyage (utils/pieces.js, IndexedDB) et le voyage n'en garde qu'une
+ * référence : il ne pèse plus sur les 5 Mo du stockage local. Le plafond
+ * ci-dessous ne s'applique plus qu'au repli, quand ce rangement est
+ * impossible (navigation privée stricte) et que le papier reste dans le
+ * voyage.
  */
 
 const MAX_PDF = 1_500_000;         // ~1,5 Mo : au-delà, le voyage ne tient plus
@@ -41,7 +46,8 @@ function placeRestante() {
   return Math.max(0, PLAFOND_STOCKAGE - RESERVE - occupe);
 }
 
-const poids = (docs) => (docs || []).reduce((n, d) => n + (d.data?.length || 0), 0);
+// Ce qui pèse encore sur le stockage local : les papiers restés dans le voyage.
+const poids = (docs) => (docs || []).reduce((n, d) => n + (estRef(d.data) ? 0 : d.data?.length || 0), 0);
 
 const lisible = (o) => o > 900_000 ? `${(o / 1_000_000).toFixed(1)} Mo` : `${Math.round(o / 1000)} ko`;
 
@@ -73,7 +79,7 @@ export default function TripDocuments({ documents, onChange }) {
               l.onload = ev => ok(ev.target.result);
               l.readAsDataURL(f);
             });
-        nouveaux.push({ id: `doc${Date.now()}${nouveaux.length}`, nom: f.name, image, data });
+        nouveaux.push({ id: `doc${Date.now()}${nouveaux.length}`, nom: f.name, image, data: await enPiece(data) });
       } catch (err) {
         setErreur(`« ${f.name} » : ${err.message}.`);
       }
@@ -89,19 +95,15 @@ export default function TripDocuments({ documents, onChange }) {
     onChange([...docs, ...nouveaux]);
   };
 
-  const ouvrir = (d) => {
+  const ouvrir = async (d) => {
     if (d.image) { setApercu(d); return; }
     // Un PDF s'ouvre dans le lecteur du téléphone. `data:` ne peut pas être
-    // navigué directement sur certains navigateurs : on passe par un blob.
+    // navigué directement sur certains navigateurs : `ouvrirPiece` passe par
+    // un blob, et va chercher la pièce là où elle est rangée.
     try {
-      const [entete, base64] = d.data.split(',');
-      const type = /:(.*?);/.exec(entete)?.[1] || 'application/pdf';
-      const bin = atob(base64);
-      const tab = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) tab[i] = bin.charCodeAt(i);
-      const url = URL.createObjectURL(new Blob([tab], { type }));
-      window.open(url, '_blank', 'noopener');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      if (!(await ouvrirPiece(d.data))) {
+        setErreur(`« ${d.nom} » n'est pas encore sur ce téléphone : il arrive avec du réseau.`);
+      }
     } catch {
       setErreur(`« ${d.nom} » n'a pas pu être ouvert.`);
     }
@@ -111,7 +113,7 @@ export default function TripDocuments({ documents, onChange }) {
     <div className="trip-docs">
       <div className="trip-docs__titre">
         📎 Billets et réservations
-        {docs.length > 0 && <span className="trip-docs__poids">{lisible(poids(docs))}</span>}
+        {poids(docs) > 0 && <span className="trip-docs__poids">{lisible(poids(docs))}</span>}
       </div>
 
       {docs.length > 0 && (
@@ -151,7 +153,7 @@ export default function TripDocuments({ documents, onChange }) {
 
       {apercu && (
         <div className="lightbox" onClick={() => setApercu(null)}>
-          <img src={apercu.data} alt={apercu.nom} className="lightbox__img" />
+          <ImagePiece valeur={apercu.data} alt={apercu.nom} className="lightbox__img" />
         </div>
       )}
     </div>

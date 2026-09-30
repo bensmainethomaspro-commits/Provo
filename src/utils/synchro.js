@@ -35,7 +35,8 @@ export function lireAttente(stockage) {
 /**
  * Rend `true` si tout a été gardé, `false` si les bases ont dû être lâchées.
  *
- * Le stockage local se remplit vite (photos et billets y sont en base64). Plutôt
+ * Le stockage local peut se remplir (photos et billets y restent en base64
+ * quand IndexedDB manque, voir utils/pieces.js). Plutôt
  * que de tout perdre, on garde au moins la LISTE des voyages en attente : au
  * chargement suivant, ce qui a été saisi ici l'emporte, faute de base pour
  * fusionner. C'est le « dernier qui écrit gagne » que le projet assume déjà,

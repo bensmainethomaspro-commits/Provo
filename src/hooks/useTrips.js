@@ -3,6 +3,8 @@ import { supabase } from '../lib/supabase';
 import { fusionnerVoyages, dateLocale } from '../utils/helpers';
 import { lireAttente, ecrireAttente, reconcilier } from '../utils/synchro';
 import { DELAI_FONCTION_MS } from '../utils/reseau';
+import { usePiecesSync } from './usePiecesSync';
+import { pourUneCopie, lirePiece } from '../utils/pieces';
 
 const STORAGE_KEY = 'provo_trips';
 
@@ -133,6 +135,8 @@ export function useTrips() {
   const remoteIdsRef = useRef(new Set());
   const tripsRef = useRef(trips);
   useEffect(() => { tripsRef.current = trips; }, [trips]);
+  // Les pièces jointes vivent à côté des voyages (utils/pieces.js).
+  usePiecesSync({ trips, setTrips, tripsRef, userId, remoteIdsRef, pretRef });
 
   // ── Ce qui attend un envoi ────────────────────────────────────────────────
   const persisterAttente = useCallback(() => {
@@ -402,10 +406,12 @@ export function useTrips() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tripsRef.current));
       if (pleinRef.current) { pleinRef.current = false; setStockagePlein(false); }
     } catch (e) {
-      // Photos de couverture, captures et PDF sont stockés en base64 dans le
-      // voyage : le stockage local tient 5,1 Mo — mesuré — et il se dépasse
-      // vite. L'écriture échoue alors pour TOUT le reste aussi, et ce qui n'est
-      // pas encore parti vers Supabase disparaît au rechargement.
+      // Le stockage local tient 5,1 Mo — mesuré. Photos, captures et PDF y
+      // étaient en base64 et le dépassaient vite ; ils sont rangés à part
+      // depuis le 30 septembre 2026 (utils/pieces.js), mais le repli sans
+      // IndexedDB les y laisse encore. L'écriture échoue alors pour TOUT le
+      // reste aussi, et ce qui n'est pas encore parti vers Supabase disparaît
+      // au rechargement.
       //
       // C'est la pire panne possible : silencieuse, et elle mange le travail.
       // Elle se dit maintenant à l'écran, pas dans une console que personne
@@ -987,7 +993,8 @@ export function useTrips() {
     // L'identifiant est tiré ici : la table ne se relit plus après écriture
     // (aucune lecture en liste n'est permise), il faut donc le connaître.
     const shareId = globalThis.crypto?.randomUUID?.() || generateUUID();
-    const donnees = { ...trip };
+    // Images remises en clair, papiers retirés : voir `pourUneCopie`.
+    const donnees = await pourUneCopie({ ...trip }, lirePiece);
     delete donnees.shareId;
     delete donnees.copieDe;
     const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: donnees });

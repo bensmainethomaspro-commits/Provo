@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
+import ImagePiece from './ImagePiece';
+import { ouvrirPiece } from '../utils/pieces';
 
 function ActivityCard({
   activity, context, isLastDay, slot, isPastTrip,
@@ -24,6 +26,7 @@ function ActivityCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState(null);
+  const [pdfAbsent, setPdfAbsent] = useState(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
   const SWIPE_MAX = 90;
@@ -153,8 +156,8 @@ function ActivityCard({
           onClick={handleTap}
         >
           {activity.photoUrl && (
-            <img
-              src={activity.photoUrl}
+            <ImagePiece
+              valeur={activity.photoUrl}
               className="activity-card__photo"
               alt=""
               onError={e => { e.currentTarget.style.display = 'none'; }}
@@ -263,7 +266,7 @@ function ActivityCard({
               {activity.screenshots?.length > 0 && (
                 <div className="activity-card__screenshots">
                   {activity.screenshots.map((src, i) => (
-                    <img key={i} src={src} className="screenshot-thumb" alt="" loading="lazy" decoding="async"
+                    <ImagePiece key={i} valeur={src} className="screenshot-thumb" alt="" loading="lazy" decoding="async"
                       onClick={() => setLightboxSrc(src)} />
                   ))}
                 </div>
@@ -282,11 +285,20 @@ function ActivityCard({
                 {(activity.pdfs || []).length > 0 && (
                   <div className="pdf-list" style={{ marginTop: 6 }}>
                     {activity.pdfs.map((p, i) => (
-                      <a key={i} href={p.data} target="_blank" rel="noopener noreferrer" className="pdf-chip">
+                      // Un bouton, plus un lien : la pièce peut être rangée à
+                      // part (utils/pieces.js), et un `data:` n'est de toute
+                      // façon pas navigable sur tous les téléphones.
+                      <button key={i} type="button" className="pdf-chip"
+                        onClick={async () => setPdfAbsent(!(await ouvrirPiece(p.data)))}>
                         <span className="pdf-chip__icon">📄</span>
                         <span className="pdf-chip__name">{p.name}</span>
-                      </a>
+                      </button>
                     ))}
+                    {pdfAbsent && (
+                      <p className="pdf-list__absent" role="status">
+                        Pas encore sur ce téléphone : il arrive avec du réseau.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -382,7 +394,7 @@ function ActivityCard({
 
       {lightboxSrc && createPortal(
         <div className="lightbox-overlay" onClick={() => setLightboxSrc(null)}>
-          <img src={lightboxSrc} className="lightbox-img" alt="" />
+          <ImagePiece valeur={lightboxSrc} className="lightbox-img" alt="" />
           <button className="lightbox-close" onClick={() => setLightboxSrc(null)}>✕</button>
         </div>,
         document.body

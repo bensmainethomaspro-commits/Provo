@@ -787,17 +787,25 @@ const PARCOURS = [
       t.verifier("les billets ont leur place dans les notes", await t.visible('.trip-docs'));
       const champ = t.p.locator('.trip-docs input[type="file"]');
       if (!(await champ.count())) t.injouable('pas de champ fichier');
+      // Un vrai billet pèse des dizaines de ko : un fichier de 15 octets
+      // resterait dans le voyage (sous le seuil) et ne testerait rien.
       await champ.setInputFiles({
         name: 'billet-train.pdf', mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF-1.4\n%%EOF\n'),
+        buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(6000, 7), Buffer.from('\n%%EOF\n')]),
       });
-      await t.p.waitForTimeout(700);
+      await t.p.waitForTimeout(900);
       t.verifier('le billet apparaît', (await t.texte()).includes('billet-train.pdf'));
       const v = await t.voyage();
       t.verifier('il est enregistré dans le voyage', (v.documents || []).length === 1,
         `${(v.documents || []).length} document(s)`);
-      t.verifier("il est lisible sans réseau (stocké, pas lié)",
-        String(v.documents?.[0]?.data || '').startsWith('data:'));
+      // Rangé À CÔTÉ du voyage (utils/pieces.js) : le voyage n'en garde que la
+      // référence, et il s'ouvre quand même sans réseau (ce parcours n'en a pas).
+      t.verifier('le voyage ne garde que sa référence, pas le fichier',
+        /^pj:[0-9a-f]{24}$/.test(String(v.documents?.[0]?.data || '')), String(v.documents?.[0]?.data || '').slice(0, 40));
+      await t.p.evaluate(() => { window.__ouverts = []; window.open = (u) => { window.__ouverts.push(String(u)); return null; }; });
+      await t.clic('.trip-doc__ouvrir', { texte: 'billet-train', delai: 700 });
+      const ouverts = await t.p.evaluate(() => window.__ouverts);
+      t.verifier('il s’ouvre sans réseau', ouverts.length === 1 && ouverts[0].startsWith('blob:'), JSON.stringify(ouverts));
       await t.clic('.trip-doc__retirer', { delai: 500 });
       t.verifier('et il se retire', ((await t.voyage()).documents || []).length === 0);
     } },

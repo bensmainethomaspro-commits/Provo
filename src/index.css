@@ -2367,6 +2367,8 @@ body {
   transition: background 0.15s;
 }
 .pdf-chip:hover { background: var(--border); }
+button.pdf-chip { font-family: inherit; cursor: pointer; }
+.pdf-list__absent { flex-basis: 100%; margin: 4px 0 0; font-size: var(--t-sm); color: var(--text-muted); }
 .pdf-chip__icon { font-size: var(--t-sm); }
 .pdf-chip__name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

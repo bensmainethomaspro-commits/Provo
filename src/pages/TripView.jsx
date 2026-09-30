@@ -30,6 +30,7 @@ import { signauxAjout } from '../utils/propositions';
 import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
 import PropositionSheet from '../components/PropositionSheet';
 import TripDocuments from '../components/TripDocuments';
+import { usePiece } from '../hooks/usePiece';
 import { aProposer as carteAProposer, telecharger as telechargerCarte } from '../utils/carteHorsLigne';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
@@ -67,6 +68,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   } = useTripsContext();
 
   const trip = getTripById(tripId);
+  const couverture = usePiece(trip?.coverPhoto);
 
   // Ce qui a changé ailleurs en même temps qu'ici (voir ConflitsSheet). Les
   // conflits qui ne portent que sur des champs techniques ne donnent aucun
@@ -1088,9 +1090,11 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       </div>
 
       {/* Cover photo */}
-      {trip.coverPhoto && (
+      {/* Le cadre attend la photo : rangée à part, elle peut ne pas être
+          encore arrivée sur ce téléphone (utils/pieces.js). */}
+      {couverture && (
         <div className="trip-cover-photo">
-          <img src={trip.coverPhoto} alt="" className="trip-cover-photo__img" />
+          <img src={couverture} alt="" className="trip-cover-photo__img" />
         </div>
       )}
 
