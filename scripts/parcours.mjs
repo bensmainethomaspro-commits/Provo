@@ -907,6 +907,30 @@ const PARCOURS = [
       t.verifier("l'adresse est remise à plat",
         !(await t.p.evaluate(() => window.location.search)).includes('voyage'),
         await t.p.evaluate(() => window.location.search) || '(vide)');
+
+      // Le lien restait posé : « ← » ramenait aussitôt dans le voyage, et
+      // l'accueil devenait inatteignable (audit A-042, reproduit).
+      await t.clic('.header__back', { delai: 1000 });
+      t.verifier("« ← » ramène bien à l'accueil", (await t.combien('.trip-card')) > 0
+        && (await t.combien('.trip-view')) === 0);
+    } },
+
+  { groupe: 'Accueil', nom: 'Un lien ouvre le voyage dès le tout premier lancement', depart: 'voyage',
+    intention: "Recevoir une invitation ou une notification sur un téléphone où Provo "
+      + "n'a jamais tourné, et arriver là où le lien mène, pas sur un accueil muet.",
+    async faire(t) {
+      // Revenir à l'état « jamais lancé » : aucun service worker aux commandes.
+      // Au premier lancement, sa prise de contrôle faisait recharger la page, et
+      // l'app avait déjà retiré le lien de l'adresse : il était perdu.
+      await t.p.evaluate(async () => {
+        for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      });
+      await t.p.goto(`${URL_BASE}/?voyage=${encodeURIComponent(TRIP.id)}&onglet=depenses`,
+        { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(3500);
+      t.verifier('le voyage est ouvert', (await t.combien('.trip-view')) > 0);
+      const actif = await t.p.locator('.tab-btn--active').first().innerText().catch(() => '');
+      t.verifier("sur l'onglet que le lien demande", /Dépenses/i.test(actif), actif || '(aucun)');
     } },
 
   { groupe: 'Dépenses', nom: 'Le montant se calcule dans le champ', depart: 'voyage',

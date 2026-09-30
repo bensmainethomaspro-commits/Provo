@@ -62,7 +62,7 @@ function AppInner() {
   // Une notification ouvre l'écran dont elle parle. Sans ça, « Léa a ajouté
   // « Dîner » — 52 € » ramenait à l'accueil, et il fallait retrouver soi-même
   // le voyage puis l'onglet : trois gestes pour lire une phrase de six mots.
-  const [pendingVoyage] = useState(() => {
+  const [pendingVoyage, setPendingVoyage] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     const id = p.get('voyage');
     if (!id) return null;
@@ -157,6 +157,14 @@ function AppInner() {
   const ongletInitial = route.tripId && route.tripId === pendingVoyage?.id
     ? pendingVoyage.onglet : null;
 
+  // Le lien d'une notification se consomme en quittant le voyage : il restait
+  // posé, et l'effet ci-dessus renvoyait aussitôt dans le voyage — l'accueil
+  // devenait inatteignable jusqu'au redémarrage (audit A-042, reproduit).
+  const quitterVoyage = () => {
+    setPendingVoyage(null);
+    navigate('dashboard');
+  };
+
   const voyagesOuverts = (currentTrips || []);
 
   const handleImport = () => {
@@ -241,7 +249,7 @@ function AppInner() {
       )}
       {route.page === 'dashboard'
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
-        : <TripView tripId={route.tripId} onBack={() => navigate('dashboard')} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
+        : <TripView tripId={route.tripId} onBack={quitterVoyage} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
             lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)}
             ongletInitial={ongletInitial} />
       }
