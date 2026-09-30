@@ -1825,6 +1825,28 @@ const PARCOURS = [
       t.verifier('après accord, les fiches sont complétées', enrichies > 0, `${enrichies} fiches`);
     } },
 
+  { groupe: 'Réseau', nom: 'Les fiches se complètent seules, et se proposent', depart: 'voyage',
+    reseau: { enrichPlace: 'ok' },
+    intention: "Ouvrir son voyage et voir les fiches incomplètes se compléter sans rien "
+      + "demander ; accepter ou refuser ce qui est trouvé, rien ne s'écrit seul.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const avant = JSON.stringify(await t.voyage());
+      let msg = '';
+      for (let i = 0; i < 30 && !/complétées? en ligne/.test(msg); i++) {
+        await t.p.waitForTimeout(1000);
+        // Délai court : sans lui, chaque tour attendait 30 s une bulle absente,
+        // et l'ancien code mettait un quart d'heure à échouer.
+        msg = await t.p.locator('.undo-toast--visible').first().innerText({ timeout: 300 }).catch(() => '');
+      }
+      t.verifier('la barre de messages annonce les fiches complétées', /complétées? en ligne/.test(msg),
+        msg || '(rien)');
+      t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
+      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      await t.clic('.undo-toast__btn', { texte: /Voir/, delai: 900 });
+      t.verifier('« Voir » ouvre les propositions, à accepter ou refuser', await t.visible('.check-card'));
+    } },
+
   { groupe: 'Réseau', nom: "Compléter sans rien trouver ne redemandera pas", depart: 'voyage',
     reseau: { enrichPlace: 'vide' },
     intention: "Rien trouvé n'est pas une panne : on l'a cherché, on s'en souvient.",
@@ -2513,7 +2535,11 @@ for (const parcours of choisis) {
   erreurs.forEach(e => journal.push({ type: 'casse', quoi: 'erreur JavaScript', detail: e }));
 
   const casses = journal.filter(j => j.type === 'casse');
-  if (casses.length) await p.screenshot({ path: `${CAPTURES}/${parcours.nom.replace(/[^a-z0-9]+/gi, '-')}.png` });
+  // Avec un délai : sans lui, une capture qui attend une police jamais
+  // servie figeait toute la suite, et un parcours en échec ne rendait
+  // jamais son verdict (vu le 30 septembre 2026, onze minutes de silence).
+  if (casses.length) await p.screenshot({ path: `${CAPTURES}/${parcours.nom.replace(/[^a-z0-9]+/gi, '-')}.png`, timeout: 15000 })
+    .catch(() => journal.push({ type: 'friction', quoi: 'capture impossible', detail: 'la page ne se laisse pas photographier' }));
 
   rapport.push({ ...parcours, journal, injoue, casses: casses.length,
     ok: journal.filter(j => j.type === 'ok').length,
