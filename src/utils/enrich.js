@@ -9,7 +9,9 @@
 // d'API, pas de fonction serveur à déployer.
 
 import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-lien.ts';
-import { avecDelai } from './reseau';
+// Avec son extension : ce fichier est aussi chargé tel quel par Node
+// (scripts/verif-completion.mjs), qui ne devine pas les extensions.
+import { avecDelai } from './reseau.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
