@@ -428,7 +428,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         setRecuMsg(`Lecture du ticket… ${Math.round(avance * 100)} %`);
       });
       if (!lu || lu.error) {
-        setRecuMsg("Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
+        setRecuMsg(lu?.error === 'moteur_absent'
+          ? "La lecture des tickets n'est pas encore sur ce téléphone : elle se télécharge une fois, avec du réseau. Saisis le montant à la main."
+          : "Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
         return;
       }
       // Le champ s'écrit comme on l'y taperait : virgule, et les deux centimes.

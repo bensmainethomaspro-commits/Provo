@@ -844,6 +844,32 @@ const PARCOURS = [
         !(await t.combien('.confirm-box')) && !/Télécharger la carte/i.test(await t.texte()));
     } },
 
+  { groupe: 'Tickets', nom: 'Le moteur des tickets est gardé avant le départ', depart: 'voyage',
+    intention: "Photographier son premier ticket à l'étranger, sans réseau, et qu'il se "
+      + "lise : le moteur doit être venu avant, pas au moment où on en a besoin.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Démarré huit secondes après l'ouverture, en silence ; on laisse le
+      // temps au moteur de venir et au service worker de le ranger.
+      let present = false;
+      for (let i = 0; i < 30 && !present; i++) {
+        await t.p.waitForTimeout(1000);
+        present = await t.p.evaluate(async () => !!(await caches.match('/tesseract/worker.min.js'))
+          && !!(await caches.match('/tesseract/lang/fra.traineddata.gz')));
+      }
+      t.verifier('le moteur et le modèle de langue sont sur le téléphone', present);
+      t.verifier("rien ne s'est affiché pour ça", !(await t.visible('.sheet, .modal')));
+    } },
+
+  { groupe: 'Tickets', nom: 'Un voyage lointain ne précharge pas le moteur', depart: PAS_PARTI,
+    intention: "Un voyage dans trois mois ne doit rien télécharger aujourd'hui.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.p.waitForTimeout(12000);
+      const present = await t.p.evaluate(async () => !!(await caches.match('/tesseract/worker.min.js')));
+      t.verifier("le moteur n'est pas venu", !present);
+    } },
+
   { groupe: 'Carte', nom: "Un voyage lointain ne télécharge rien", depart: PAS_PARTI,
     intention: "Le pré-chargement ne doit pas consommer des données un mois à l'avance.",
     async faire(t) {

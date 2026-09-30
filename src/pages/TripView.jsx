@@ -426,6 +426,21 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     return () => ctrl.abort();
   }, [tab, trip?.id, trip?.carteHorsLigne]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Le moteur de lecture des tickets, gardé avant d'en avoir besoin. Même
+  // règle que la carte ci-dessus, et comme elle sans aucune interface : huit
+  // secondes après l'ouverture du voyage, quand l'écran a fini de se dessiner.
+  // Au premier ticket photographié hors ligne, il est là (audit A-040).
+  useEffect(() => {
+    if (!trip?.id) return undefined;
+    let annule = false;
+    const minuteur = setTimeout(() => {
+      import('../utils/ocrTicket')
+        .then(({ prechargerMoteur }) => { if (!annule) return prechargerMoteur(tripRef.current); })
+        .catch(() => {});
+    }, 8000);
+    return () => { annule = true; clearTimeout(minuteur); };
+  }, [trip?.id]);
+
   if (!trip) return (
     <div className="trip-view">
       <div className="header">

@@ -1279,7 +1279,9 @@ export async function lireRecu(imageDataUrl, surAvancement) {
     const { lireTicketImage } = await import('./ocrTicket');
     return await lireTicketImage(imageDataUrl, surAvancement);
   } catch {
-    return { error: 'illisible' };
+    // Le module lui-même n'a pas pu venir : hors ligne, c'est qu'il n'a
+    // jamais été téléchargé.
+    return { error: navigator.onLine ? 'illisible' : 'moteur_absent' };
   }
 }
 
