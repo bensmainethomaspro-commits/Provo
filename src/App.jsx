@@ -126,7 +126,9 @@ function AppInner() {
     if (!pendingShareId) return;
     loadSharedTrip(pendingShareId)
       .then(tripId => navigate('trip', tripId))
-      .catch(() => alert('Voyage introuvable ou lien expiré.'));
+      // Dans le bandeau d'erreur de l'app, pas dans une alerte système qui
+      // bloque l'écran et ne dit pas quoi faire.
+      .catch(() => setInviteError('Cette copie de voyage est introuvable : demande un nouveau lien.'));
   }, []);
 
   // Gérer le lien d'invitation collaboration
@@ -251,7 +253,7 @@ function AppInner() {
         ? <Dashboard onNavigate={navigate} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)} autoNewTrip={autoNewTrip} onShowAuth={() => setShowAuth(true)} />
         : <TripView tripId={route.tripId} onBack={quitterVoyage} darkMode={darkMode} onToggleDark={() => setDarkMode(d => !d)}
             lienAImporter={lienPartage} onLienConsomme={() => setLienPartage(null)}
-            ongletInitial={ongletInitial} />
+            ongletInitial={ongletInitial} onShowAuth={() => setShowAuth(true)} />
       }
     </div>
   );

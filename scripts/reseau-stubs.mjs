@@ -44,6 +44,12 @@ export const REPONSES = {
 
   // Frankfurter : taux de change.
   taux: { amount: 1, base: 'EUR', date: '2026-08-04', rates: { USD: 1.09, GBP: 0.84, CHF: 0.95, JPY: 172.4 } },
+  // Une copie reçue par lien. Même identifiant que le voyage de la fixture,
+  // exprès : c'est le cas où l'ancien code REMPLAÇAIT le voyage local.
+  copie: { id: 'tr1', name: 'Vienne (copie reçue)', destination: 'Vienne', emoji: '🇦🇹',
+    startDate: '2026-10-01', endDate: '2026-10-02', travelers: 2, initialBudget: 0,
+    days: [{ id: 'cd1', date: '2026-10-01', startTime: '09:00', activities: [] },
+      { id: 'cd2', date: '2026-10-02', startTime: '09:00', activities: [] }], reserve: [] },
   tauxSecours: { result: 'success', base_code: 'EUR', rates: { EUR: 1, USD: 1.1, JPY: 170, MAD: 10.8, AED: 4.0, EGP: 53 } },
 
   // Overpass : lieux autour d'un point.
@@ -265,6 +271,11 @@ export async function brancherReseau(page, base, plan = {}) {
     if (url.includes('read-booking')) return servir(route, 'reservation', REPONSES.reservation);
     return route.fulfill(json({ ok: false }));
   });
+
+  // Le lien d'une copie de voyage (`?share=`) se lit par une fonction SQL, et
+  // plus en lisant la table : celle-ci n'est plus lisible en liste (A-001).
+  await page.route('**/*.supabase.co/rest/v1/rpc/lire_voyage_partage', (route) =>
+    servir(route, 'copie', REPONSES.copie));
 
   return { appels: () => ({ ...appels }) };
 }

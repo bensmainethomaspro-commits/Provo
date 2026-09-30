@@ -46,7 +46,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
 
-export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme, ongletInitial }) {
+export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
   const {
     getTripById, setActivityStatus, updateActivity, deleteActivity,
     moveToReserve, moveFromReserveToDay, moveDayToDay, moveToNextDay,
@@ -58,7 +58,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
     reorderDay, addToAllDays,
     addExpense, updateExpense, deleteExpense,
     addDailyTemplate, removeDailyTemplate,
-    enableCollaboration, userId,
+    userId,
     fetchTripMembers, removeTripMember,
   } = useTripsContext();
 
@@ -1697,7 +1697,7 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
         />
       )}
 
-      {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} />}
+      {showShare && <ShareModal trip={trip} onClose={() => setShowShare(false)} onShowAuth={onShowAuth} />}
 
       {showRecap && <TripRecap trip={trip} onClose={() => setShowRecap(false)} />}
 
@@ -1740,7 +1740,6 @@ export default function TripView({ tripId, onBack, darkMode, onToggleDark, lienA
         setSetting={setSetting}
         onAddDailyTemplate={addDailyTemplate}
         onRemoveDailyTemplate={removeDailyTemplate}
-        enableCollaboration={enableCollaboration}
         userId={userId}
         tripMembers={tripMembers}
         currentUserId={userId}

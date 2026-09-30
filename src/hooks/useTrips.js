@@ -291,10 +291,12 @@ export function useTrips() {
     setUserId(uid);
     setUserEmail(session?.user?.email ?? null);
     setUserProfile({ name: meta.display_name ?? null, emoji: meta.profile_emoji ?? null });
-    // Sync display_name to profiles table so other trip members can see it
+    // Publie le prénom pour que les autres membres du voyage le voient. La
+    // colonne s'appelle `display_name` : l'app écrivait `name`, qui n'existe
+    // pas, et chaque publication échouait (vu le 30 septembre 2026).
     if (uid && meta.display_name) {
       supabase.from('profiles')
-        .upsert({ id: uid, name: meta.display_name }, { onConflict: 'id' })
+        .upsert({ id: uid, display_name: meta.display_name }, { onConflict: 'id' })
         .then(({ error }) => {
           // Sans cette ligne, les autres membres du voyage voient un identifiant
           // à la place du prénom, sans qu'aucune erreur ne le signale.
@@ -916,32 +918,44 @@ export function useTrips() {
     return id;
   }, []);
 
-  // Partage legacy (shared_trips) — conservé pour compatibilité
-  const enableSharing = useCallback(async (tripId) => {
+  // ── Envoyer une COPIE ─────────────────────────────────────────────────────
+  // Un instantané du voyage, lisible par qui a le lien, qui ne se synchronise
+  // pas : l'ami modifie SA copie, jamais le voyage d'origine. (Pour modifier
+  // ensemble, c'est l'invitation : `enableCollaboration`.)
+  //
+  // Ce que ça remplace : un « partage collaboratif » qui promettait le temps
+  // réel et n'était qu'une photo figée, dans une table que n'importe qui
+  // pouvait lister et réécrire (audit A-001). Et rouvrir son propre lien
+  // REMPLAÇAIT le voyage par cette photo : tout ce qui avait été modifié
+  // depuis était perdu, puis la synchro l'écrivait dans le nuage.
+  const creerCopiePartagee = useCallback(async (tripId) => {
     const trip = tripsRef.current.find(t => t.id === tripId);
-    if (!trip) throw new Error('Trip not found');
-    if (trip.shareId) return trip.shareId;
-    const shareId = generateUUID();
-    const tripWithShare = { ...trip, shareId };
-    const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: tripWithShare });
+    if (!trip) throw new Error('Voyage introuvable');
+    // L'identifiant est tiré ici : la table ne se relit plus après écriture
+    // (aucune lecture en liste n'est permise), il faut donc le connaître.
+    const shareId = globalThis.crypto?.randomUUID?.() || generateUUID();
+    const donnees = { ...trip };
+    delete donnees.shareId;
+    delete donnees.copieDe;
+    const { error } = await supabase.from('shared_trips').insert({ share_id: shareId, data: donnees });
     if (error) throw error;
-    syncedHashRef.current[shareId] = JSON.stringify(tripWithShare);
-    setTrips(p => p.map(t => t.id !== tripId ? t : tripWithShare));
     return shareId;
   }, []);
 
+  // Ouvrir le lien d'une copie : on l'importe comme un voyage À SOI (nouvel
+  // identifiant), et on ne touche jamais à un voyage existant. Rouvrir le même
+  // lien rouvre la même copie au lieu d'en créer une deuxième.
   const loadSharedTrip = useCallback(async (shareId) => {
-    const { data, error } = await supabase.from('shared_trips').select('data').eq('share_id', shareId).single();
+    const { data, error } = await supabase.rpc('lire_voyage_partage', { p_share_id: shareId });
     if (error) throw error;
-    const remoteTrip = data.data;
-    if (!remoteTrip) throw new Error('Empty trip data');
-    syncedHashRef.current[shareId] = JSON.stringify(remoteTrip);
-    setTrips(p => {
-      const exists = p.find(t => t.shareId === shareId);
-      if (exists) return p.map(t => t.shareId === shareId ? remoteTrip : t);
-      return [remoteTrip, ...p];
-    });
-    return remoteTrip.id;
+    if (!data) throw new Error('Copie introuvable');
+    const deja = tripsRef.current.find(t => t.copieDe === shareId);
+    if (deja) return deja.id;
+    const id = genId();
+    const copie = { ...data, id, copieDe: shareId, createdAt: new Date().toISOString() };
+    delete copie.shareId;
+    setTrips(p => [copie, ...p]);
+    return id;
   }, []);
 
   const addExpense = useCallback((tripId, expense) => {
@@ -1038,10 +1052,10 @@ export function useTrips() {
     const userIds = members.map(m => m.user_id);
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('id, name')
+      .select('id, display_name')
       .in('id', userIds);
     return members.map(m => {
-      const profileName = (profiles || []).find(p => p.id === m.user_id)?.name || null;
+      const profileName = (profiles || []).find(p => p.id === m.user_id)?.display_name || null;
       // Fallback to local auth metadata for the current user (in case profiles UPDATE is blocked by RLS)
       const name = profileName || (m.user_id === userId ? (userProfileRef.current?.name || null) : null);
       return { userId: m.user_id, role: m.role, name };
@@ -1063,8 +1077,12 @@ export function useTrips() {
     if (emoji !== undefined) meta.profile_emoji = emoji;
     const { error } = await supabase.auth.updateUser({ data: meta });
     if (error) return { error: error.message };
-    if (name !== undefined && userId) {
-      await supabase.from('profiles').upsert({ id: userId, name }, { onConflict: 'id' });
+    if (userId && (name !== undefined || emoji !== undefined)) {
+      await supabase.from('profiles').upsert({
+        id: userId,
+        ...(name !== undefined ? { display_name: name } : {}),
+        ...(emoji !== undefined ? { avatar_emoji: emoji } : {}),
+      }, { onConflict: 'id' });
     }
     setUserProfile(prev => ({
       name: name !== undefined ? name : prev.name,
@@ -1099,7 +1117,7 @@ export function useTrips() {
     addPackingItem, togglePackingItem, deletePackingItem,
     setPackingOrder, sweepDayToReserve,
     restoreTrip, addTravelBlock, setDayActivitiesOrder,
-    enableSharing, loadSharedTrip,
+    creerCopiePartagee, loadSharedTrip,
     reorderDay, addToAllDays,
     addExpense, updateExpense, deleteExpense,
     copyDay, sortDayByTime,

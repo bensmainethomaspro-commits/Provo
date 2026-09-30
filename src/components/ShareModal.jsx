@@ -2,42 +2,82 @@ import { useState } from 'react';
 import { encodeTrip } from '../utils/helpers';
 import { useTripsContext } from '../context/TripsContext';
 
-export default function ShareModal({ trip, onClose }) {
-  const { enableSharing } = useTripsContext();
-  const [copied, setCopied] = useState(false);
-  const [collabUrl, setCollabUrl] = useState(
-    trip.shareId ? `${window.location.origin}${window.location.pathname}?share=${trip.shareId}` : null
-  );
-  const [collabLoading, setCollabLoading] = useState(false);
-  const [collabError, setCollabError] = useState(null);
-  const [collabCopied, setCollabCopied] = useState(false);
+/**
+ * Partager un voyage : deux intentions, et chacune dit ce qu'elle fait.
+ *
+ * Avant, trois notions dans deux écrans : un « partage collaboratif » qui
+ * promettait le temps réel et n'était qu'une photo figée (dans une table que
+ * n'importe qui pouvait lister, audit A-001), un « import statique », et le
+ * vrai lien d'invitation, rangé à part dans les Paramètres du voyage. Une
+ * intention, un geste (règle A7) :
+ *
+ *  · Inviter à modifier ensemble : le lien d'invitation. Même programme, mêmes
+ *    dépenses, pour tout le monde. Il faut un compte ; sans compte, la raison
+ *    et le geste qui débloque (règle A8), jamais un bouton mort.
+ *  · Envoyer une copie : l'ami reçoit le voyage pour lui, et ce qu'il y change
+ *    ne touche pas au tien.
+ */
+export default function ShareModal({ trip, onClose, onShowAuth }) {
+  const { userId, enableCollaboration, creerCopiePartagee } = useTripsContext();
+  const [invitation, setInvitation] = useState(null);
+  const [copie, setCopie] = useState(null);
+  const [enCours, setEnCours] = useState(null);
+  const [erreur, setErreur] = useState('');
+  const [fait, setFait] = useState('');
 
-  const staticUrl = `${window.location.origin}${window.location.pathname}#share=${encodeTrip(trip)}`;
+  const base = `${window.location.origin}${window.location.pathname}`;
 
-  const copyText = async (text, setDone) => {
+  // Le menu de partage du téléphone quand il existe (messagerie, mail…),
+  // sinon le presse-papier. Dans les deux cas, on dit ce qui s'est passé.
+  const transmettre = async (url, titre, quoi) => {
+    setErreur('');
+    if (navigator.share) {
+      try { await navigator.share({ title: titre, url }); setFait(quoi); return; }
+      catch (e) { if (e?.name === 'AbortError') return; }
+    }
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(url);
     } catch {
       const ta = document.createElement('textarea');
-      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
       document.body.appendChild(ta); ta.select(); document.execCommand('copy');
       document.body.removeChild(ta);
     }
-    setDone(true);
-    setTimeout(() => setDone(false), 2500);
+    setFait(`${quoi} · lien copié`);
   };
 
-  const handleEnableCollab = async () => {
-    setCollabLoading(true);
-    setCollabError(null);
+  const inviter = async () => {
+    setEnCours('invitation'); setErreur(''); setFait('');
     try {
-      const shareId = await enableSharing(trip.id);
-      const url = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
-      setCollabUrl(url);
-    } catch (e) {
-      setCollabError('Erreur de connexion. Vérifie ta connexion internet.');
+      const code = invitation || await enableCollaboration(trip.id);
+      if (!code) throw new Error('pas de code');
+      setInvitation(code);
+      await transmettre(`${base}?invite=${code}`, `Rejoins mon voyage « ${trip.name} »`, 'Invitation prête');
+    } catch {
+      setErreur("L'invitation n'a pas pu être créée. Vérifie ta connexion et réessaie.");
     } finally {
-      setCollabLoading(false);
+      setEnCours(null);
+    }
+  };
+
+  const envoyerCopie = async () => {
+    setEnCours('copie'); setErreur(''); setFait('');
+    try {
+      let url;
+      if (userId) {
+        const id = copie || await creerCopiePartagee(trip.id);
+        setCopie(id);
+        url = `${base}?share=${id}`;
+      } else {
+        // Sans compte, le voyage voyage DANS le lien. Ça marche sans serveur,
+        // mais un gros voyage fait un lien très long.
+        url = `${base}#share=${encodeTrip(trip)}`;
+      }
+      await transmettre(url, `Copie du voyage « ${trip.name} »`, 'Copie prête');
+    } catch {
+      setErreur("La copie n'a pas pu être créée. Vérifie ta connexion et réessaie.");
+    } finally {
+      setEnCours(null);
     }
   };
 
@@ -50,29 +90,22 @@ export default function ShareModal({ trip, onClose }) {
         </div>
         <div className="modal__body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-          {/* Collaborative share */}
           <div className="share-section">
             <div className="share-section__label">
-              <span className="share-section__badge share-section__badge--collab">✦ Collaboratif</span>
-              <span className="share-section__desc">Tes amis voient et modifient le voyage en temps réel</span>
+              <span className="share-section__badge share-section__badge--collab">👥 Modifier ensemble</span>
+              <span className="share-section__desc">
+                Tes proches rejoignent ce voyage : même programme, mêmes dépenses, pour tout le monde.
+              </span>
             </div>
-            {collabUrl ? (
-              <>
-                <div className="share-url share-url--collab">{collabUrl}</div>
-                {collabCopied && <div className="share-copied">✅ Lien copié !</div>}
-                <button className="btn btn--primary btn--full" onClick={() => copyText(collabUrl, setCollabCopied)}>
-                  {collabCopied ? '✅ Copié !' : '📋 Copier le lien collaboratif'}
-                </button>
-              </>
+            {userId ? (
+              <button className="btn btn--primary btn--full" onClick={inviter} disabled={!!enCours}>
+                {enCours === 'invitation' ? '⏳ Préparation…' : '📨 Inviter'}
+              </button>
             ) : (
               <>
-                {collabError && <div className="share-error">{collabError}</div>}
-                <button
-                  className="btn btn--primary btn--full"
-                  onClick={handleEnableCollab}
-                  disabled={collabLoading}
-                >
-                  {collabLoading ? '⏳ Activation...' : '🚀 Activer le partage collaboratif'}
+                <p className="share-section__desc">Il faut un compte pour inviter : c'est lui qui garde le voyage commun.</p>
+                <button className="btn btn--primary btn--full" onClick={() => { onClose(); onShowAuth?.(); }}>
+                  🔑 Se connecter
                 </button>
               </>
             )}
@@ -80,19 +113,20 @@ export default function ShareModal({ trip, onClose }) {
 
           <div className="share-divider">ou</div>
 
-          {/* Static share */}
           <div className="share-section">
             <div className="share-section__label">
-              <span className="share-section__badge">📤 Import statique</span>
-              <span className="share-section__desc">Ton ami importe une copie du voyage (sans sync)</span>
+              <span className="share-section__badge">📤 Envoyer une copie</span>
+              <span className="share-section__desc">
+                Ton ami reçoit le voyage pour lui. Ce qu'il y change ne touche pas au tien.
+              </span>
             </div>
-            <div className="share-url">{staticUrl.length > 80 ? staticUrl.slice(0, 80) + '…' : staticUrl}</div>
-            {copied && <div className="share-copied">✅ Lien copié !</div>}
-            <button className="btn btn--secondary btn--full" onClick={() => copyText(staticUrl, setCopied)}>
-              {copied ? '✅ Copié !' : '📋 Copier le lien statique'}
+            <button className="btn btn--secondary btn--full" onClick={envoyerCopie} disabled={!!enCours}>
+              {enCours === 'copie' ? '⏳ Préparation…' : '📤 Envoyer une copie'}
             </button>
           </div>
 
+          {fait && <div className="share-copied" role="status">✅ {fait}</div>}
+          {erreur && <div className="share-error" role="alert">{erreur}</div>}
         </div>
         <div className="modal__footer">
           <button className="btn btn--secondary btn--full" onClick={onClose}>Fermer</button>

@@ -965,6 +965,45 @@ const PARCOURS = [
         && (await t.combien('.trip-view')) === 0);
     } },
 
+  { groupe: 'Partage', nom: 'Partager dit ce que fait chaque lien, sans bouton mort', depart: 'voyage',
+    intention: "Vouloir partager le voyage sans compte : comprendre ce qu'on peut faire, "
+      + "et envoyer au moins une copie.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.menu(/Partager/);
+      const txt = await t.texte();
+      t.verifier("plus de promesse de « temps réel » d'une photo figée", !/temps réel/i.test(txt));
+      t.verifier('inviter sans compte : la raison et le geste qui débloque',
+        /Il faut un compte/i.test(txt) && (await t.combien('button:has-text("Se connecter")')) > 0);
+      await t.clic('button', { texte: /Envoyer une copie/, delai: 800 });
+      t.verifier('la copie est prête, et ça se dit', /Copie prête/i.test(await t.texte()));
+    } },
+
+  { groupe: 'Réseau', nom: 'Ouvrir une copie reçue ne remplace aucun voyage', depart: 'voyage',
+    reseau: { copie: 'ok' },
+    intention: "Rouvrir un lien de copie, même le sien : on obtient une copie à part, et "
+      + "le voyage qu'on a déjà n'est jamais écrasé par la photo du jour du partage.",
+    async faire(t) {
+      const lien = `${URL_BASE}/?share=3f0c1f4e-7b1a-4c7e-9d7e-2a8b5c1d9e01`;
+      await t.p.goto(lien, { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(2500);
+      t.verifier('la copie est lue par la fonction SQL', (t.appels().copie || 0) > 0,
+        `${t.appels().copie || 0} appels`);
+      const tous = () => t.p.evaluate(() => JSON.parse(localStorage.getItem('provo_trips') || '[]'));
+      await t.p.waitForTimeout(500);
+      let v = await tous();
+      const origine = v.find(x => x.id === TRIP.id);
+      const copie = v.find(x => x.copieDe);
+      t.verifier("le voyage d'origine est intact", origine?.name === TRIP.name, origine?.name);
+      t.verifier('la copie est un voyage à part', !!copie && copie.id !== TRIP.id,
+        copie ? `${copie.id} · ${copie.name}` : '(aucune)');
+      await t.p.goto(lien, { waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(2500);
+      v = await tous();
+      t.verifier('rouvrir le même lien ne la duplique pas', v.filter(x => x.copieDe).length === 1,
+        `${v.filter(x => x.copieDe).length} copies`);
+    } },
+
   { groupe: 'Accueil', nom: 'Un lien ouvre le voyage dès le tout premier lancement', depart: 'voyage',
     intention: "Recevoir une invitation ou une notification sur un téléphone où Provo "
       + "n'a jamais tourné, et arriver là où le lien mène, pas sur un accueil muet.",
