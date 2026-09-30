@@ -4,7 +4,7 @@ import {
   partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
   dateLocale, enEuros,
 } from '../utils/helpers';
-import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
+import { useCurrencyRates, SUPPORTED_CURRENCIES, deviseParDefaut } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
 
@@ -284,7 +284,7 @@ function DonutChart({ byCategory, total }) {
   );
 }
 
-export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId }) {
+export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId, paysDestination }) {
   const travelers = trip.tripTravelers || [];
   const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
@@ -359,6 +359,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       payerId: me?.id || travelers[0]?.id || '',
       participantIds: travelers.map(t => t.id),
       date: aujourdhui(),
+      currency: deviseParDefaut(trip.expenses || [], paysDestination),
     });
     setEditingId(null);
     setEmojisOuverts(false);

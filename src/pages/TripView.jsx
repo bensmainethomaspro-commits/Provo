@@ -1573,6 +1573,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
             onAddExpense={(exp) => addExpense(tripId, exp)}
             onUpdateExpense={(expId, patch) => updateExpense(tripId, expId, patch)}
             currentUserId={userId}
+            paysDestination={anchor?.pays}
             onDeleteExpense={undoableDeleteExpense}
             onDeleteTraveler={undoableDeleteTraveler}
           />

@@ -894,6 +894,29 @@ const PARCOURS = [
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
     } },
 
+  { groupe: 'Dépenses', nom: 'La devise du voyage est proposée d’office', depart: { ...TRIP, destination: 'Tokyo', expenses: [] },
+    intention: "Noter une dépense à Tokyo sans avoir à changer « EUR » en « JPY » à "
+      + "chaque fois ; puis, après avoir payé en dollars, retrouver les dollars.",
+    async faire(t) {
+      // Le pays de destination vient du géocodage de la destination, gardé en
+      // cache : on l'y pose, le parcours ne joint pas le réseau.
+      await t.p.evaluate(() => localStorage.setItem('provo_dest_coords_v2',
+        JSON.stringify({ Tokyo: { lat: 35.68, lon: 139.76, pays: 'JP' } })));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 700 });
+      const devise = () => t.p.locator('select.ef__devise').inputValue();
+      t.verifier('la devise du pays est proposée', (await devise()) === 'JPY', await devise());
+      await t.saisir('.ef__ligne-titre input.form-input', 'Taxi');
+      await t.p.locator('.ef__montant').first().fill('20');
+      await t.p.locator('select.ef__devise').selectOption('USD');
+      await t.clic('button', { texte: /^Ajouter$/, delai: 900 });
+      await t.clic('.expenses-add-top', { delai: 700 });
+      t.verifier('ensuite, la devise de la dernière dépense', (await devise()) === 'USD', await devise());
+    } },
+
   { groupe: 'Dépenses', nom: 'Une devise sans taux ne compte jamais 1 pour 1', depart: 'voyage',
     intention: "Payer 10 000 ¥ hors ligne sans avoir jamais chargé de taux : la dépense "
       + "est notée, mais elle ne pèse pas 10 000 € dans les comptes.",
