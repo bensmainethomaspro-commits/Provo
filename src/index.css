@@ -1,93 +1,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ─── LIGHT MODE VARS ───────────────────────────────────── */
+/* Les jetons (couleurs, tailles, rayons, ombres) vivent dans styles/tokens.css. */
 :root {
-
-  /* ─── Échelle typographique ───────────────────────────────────────────────
-     Mesuré avant : 32 tailles et 9 graisses coexistaient — jusqu'à 31 couples
-     distincts sur le seul écran du jour ouvert, avec des 9,75 px, 12,5 px et
-     16,5 px qui sont des résultats de multiplication, pas des décisions. Une
-     échelle qu'on ne peut pas réciter ne se lit pas comme une hiérarchie ;
-     elle se lit comme du désordre.
-
-     Sept pas, un rapport d'environ 1,2. Les six premiers portent le texte ;
-     --t-3xl est réservé aux chiffres qui répondent à la question de l'écran
-     (règle A4). Aucune taille en dur ne doit réapparaître dans ce fichier. */
-  --t-xs:  11px;   /* métadonnées, compteurs, mentions */
-  --t-sm:  13px;   /* texte secondaire, libellés */
-  --t-md:  15px;   /* texte courant, titre d'une ligne de liste */
-  --t-lg:  18px;   /* titre d'un objet */
-  --t-xl:  22px;   /* titre d'écran */
-  --t-2xl: 28px;   /* chiffre principal */
-  --t-3xl: 40px;   /* chiffre héros */
-
-  /* Trois graisses, pas neuf : 400 courant, 600 appuyé, 800 fort. Écrites en
-     clair plutôt qu'en jetons — trois valeurs se retiennent, et un jeton de
-     plus serait un indirection sans bénéfice. 700 a rejoint 600 : la
-     hiérarchie se porte par la taille, pas par l'épaisseur. */
-  /* Couleur de marque : bleu clair. Les noms --orange / --yellow sont conservés
-     comme alias hérités (ils sont référencés dans tout le fichier) — ils portent
-     désormais les bleus ci-dessous, c'est la seule source de vérité.
-
-     --accent (#35A7DD) est la teinte de marque : traits, bordures, surfaces
-     décoratives, pastilles actives. Elle ne peut PAS porter de texte : mesurée
-     à 2,72:1 contre le blanc — sous le seuil AA de 4,5 — et donc illisible en
-     plein soleil, aussi bien en fond blanc-sur-bleu qu'en texte bleu-sur-blanc.
-
-     --accent-deep est la même famille en plus dense : c'est elle qui remplit les
-     boutons et porte le texte d'accent. C'est aussi ce que reçoit l'alias
-     --orange, référencé partout. Sa valeur de référence est déclarée une seule
-     fois, tout en bas du fichier (#287DA6, 4,59:1) — ne pas la dupliquer ici,
-     c'est ce genre de doublon qui a rendu la correction invisible. */
-  --accent: #35A7DD;
-  --accent-light: #7FD1F0;
-  --orange: var(--accent-deep);
-  --yellow: var(--accent-light);
-  --white: #FFFFFF;
-  --surface: rgba(255,255,255,0.97);
-  --surface-raised: #FFFFFF;
-  --surface-sunken: #EDF1F5;
-  --text: #1a1a2e;
-  --text-muted: #5a5a7a;
-  --text-light: #9090b0;
-  --border: rgba(0,0,0,0.09);
-  --border-strong: rgba(0,0,0,0.15);
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.03);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
-  /* ─── Rayons ──────────────────────────────────────────────────────────
-     Mesuré avant : 23 valeurs en dur (1 → 999 px) et les jetons redéclarés
-     QUATRE fois — si bien que le thème sombre arrondissait tout davantage que
-     le clair (18 contre 14 px sur les boutons) sans que personne l'ait décidé.
-     Cinquième fois qu'une redéclaration plus bas dans ce fichier annule ce
-     qu'on croit avoir posé (règle B5). Une seule déclaration, ici. */
-  --radius-xs:    4px;   /* lignes internes, barres */
-  --radius-sm:   10px;   /* petits contrôles, vignettes */
-  --radius-md:   14px;   /* boutons, champs, feuilles */
-  --radius-lg:   20px;   /* cartes */
-  --radius-pill: 999px;  /* pastilles */
-  --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --blue: #3b82f6;
-  --btn-shadow: 0 2px 6px rgba(0,0,0,0.18);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
-}
-
-:root { --primary-shadow: rgba(53,167,221,0.4); }
-
-/* ─── DARK MODE VARS ─────────────────────────────────────── */
-[data-theme="dark"] {
-  --surface: rgba(22, 22, 40, 0.97);
-  --surface-raised: #1e1e36;
-  --surface-sunken: #12121e;
-  --text: #e2e2f0;
-  --text-muted: #8888aa;
-  --text-light: #5555aa;
-  --border: rgba(255,255,255,0.09);
-  --border-strong: rgba(255,255,255,0.16);
-  --shadow-sm: 0 1px 4px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
-  --btn-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 
 /* ─── RESET & BASE ───────────────────────────────────────── */
@@ -3287,37 +3203,6 @@ button.pdf-chip { font-family: inherit; cursor: pointer; }
   font-weight: 400; line-height: 1;
 }
 
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   APPLE DESIGN SYSTEM — iOS-faithful, modern, clean
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── System colors (override base tokens) ──────────────────────────────── */
-:root {
-  --surface-sunken:  #F2F2F7;   /* iOS system grouped background */
-  --border:          rgba(60,60,67,0.15);
-  --border-strong:   rgba(60,60,67,0.26);
-  --text-muted:      rgba(60,60,67,0.60);
-  --text-light:      rgba(60,60,67,0.36);
-  --shadow-sm:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md:  0 2px 14px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04);
-  --shadow-lg:  0 8px 40px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05);
-  --btn-shadow: 0 1px 2px rgba(0,0,0,0.12);
-}
-[data-theme="dark"] {
-  --surface:        #1C1C1E;
-  --surface-raised: #2C2C2E;
-  --surface-sunken: #000000;
-  --border:         rgba(84,84,88,0.55);
-  --border-strong:  rgba(84,84,88,0.80);
-  --text:           #FFFFFF;
-  --text-muted:     rgba(235,235,245,0.60);
-  --text-light:     rgba(235,235,245,0.30);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.50);
-  --shadow-lg: 0 8px 40px rgba(0,0,0,0.60);
-}
-
 /* ── Body: clean system bg (orange lives only in header zones) ─────────── */
 body {
   background: #F2F2F7;
@@ -4490,40 +4375,10 @@ body {
    PROVO 2.0 — Premium Redesign
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Inter font + warm palette ──────────────────────────────────────────── */
+/* ── Police ─────────────────────────────────────────────────────────────── */
 :root {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-feature-settings: 'cv11' 1;
-  /* Cette redéclaration écrasait l'alias défini en tête de fichier et rendait
-     tous les boutons illisibles (2,72:1). Elle pointe maintenant sur le même
-     bleu dense. Voir B5 : un jeton peut être redéfini plus bas dans la feuille. */
-  --orange: var(--accent-deep);
-  --yellow: #7FD1F0;
-  --primary-shadow: rgba(53,167,221, 0.38);
-  --text: #1C1917;
-  --text-muted: #78716C;
-  --text-light: #A8A29E;
-  --surface: #FFFFFF;
-  --surface-raised: #FFFFFF;
-  --surface-sunken: #F4EFE9;
-  --border: rgba(0,0,0,0.07);
-  --border-strong: rgba(0,0,0,0.12);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.12), 0 3px 10px rgba(0,0,0,0.06);
-}
-[data-theme="dark"] {
-  --text: #E8E3DC;
-  --text-muted: #8A837A;
-  --text-light: #56504A;
-  --surface: #1C1B1A;
-  --surface-raised: #242320;
-  --surface-sunken: #111110;
-  --border: rgba(255,255,255,0.08);
-  --border-strong: rgba(255,255,255,0.13);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.45), 0 0 0 0.5px rgba(255,255,255,0.05);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.65);
 }
 
 /* ── Page entrance animation ─────────────────────────────────────────────── */
@@ -5375,53 +5230,6 @@ button, [role="button"] { -webkit-tap-highlight-color: transparent; }
 }
 .header__add-btn:active { transform: scale(0.92); }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   DESIGN 2.0 — direction « golden hour »
-   Un seul layer final et cohérent : typographie Inter réellement exploitée,
-   neutres chauds, mode sombre chaleureux (fini le bleu-nuit générique),
-   profondeur ambrée, rayons unifiés, micro-animations. Aucune modification
-   de structure — uniquement l'apparence.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-:root {
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  /* Neutres chauds (papier / sable) */
-  --surface: #F7FAFD;
-  --surface-raised: #FFFFFF;
-  --surface-sunken: #E9EFF5;
-  --text: #12202B;
-  --text-muted: #576A78;
-  /* Mesuré à 2,57:1 sur le fond enfoncé — un texte qu'on devine plus qu'on ne
-     le lit. L'app se consulte dehors, en plein soleil, sur un écran baissé :
-     les dates et les compteurs doivent se lire. Assombri jusqu'à 4,5:1 (WCAG
-     AA) à teinte constante. Du coup ce gris rejoint --text-muted : la
-     hiérarchie passe désormais par la taille et la graisse, pas par la pâleur. */
-  --text-light: #606D78;
-  --border: rgba(16, 45, 70, 0.10);
-  --border-strong: rgba(16, 45, 70, 0.18);
-  /* Ombres teintées ambre — jamais de noir pur */
-  --shadow-sm: 0 1px 3px rgba(20,55,80, 0.07), 0 0 0 1px rgba(20,55,80, 0.03);
-  --shadow-md: 0 6px 20px rgba(20,55,80, 0.12), 0 2px 6px rgba(20,55,80, 0.06);
-  --shadow-lg: 0 14px 44px rgba(20,55,80, 0.18), 0 3px 10px rgba(20,55,80, 0.08);
-  --accent-grad: linear-gradient(135deg, #5CBEEA 0%, var(--accent) 55%, #1B7DB5 100%);
-}
-
-/* Mode sombre « braise » : charbon chaud, textes crème */
-[data-theme="dark"] {
-  --surface: #111A22;
-  --surface-raised: #1A252F;
-  --surface-sunken: #0B1218;
-  --text: #E6EEF4;
-  --text-muted: #A5B6C2;
-  /* 3,86:1 sur la surface haute — même correction, éclaircie cette fois. */
-  --text-light: #798D9B;
-  --border: rgba(170,214,255, 0.10);
-  --border-strong: rgba(170,214,255, 0.20);
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow-md: 0 6px 20px rgba(0,0,0,0.55);
-  --shadow-lg: 0 14px 44px rgba(0,0,0,0.65);
-}
-
 /* ── Typographie ─────────────────────────────────────────────────────────── */
 body, button, input, select, textarea {
   font-family: var(--font-sans);
@@ -5462,7 +5270,7 @@ h1, h2, h3,
 }
 [data-theme="dark"] .header__add-btn { background: #E6EEF4; }
 
-/* ── Cartes : hairline + ombre ambrée douce ─────────────────────────────── */
+/* ── Cartes : contour fin + ombre douce ─────────────────────────────────── */
 .trip-card, .tl-day, .agenda-day, .expense-item, .today-act-card,
 .expenses-summary, .debts-card, .traveler-card, .planning-reserve,
 .expense-form, .local-news {
@@ -5866,8 +5674,8 @@ button.budget-inline:active { transform: scale(0.98); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MODE CLAIR 2.0 — clair, aéré, « à la Apple »
-   Fini l'orange plein cadre agressif : fond chaud très clair, texte sombre,
-   orange réservé aux accents (bouton +, onglet actif, libellés, CTA).
+   Fini l'accent plein cadre : fond clair, texte sombre, accent réservé à ce
+   qui est actif (bouton +, onglet actif, libellés, CTA).
    Tout est scopé [data-theme="light"] → le mode sombre n'est pas touché.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -6669,34 +6477,11 @@ button.budget-inline:active { transform: scale(0.98); }
 .map-wrap { position: relative; z-index: 0; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   LISIBILITÉ ET PRISE EN MAIN — mesuré par /verif-ui
+   LISIBILITÉ ET PRISE EN MAIN · mesuré par /verif-ui
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Pastilles de comptage ───────────────────────────────────────────────
-   Blanc sur l'accent : 2,72:1. Blanc sur le vert : 2,28:1. Il faut 4,5:1.
-   Ces pastilles portent des chiffres qu'on lit d'un coup d'œil, dehors, sur
-   un écran baissé — c'est exactement le cas où un contraste faible coûte.
-   La teinte reste celle de la marque, seulement assez foncée pour que le
-   blanc tienne dessus. Le token est dédié : --accent ne bouge pas. */
-:root {
-  --accent-deep: #287DA6;   /* blanc dessus : 4,59:1 */
-  --green-deep:  #178841;   /* blanc dessus : 4,53:1 */
-  --red-deep:    #C42B2B;   /* blanc dessus : 4,52:1 */
-
-  /* Deux métiers différents, deux jetons. --accent-deep REÇOIT du blanc ;
-     --accent-texte EST du texte, posé sur les surfaces claires de l'app
-     (#EDF1F5 au plus foncé) où --accent-deep ne tenait qu'à 3,96:1. */
-  --accent-texte: #22719A;  /* sur --surface-sunken : 4,75:1 ; sur blanc : 5,39:1 */
-  --red-texte:    #B31F1F;  /* sur une carte claire : 5,4:1 */
-  --green-texte:  #146F35;  /* sur une carte claire : 6:1 — --green-deep n'atteignait que 4,33 */
-}
-/* En sombre, un texte d'accent doit s'éclaircir, pas s'assombrir. */
-[data-theme="dark"] {
-  --accent-texte: var(--accent-light);
-  --red-texte: #FF8A8A;
-  --green-texte: #4ADE80;
-}
-
+/* Pastilles de comptage : blanc sur l'accent (2,72:1) ou sur le vert (2,28:1)
+   ne se lit pas dehors. Elles prennent les variantes « deep » de tokens.css. */
 .tab-badge { background: var(--accent-deep) !important; color: #fff !important; }
 .tab-badge--today { background: var(--green-deep) !important; }
 /* Sur l'onglet actif la pastille s'inverse : fond blanc, chiffre coloré.
