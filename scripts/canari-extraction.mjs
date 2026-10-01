@@ -356,13 +356,26 @@ const ATTENDU = {
 };
 const attenduDe = (nom) => ATTENDU[nom] || ATTENDU_PAR_DEFAUT;
 
-function juger(mesures, modele) {
+function juger(mesures, modele, budget) {
   const vivantes = mesures.filter(m => !m.absent);
   const soucis = [];
   const bonnesNouvelles = [];
 
+  // Le budget de 20 s de la fonction (`_shared/budget.ts`, 30 septembre 2026)
+  // suit l'appel par le contexte asynchrone. Si l'hébergeur ne le porte pas,
+  // rien ne casse : chaque requête garde son délai, comme avant. Mais l'appel
+  // entier n'est plus borné, et l'app (qui coupe à 25 s) peut de nouveau
+  // attendre pour rien. Orange : prévenir, pas crier. Une sonde muette (fonction
+  // pas encore redéployée) ne conclut rien.
+  const avertissements = [];
+  if (budget?.connu && !budget.ok) {
+    avertissements.push("le budget de 20 s de la fonction est inactif chez l'hébergeur "
+      + "(contexte asynchrone absent) : chaque requête garde son délai, mais l'appel "
+      + "entier n'est plus borné");
+  }
+
   if (!vivantes.length) {
-    return { etat: 'orange', resume: 'tous les liens témoins ont disparu — à remplacer' };
+    return { etat: 'orange', resume: ['tous les liens témoins ont disparu — à remplacer', ...avertissements].join(' · ') };
   }
 
   for (const m of vivantes) {
@@ -400,21 +413,28 @@ function juger(mesures, modele) {
   const morts = mesures.filter(m => m.absent).map(m => m.temoin);
   if (morts.length) soucis.push(`liens témoins disparus, à remplacer : ${morts.join(', ')}`);
 
-  if (soucis.length) return { etat: 'rouge', resume: soucis.join(' · ') };
-  if (bonnesNouvelles.length) return { etat: 'orange', resume: bonnesNouvelles.join(' · ') };
+  if (soucis.length) return { etat: 'rouge', resume: [...soucis, ...avertissements].join(' · ') };
+  if (bonnesNouvelles.length || avertissements.length) {
+    return { etat: 'orange', resume: [...avertissements, ...bonnesNouvelles].join(' · ') };
+  }
   return { etat: 'vert', resume: 'conforme à ce qu\'on attend d\'un serveur depuis le 9 août 2026' };
 }
 
 /**
- * La clé du modèle est-elle posée sur la fonction déployée ?
+ * La sonde de santé de la fonction déployée (`{ sante: true }`). Elle ne
+ * consomme rien et ne va rien chercher au dehors. Deux réponses en une lecture :
  *
- * Ce n'est pas un détail d'exploitation : depuis que TikTok ne rend plus de
- * légende, lire le nom sur la couverture est le SEUL échelon qui nomme encore
- * un lieu — et il ne fonctionne pas sans clé. Une clé absente, révoquée ou
- * expirée casse donc l'ajout par lien en silence. La sonde ne consomme rien :
- * elle regarde la variable, elle n'appelle pas le modèle.
+ *  · `modele` : une clé de modèle est-elle encore posée ? Plus rien ne s'en
+ *    sert depuis le 31 août 2026 (voir `juger`).
+ *  · `budget` : le budget de 20 s de tout l'appel fonctionne-t-il chez
+ *    l'hébergeur ? Il repose sur `AsyncLocalStorage`, que les tests sous Node
+ *    confirment mais que seul l'hébergeur réel peut confirmer pour lui-même.
+ *
+ * Chacune vaut `{ connu, ok, pourquoi }` : une fonction pas encore redéployée
+ * ne connaît pas le champ, et on ne conclut alors rien.
  */
-async function modeleConfigure() {
+async function sante() {
+  const inconnu = (pourquoi) => ({ modele: { connu: false, pourquoi }, budget: { connu: false, pourquoi } });
   const { signal, clear } = delai(15000);
   try {
     const r = await fetch(FONCTION, {
@@ -426,25 +446,25 @@ async function modeleConfigure() {
       body: JSON.stringify({ sante: true }),
     });
     clear();
-    if (!r.ok) return { connu: false, pourquoi: `HTTP ${r.status}` };
+    if (!r.ok) return inconnu(`HTTP ${r.status}`);
     const d = await r.json();
-    // Une fonction pas encore redéployée ne connaît pas la sonde : elle répond
+    // Une fonction pas encore redéployée ne connaît pas le champ : elle répond
     // autre chose. On ne conclut alors rien, plutôt que de crier au loup.
-    if (typeof d?.modele !== 'boolean') return { connu: false, pourquoi: 'sonde non déployée' };
-    return { connu: true, ok: d.modele };
+    const lire = (v) => (typeof v === 'boolean' ? { connu: true, ok: v } : { connu: false, pourquoi: 'champ absent de la sonde' });
+    return { modele: lire(d?.modele), budget: lire(d?.budget) };
   } catch (e) {
     clear();
-    return { connu: false, pourquoi: String(e.message || e) };
+    return inconnu(String(e.message || e));
   }
 }
 
 const mesures = [];
 for (const t of TEMOINS) mesures.push(await mesurer(t));
-const modele = await modeleConfigure();
-const verdict = juger(mesures, modele);
+const { modele, budget } = await sante();
+const verdict = juger(mesures, modele, budget);
 
 if (JSON_SEUL) {
-  console.log(JSON.stringify({ verdict, modele, mesures }, null, 2));
+  console.log(JSON.stringify({ verdict, modele, budget, mesures }, null, 2));
 } else {
   for (const m of mesures) {
     console.log(`\n■ ${m.temoin}${m.absent ? '  (LIEN DISPARU)' : ''}`);
@@ -464,6 +484,11 @@ if (JSON_SEUL) {
     + `${modele.connu ? (modele.ok ? 'posée sur la fonction déployée'
       : 'ABSENTE — cet échelon ne peut pas fonctionner')
       : `état inconnu (${modele.pourquoi})`}`);
+  console.log(`\n■ fonction déployée`);
+  console.log(`  ${budget.connu ? (budget.ok ? '✓' : '✗') : '~'} budget de 20 s  `
+    + `${budget.connu ? (budget.ok ? "actif : il suit chaque appel chez l'hébergeur"
+      : "INACTIF — l'appel entier n'est plus borné (chaque requête garde son délai)")
+      : `état inconnu (${budget.pourquoi})`}`);
 
   const sceau = { vert: '🟢', orange: '🟠', rouge: '🔴' }[verdict.etat];
   console.log(`\n${sceau} ${verdict.etat.toUpperCase()} — ${verdict.resume}\n`);
