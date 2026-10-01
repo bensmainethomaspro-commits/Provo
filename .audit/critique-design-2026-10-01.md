@@ -4,6 +4,33 @@ Deux passes : la critique du visuel et du design system, puis le test d'un
 nouvel utilisateur. Rien n'a été modifié dans le code : ce rapport attend tes
 choix.
 
+## Suite donnée (1er octobre 2026, même jour)
+
+Demandé : « fais tout ce que tu penses être le mieux ». Les trois lots sont
+appliqués, avec trois écarts par rapport au plan ci-dessous, chacun pour une
+raison :
+
+- **Les repas restent dans l'estimé.** Je recommandais de les en sortir ;
+  `budgetStats` documente qu'ils y sont exprès, pour qu'on sache à quoi
+  s'attendre. Ils sortent des compteurs, de l'avancement et du bilan, et
+  l'estimé dit d'où il vient (« ≈ 200 € de repas prévus »).
+- **La Réserve vide ne promet pas Instagram** : l'extraction Instagram est
+  abandonnée sciemment (`project-notes.md`).
+- **Le vide sous la carte du jour (F3) n'est pas traité** : c'est la
+  conséquence de la frise horizontale, une décision de conception à prendre
+  avec toi.
+
+Trouvé en chemin et corrigé : un champ de saisie posé dans une feuille ne se
+voyait plus du tout (A-067).
+
+Vérifié : `verif-ui` à zéro hors carte sur 30 écrans par thème (26 avant),
+avec la nouvelle mesure au pixel ; 92 parcours et 21 suites verts ;
+`verif-jetons` rouge sur l'ancien code, vert sur le nouveau. Non vérifié : le
+rendu de SF Pro sur un vrai iPhone (captures faites sous Linux).
+
+Le détail des décisions est dans `.claude/project-notes.md` ; les constats
+sont dans `.audit/journal.md` (A-061 à A-069).
+
 ## Méthode et limites
 
 - **26 écrans × 2 thèmes** capturés sur le jeu de référence de `verif-ui`
