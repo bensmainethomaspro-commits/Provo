@@ -465,6 +465,28 @@ const PARCOURS = [
         `${await t.combien('.tl-activity')} activités`);
     } },
 
+  // Le plantage du 30 septembre 2026 : annuler une activité d'AUJOURD'HUI
+  // faisait tomber l'app entière (créneau `null` lu par la carte du jour).
+  // Aucun parcours n'annulait rien ; /verif-ui l'a trouvé en mesurant la
+  // barre « Annuler ».
+  { groupe: 'Planning', nom: "Annuler une activité du jour, puis se raviser", depart: 'voyage',
+    intention: "Une activité d'aujourd'hui tombe à l'eau : la marquer « Nogo », puis revenir en arrière.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.clic('.tl-day__open, .tl-day__header', { delai: 700 });
+      await t.clic('.day-detail-overlay .activity-card', { delai: 500 });
+      await t.clic('.day-detail-overlay .status-btn--nogo', { delai: 900 });
+      t.verifier("l'app tient debout", !(await t.visible('.error-screen')));
+      const v = await t.voyage();
+      const annulee = v.days[0].activities.find(a => a.status === 'nogo');
+      t.verifier("l'activité est annulée", !!annulee, JSON.stringify(v.days[0].activities.map(a => a.status)));
+      const msg = await t.p.locator('.undo-toast--visible').first().innerText({ timeout: 500 }).catch(() => '');
+      t.verifier('la barre propose de revenir en arrière', /Annuler/.test(msg), msg || '(rien)');
+      await t.clic('.undo-toast--visible .undo-toast__btn', { texte: /Annuler/, delai: 700 });
+      const apres = (await t.voyage()).days[0].activities.find(a => a.id === annulee?.id);
+      t.verifier('« Annuler » la remet comme avant', apres && apres.status !== 'nogo', apres?.status);
+    } },
+
   { groupe: 'Planning', nom: 'Ajouter une activité à un jour', depart: 'voyage',
     intention: "Poser une visite dans le programme d'un jour précis.",
     async faire(t) {
@@ -787,17 +809,25 @@ const PARCOURS = [
       t.verifier("les billets ont leur place dans les notes", await t.visible('.trip-docs'));
       const champ = t.p.locator('.trip-docs input[type="file"]');
       if (!(await champ.count())) t.injouable('pas de champ fichier');
+      // Un vrai billet pèse des dizaines de ko : un fichier de 15 octets
+      // resterait dans le voyage (sous le seuil) et ne testerait rien.
       await champ.setInputFiles({
         name: 'billet-train.pdf', mimeType: 'application/pdf',
-        buffer: Buffer.from('%PDF-1.4\n%%EOF\n'),
+        buffer: Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(6000, 7), Buffer.from('\n%%EOF\n')]),
       });
-      await t.p.waitForTimeout(700);
+      await t.p.waitForTimeout(900);
       t.verifier('le billet apparaît', (await t.texte()).includes('billet-train.pdf'));
       const v = await t.voyage();
       t.verifier('il est enregistré dans le voyage', (v.documents || []).length === 1,
         `${(v.documents || []).length} document(s)`);
-      t.verifier("il est lisible sans réseau (stocké, pas lié)",
-        String(v.documents?.[0]?.data || '').startsWith('data:'));
+      // Rangé À CÔTÉ du voyage (utils/pieces.js) : le voyage n'en garde que la
+      // référence, et il s'ouvre quand même sans réseau (ce parcours n'en a pas).
+      t.verifier('le voyage ne garde que sa référence, pas le fichier',
+        /^pj:[0-9a-f]{24}$/.test(String(v.documents?.[0]?.data || '')), String(v.documents?.[0]?.data || '').slice(0, 40));
+      await t.p.evaluate(() => { window.__ouverts = []; window.open = (u) => { window.__ouverts.push(String(u)); return null; }; });
+      await t.clic('.trip-doc__ouvrir', { texte: 'billet-train', delai: 700 });
+      const ouverts = await t.p.evaluate(() => window.__ouverts);
+      t.verifier('il s’ouvre sans réseau', ouverts.length === 1 && ouverts[0].startsWith('blob:'), JSON.stringify(ouverts));
       await t.clic('.trip-doc__retirer', { delai: 500 });
       t.verifier('et il se retire', ((await t.voyage()).documents || []).length === 0);
     } },
@@ -842,6 +872,32 @@ const PARCOURS = [
         JSON.stringify(apres.carteHorsLigne) === JSON.stringify(v.carteHorsLigne));
       t.verifier("aucune interface n'a été ajoutée pour ça",
         !(await t.combien('.confirm-box')) && !/Télécharger la carte/i.test(await t.texte()));
+    } },
+
+  { groupe: 'Tickets', nom: 'Le moteur des tickets est gardé avant le départ', depart: 'voyage',
+    intention: "Photographier son premier ticket à l'étranger, sans réseau, et qu'il se "
+      + "lise : le moteur doit être venu avant, pas au moment où on en a besoin.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Démarré huit secondes après l'ouverture, en silence ; on laisse le
+      // temps au moteur de venir et au service worker de le ranger.
+      let present = false;
+      for (let i = 0; i < 30 && !present; i++) {
+        await t.p.waitForTimeout(1000);
+        present = await t.p.evaluate(async () => !!(await caches.match('/tesseract/worker.min.js'))
+          && !!(await caches.match('/tesseract/lang/fra.traineddata.gz')));
+      }
+      t.verifier('le moteur et le modèle de langue sont sur le téléphone', present);
+      t.verifier("rien ne s'est affiché pour ça", !(await t.visible('.sheet, .modal')));
+    } },
+
+  { groupe: 'Tickets', nom: 'Un voyage lointain ne précharge pas le moteur', depart: PAS_PARTI,
+    intention: "Un voyage dans trois mois ne doit rien télécharger aujourd'hui.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.p.waitForTimeout(12000);
+      const present = await t.p.evaluate(async () => !!(await caches.match('/tesseract/worker.min.js')));
+      t.verifier("le moteur n'est pas venu", !present);
     } },
 
   { groupe: 'Carte', nom: "Un voyage lointain ne télécharge rien", depart: PAS_PARTI,
@@ -892,6 +948,29 @@ const PARCOURS = [
       const txt = await t.texte();
       t.verifier('elle apparaît dans la liste', txt.includes('Café Central'));
       t.verifier('un total est affiché', /\d[\d\s,.]*\s*€/.test(txt));
+    } },
+
+  { groupe: 'Dépenses', nom: 'La devise du voyage est proposée d’office', depart: { ...TRIP, destination: 'Tokyo', expenses: [] },
+    intention: "Noter une dépense à Tokyo sans avoir à changer « EUR » en « JPY » à "
+      + "chaque fois ; puis, après avoir payé en dollars, retrouver les dollars.",
+    async faire(t) {
+      // Le pays de destination vient du géocodage de la destination, gardé en
+      // cache : on l'y pose, le parcours ne joint pas le réseau.
+      await t.p.evaluate(() => localStorage.setItem('provo_dest_coords_v2',
+        JSON.stringify({ Tokyo: { lat: 35.68, lon: 139.76, pays: 'JP' } })));
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      await t.onglet(/Dépenses/i);
+      await t.clic('.expenses-add-top', { delai: 700 });
+      const devise = () => t.p.locator('select.ef__devise').inputValue();
+      t.verifier('la devise du pays est proposée', (await devise()) === 'JPY', await devise());
+      await t.saisir('.ef__ligne-titre input.form-input', 'Taxi');
+      await t.p.locator('.ef__montant').first().fill('20');
+      await t.p.locator('select.ef__devise').selectOption('USD');
+      await t.clic('button', { texte: /^Ajouter$/, delai: 900 });
+      await t.clic('.expenses-add-top', { delai: 700 });
+      t.verifier('ensuite, la devise de la dernière dépense', (await devise()) === 'USD', await devise());
     } },
 
   { groupe: 'Dépenses', nom: 'Une devise sans taux ne compte jamais 1 pour 1', depart: 'voyage',
@@ -1776,6 +1855,28 @@ const PARCOURS = [
       t.verifier('après accord, les fiches sont complétées', enrichies > 0, `${enrichies} fiches`);
     } },
 
+  { groupe: 'Réseau', nom: 'Les fiches se complètent seules, et se proposent', depart: 'voyage',
+    reseau: { enrichPlace: 'ok' },
+    intention: "Ouvrir son voyage et voir les fiches incomplètes se compléter sans rien "
+      + "demander ; accepter ou refuser ce qui est trouvé, rien ne s'écrit seul.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      const avant = JSON.stringify(await t.voyage());
+      let msg = '';
+      for (let i = 0; i < 30 && !/complétées? en ligne/.test(msg); i++) {
+        await t.p.waitForTimeout(1000);
+        // Délai court : sans lui, chaque tour attendait 30 s une bulle absente,
+        // et l'ancien code mettait un quart d'heure à échouer.
+        msg = await t.p.locator('.undo-toast--visible').first().innerText({ timeout: 300 }).catch(() => '');
+      }
+      t.verifier('la barre de messages annonce les fiches complétées', /complétées? en ligne/.test(msg),
+        msg || '(rien)');
+      t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
+      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      await t.clic('.undo-toast__btn', { texte: /Voir/, delai: 900 });
+      t.verifier('« Voir » ouvre les propositions, à accepter ou refuser', await t.visible('.check-card'));
+    } },
+
   { groupe: 'Réseau', nom: "Compléter sans rien trouver ne redemandera pas", depart: 'voyage',
     reseau: { enrichPlace: 'vide' },
     intention: "Rien trouvé n'est pas une panne : on l'a cherché, on s'en souvient.",
@@ -2464,7 +2565,11 @@ for (const parcours of choisis) {
   erreurs.forEach(e => journal.push({ type: 'casse', quoi: 'erreur JavaScript', detail: e }));
 
   const casses = journal.filter(j => j.type === 'casse');
-  if (casses.length) await p.screenshot({ path: `${CAPTURES}/${parcours.nom.replace(/[^a-z0-9]+/gi, '-')}.png` });
+  // Avec un délai : sans lui, une capture qui attend une police jamais
+  // servie figeait toute la suite, et un parcours en échec ne rendait
+  // jamais son verdict (vu le 30 septembre 2026, onze minutes de silence).
+  if (casses.length) await p.screenshot({ path: `${CAPTURES}/${parcours.nom.replace(/[^a-z0-9]+/gi, '-')}.png`, timeout: 15000 })
+    .catch(() => journal.push({ type: 'friction', quoi: 'capture impossible', detail: 'la page ne se laisse pas photographier' }));
 
   rapport.push({ ...parcours, journal, injoue, casses: casses.length,
     ok: journal.filter(j => j.type === 'ok').length,

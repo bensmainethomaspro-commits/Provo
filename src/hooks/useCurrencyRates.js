@@ -31,6 +31,34 @@ export const SUPPORTED_CURRENCIES = [
   { code: 'SEK', symbol: 'kr', name: 'Couronne suédoise' },
 ];
 
+// La monnaie d'un pays, pour les devises que l'app propose. Tout le reste —
+// zone euro comprise — donne l'euro.
+const DEVISE_DU_PAYS = {
+  US: 'USD', GB: 'GBP', JP: 'JPY', CH: 'CHF', LI: 'CHF', CA: 'CAD', AU: 'AUD',
+  MX: 'MXN', BR: 'BRL', TH: 'THB', SG: 'SGD', AE: 'AED', MA: 'MAD', EG: 'EGP',
+  TR: 'TRY', ID: 'IDR', KR: 'KRW', IN: 'INR', NO: 'NOK', SE: 'SEK',
+};
+
+/**
+ * La devise à proposer d'office dans le formulaire d'une dépense.
+ *
+ * Elle était toujours l'euro : à Tokyo, chaque dépense demandait de changer
+ * « EUR » en « JPY » avant de taper le montant — un geste de trop sur la
+ * saisie qu'on fait le plus souvent, debout, à la caisse. Dans l'ordre :
+ *  1. la devise de la dernière dépense notée dans ce voyage (on paie
+ *     rarement deux fois de suite dans deux monnaies différentes) ;
+ *  2. celle du pays de destination ;
+ *  3. l'euro.
+ * Les remboursements sont écartés : l'app les note toujours en euros.
+ */
+export function deviseParDefaut(expenses = [], pays = null) {
+  for (let i = expenses.length - 1; i >= 0; i--) {
+    const e = expenses[i];
+    if (e && !e.isSettlement && e.currency) return e.currency;
+  }
+  return DEVISE_DU_PAYS[String(pays || '').toUpperCase()] || 'EUR';
+}
+
 function lireCache() {
   try {
     const raw = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');

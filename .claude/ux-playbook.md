@@ -195,6 +195,20 @@ ailleurs.*
 déplacement est enregistré ne dit pas qu'il est atteignable au doigt.
 *Origine : la cible de dépôt du jour voisin mesurait 6 px de large sur un écran
 de 390 px. Le code « marchait ».*
+**Corollaire : le geste réel part de l'état réel.** Un test qui prépare sa
+scène (charge l'app une première fois, ouvre une session, remplit un cache,
+installe le service worker) ne teste plus le premier contact. Le premier
+lancement, l'arrivée par un lien reçu, la première ouverture après une mise à
+jour : chacun demande un test qui part d'un état **vierge** (aucun cache, aucun
+service worker, aucune session) et entre directement par le chemin de
+l'utilisateur. Se demander à chaque test : « par où ce test est-il entré, et
+est-ce par là qu'entre la personne ? »
+*Origine : le parcours « la notification ouvre le bon écran » passait au vert.
+Il chargeait l'app une fois, PUIS suivait le lien. Au vrai premier lancement,
+l'installation du service worker rechargeait la page, alors que l'app avait déjà
+effacé le lien de l'adresse : une invitation ouverte par quelqu'un qui n'avait
+jamais lancé l'app ne faisait rien. Le test ne pouvait pas le voir, il était
+entré par une autre porte.*
 
 **E4. Un test qui échoue n'est pas toujours un bug produit.** Distinguer le
 défaut réel du sélecteur mal choisi avant de modifier le code.
@@ -423,6 +437,26 @@ s'est éteint sans prévenir ; toute l'extraction reposait dessus et personne ne
 l'a su avant qu'un utilisateur ne signale des fiches vides. Deux fautes, pas
 une : une source unique, et aucune alarme.*
 
+**F6. Une copie distante ne remplace jamais une saisie locale pas encore
+envoyée.** Dans une app qui marche hors ligne et se synchronise, garder sur
+l'appareil, de façon durable (pas seulement en mémoire) : **ce qui attend un
+envoi**, et **la dernière version connue des deux côtés**. À chaque lecture
+depuis le serveur, fusionner à trois voies avec cette base au lieu de
+remplacer ; n'écrire vers le serveur qu'après l'avoir lu ; relancer les envois
+au retour du réseau. Et chercher **tous** les déclencheurs de la lecture : un
+rechargement silencieux part plus souvent qu'on ne croit (retour au premier
+plan, renouvellement de session, reconnexion).
+Vérifiable en une minute : modifier hors ligne, passer sur une autre app,
+revenir avec le réseau, relancer. La modification doit être là, et arrivée au
+serveur.
+*Origine : une dépense notée hors ligne disparaissait au premier aller-retour
+par une autre application une fois le réseau revenu. La bibliothèque
+d'authentification annonçait une « connexion » à chaque retour au premier plan,
+l'app relisait alors le serveur et remplaçait sa version par celle d'avant. En
+sens inverse, un téléphone en retard réécrivait le serveur avec sa vieille
+version, parce que son envoi différé partait avant la lecture. Le bandeau
+promettait pourtant « données sauvegardées localement ».*
+
 ---
 
 ## Journal analytique
@@ -458,6 +492,8 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | un canari déguisé en navigateur déclare morte une chaîne qui marche | F5 (3ᵉ corollaire) |
 | 2026-08 | « essaie quelque chose de moins cher, c'est très onéreux là » | F3 (corollaires) |
 | 2026-08 | trois audits de suite : une règle posée à un endroit ne suit pas les autres | E13 |
+| 2026-09 | une dépense notée hors ligne effacée par la version du serveur au retour dans l'app | F6 |
+| 2026-09 | le test de notification passait : il chargeait l'app avant de suivre le lien | E3 (corollaire) |
 
 ### Récidives repérées
 
@@ -479,8 +515,11 @@ revient trois fois est un problème structurel, pas un détail.
   fois en une semaine (formulaire de dépense, puis jour ouvert et fiche
   d'activité). À chaque fois la sonde annonçait « rien à signaler » sur un
   écran qu'elle ne regardait pas — et la troisième fois, sur un écran qu'elle
-  croyait regarder. → E6, et vérifier qu'un écran exerce chaque sonde avant de
-  l'ajouter.
+  croyait regarder. **Quatrième et cinquième fois en septembre 2026** : une
+  sonde d'interface qui réamorçait le stockage en rechargeant et n'atteignait
+  jamais son écran, et un parcours de notification entré par une autre porte
+  que l'utilisateur (E3, corollaire). → E6, et vérifier qu'un écran exerce
+  chaque sonde avant de l'ajouter ; puis se demander par où la sonde entre.
 - **Un `position: fixed` enfermé par un ancêtre** : trois fois — la roue,
   la barre d'onglets sur les dépôts, puis le menu ⋯ d'une activité. À chaque
   fois le calque semblait correct dans le code et se dessinait au mauvais

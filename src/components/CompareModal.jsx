@@ -1,4 +1,6 @@
 import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, CATEGORY_COLORS, haversineKm } from '../utils/helpers';
+import ImagePiece from './ImagePiece';
+import { ouvrirPiece } from '../utils/pieces';
 
 export default function CompareModal({ activities, onClose, onChoose }) {
   if (!activities?.length) return null;
@@ -48,7 +50,7 @@ export default function CompareModal({ activities, onClose, onChoose }) {
 
                 {a.photoUrl && (
                   <div className="compare-card__photo-wrap">
-                    <img src={a.photoUrl} className="compare-card__photo" alt="" />
+                    <ImagePiece valeur={a.photoUrl} className="compare-card__photo" alt="" />
                   </div>
                 )}
 
@@ -107,7 +109,7 @@ export default function CompareModal({ activities, onClose, onChoose }) {
                   {a.screenshots?.length > 0 && (
                     <div className="compare-card__screenshots">
                       {a.screenshots.map((src, i) => (
-                        <img key={i} src={src} className="compare-screenshot" alt="" onClick={() => window.open(src, '_blank')} />
+                        <ImagePiece key={i} valeur={src} className="compare-screenshot" alt="" onClick={() => ouvrirPiece(src)} />
                       ))}
                     </div>
                   )}

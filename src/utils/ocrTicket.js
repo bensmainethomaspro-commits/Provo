@@ -73,6 +73,59 @@ function preparer(image, largeurCible = 1400) {
   });
 }
 
+// Nos propres chemins : sans eux, tesseract.js irait chercher ces trois
+// fichiers sur un CDN public (voir scripts/vendor-tesseract.mjs).
+const CHEMINS = {
+  workerPath: '/tesseract/worker.min.js',
+  corePath: '/tesseract/core',
+  langPath: '/tesseract/lang',
+};
+
+/**
+ * Le moteur est-il déjà sur ce téléphone ? Le service worker le garde dans un
+ * cache nommé d'après sa version : une nouvelle version le vide, et la
+ * question se repose d'elle-même.
+ */
+export async function moteurPresent() {
+  if (!('caches' in window)) return false;
+  const [worker, langue] = await Promise.all([
+    caches.match('/tesseract/worker.min.js'),
+    caches.match('/tesseract/lang/fra.traineddata.gz'),
+  ]);
+  return !!(worker && langue);
+}
+
+/**
+ * Faire venir le moteur AVANT d'en avoir besoin (audit A-040).
+ *
+ * Il se téléchargeait au premier ticket photographié : hors ligne à ce
+ * moment-là, à l'étranger, la lecture échouait, et le message accusait la
+ * photo. On démarre donc le moteur une fois, en silence, puis on l'éteint :
+ * ses fichiers (celui des trois cœurs que CE téléphone sait lire, le modèle
+ * de langue) passent par le service worker et y restent.
+ *
+ * Mêmes règles que la carte hors ligne (`carteHorsLigne.js`) : départ dans
+ * moins de dix jours ou voyage en cours, réseau présent, économiseur de
+ * données respecté. Rend `true` si le moteur est là à la fin.
+ */
+export async function prechargerMoteur(trip, { maintenant = new Date() } = {}) {
+  if (!trip || !navigator.onLine || navigator.connection?.saveData) return false;
+  const debut = new Date(`${trip.startDate}T00:00:00`);
+  const fin = new Date(`${trip.endDate}T23:59:59`);
+  if (maintenant > fin || (debut - maintenant) / 86400000 > 10) return false;
+  if (await moteurPresent()) return true;
+  let worker = null;
+  try {
+    const { createWorker } = await import('tesseract.js');
+    worker = await createWorker('fra', 1, CHEMINS);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await worker?.terminate?.().catch(() => {});
+  }
+}
+
 /**
  * Photo de ticket → ce qu'on propose de remplir.
  *
@@ -90,11 +143,7 @@ export async function lireTicketImage(imageDataUrl, surAvancement) {
     // `1` = OEM LSTM seul, le moteur moderne. C'est aussi ce qui autorise le
     // modèle de langue allégé (0,7 Mo au lieu de 6).
     worker = await createWorker('fra', 1, {
-      // Nos propres chemins : sans eux, tesseract.js irait chercher ces trois
-      // fichiers sur un CDN public (voir scripts/vendor-tesseract.mjs).
-      workerPath: '/tesseract/worker.min.js',
-      corePath: '/tesseract/core',
-      langPath: '/tesseract/lang',
+      ...CHEMINS,
       logger: (m) => {
         if (m?.status === 'recognizing text' && typeof m.progress === 'number') {
           surAvancement?.(m.progress);
@@ -104,8 +153,13 @@ export async function lireTicketImage(imageDataUrl, surAvancement) {
     const { data } = await worker.recognize(prete);
     return lireTicketTexte(data?.text || '');
   } catch {
-    // Hors ligne au premier usage, mémoire insuffisante, moteur indisponible :
-    // une seule réponse, celle que le formulaire sait dire.
+    // Hors ligne sans moteur sur le téléphone : ce n'est pas la photo qui est
+    // en cause, et le dire autrement enverrait reprendre dix fois la photo.
+    if (!navigator.onLine && !(await moteurPresent().catch(() => false))) {
+      return { error: 'moteur_absent' };
+    }
+    // Mémoire insuffisante, moteur indisponible : une seule réponse, celle
+    // que le formulaire sait dire.
     return { error: 'illisible' };
   } finally {
     // Le moteur garde plusieurs dizaines de mégaoctets : sur un téléphone, le

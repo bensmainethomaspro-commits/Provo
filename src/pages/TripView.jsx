@@ -21,7 +21,7 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros } from '../utils/helpers';
+import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
@@ -30,6 +30,7 @@ import { signauxAjout } from '../utils/propositions';
 import { preparerFeries, feriesEnCache, anneesDuVoyage } from '../utils/joursFeries';
 import PropositionSheet from '../components/PropositionSheet';
 import TripDocuments from '../components/TripDocuments';
+import { usePiece } from '../hooks/usePiece';
 import { aProposer as carteAProposer, telecharger as telechargerCarte } from '../utils/carteHorsLigne';
 import { useLiveLocation, formatDistance } from '../hooks/useLiveLocation';
 import { useReorderDrag } from '../hooks/useReorderDrag';
@@ -47,6 +48,7 @@ const PlaceCheckSheet = lazy(() => import('../components/PlaceCheckSheet'));
 // La pop-up d'enrichissement n'apparaît qu'après une recherche réussie :
 // inutile de l'embarquer dans le paquet principal.
 const EnrichSheet = lazy(() => import('../components/EnrichSheet'));
+const ConflitsSheet = lazy(() => import('../components/ConflitsSheet'));
 
 export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme, ongletInitial, onShowAuth }) {
   const {
@@ -62,9 +64,26 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     addDailyTemplate, removeDailyTemplate,
     userId,
     fetchTripMembers, removeTripMember,
+    conflits, oublierConflits,
   } = useTripsContext();
 
   const trip = getTripById(tripId);
+  const couverture = usePiece(trip?.coverPhoto);
+
+  // Ce qui a changé ailleurs en même temps qu'ici (voir ConflitsSheet). Les
+  // conflits qui ne portent que sur des champs techniques ne donnent aucun
+  // groupe : ils se règlent seuls, et on les oublie.
+  const conflitsBruts = conflits?.[tripId];
+  const groupesConflits = useMemo(
+    () => (trip && conflitsBruts?.length ? regrouperConflits(trip, conflitsBruts) : []),
+    [trip, conflitsBruts]);
+  useEffect(() => {
+    if (conflitsBruts?.length && !groupesConflits.length) oublierConflits(tripId, conflitsBruts);
+  }, [conflitsBruts, groupesConflits, oublierConflits, tripId]);
+  const remettreSaVersion = (groupes) => {
+    restoreTrip(tripId, v => groupes.reduce(restaurerConflit, v));
+    oublierConflits(tripId, groupes.flatMap(g => g.conflits));
+  };
   const weather = useWeather(trip);
   // Les recherches de lieu se situent sur la DESTINATION, jamais sur la
   // première activité géolocalisée : un vol au départ ancrerait tout le
@@ -201,8 +220,10 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   const [undoVisible, setUndoVisible] = useState(false);
   const [undoMsg, setUndoMsg] = useState('');
   const [undoDone, setUndoDone] = useState(false);
-  // Un message sans action à annuler (« demande le réseau »…).
+  // Un message sans action à annuler (« demande le réseau »…), avec au besoin
+  // un geste à proposer (« Voir »).
   const [undoInfo, setUndoInfo] = useState(false);
+  const [infoAction, setInfoAction] = useState(null);
   const [showSearch, setShowSearch] = useState(false);
   const [tripMenuOpen, setTripMenuOpen] = useState(false);
   // Ce que l'app a remarqué en posant une activité : dit après coup, jamais
@@ -319,15 +340,67 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     undoTimerRef.current = setTimeout(() => setUndoVisible(false), 1800);
   };
 
-  const informer = (msg) => {
+  const informer = (msg, action = null) => {
     undoRef.current = null;
     setUndoMsg(msg);
     setUndoDone(true);
     setUndoInfo(true);
+    setInfoAction(action);
     setUndoVisible(true);
     clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setUndoVisible(false), 3500);
+    undoTimerRef.current = setTimeout(() => setUndoVisible(false), action ? 9000 : 3500);
   };
+
+  // ── Complétion automatique ─────────────────────────────────────────────────
+  // Le principe produit dit que l'app complète elle-même ; elle ne le faisait
+  // qu'à l'ajout d'une fiche, ou sur le bouton « Compléter les fiches (12) »
+  // du menu. Une fiche ajoutée hors ligne, ou dont les horaires ont changé,
+  // restait donc incomplète tant qu'on n'y pensait pas.
+  // Elle tourne maintenant EN SILENCE à l'ouverture du voyage et au retour du
+  // réseau, et ce qu'elle trouve se PROPOSE (règle D1) : une ligne dans la
+  // barre de messages, « Voir », puis la feuille où chaque proposition
+  // s'accepte ou se refuse. Rien ne s'écrit sans un geste, et aucune feuille
+  // ne s'ouvre d'office sous les doigts.
+  const [propsAuto, setPropsAuto] = useState(null);
+  const fouilleAutoRef = useRef({ enCours: false, derniere: 0 });
+  const voirPropsAuto = (propositions) => {
+    setEnrichProps(propositions);
+    setPropsAuto(null);
+    setUndoVisible(false);
+  };
+  const fouillerEnSilence = async () => {
+    const f = fouilleAutoRef.current;
+    if (f.enCours || propsAuto?.length) return;
+    if (!navigator.onLine || navigator.connection?.saveData) return;
+    // Une fois par demi-heure au plus : le retour du réseau peut se répéter
+    // dix fois dans le métro.
+    if (Date.now() - f.derniere < 30 * 60 * 1000) return;
+    const liste = aEnrichir(tripRef.current);
+    if (!liste.length) return;
+    f.enCours = true;
+    f.derniere = Date.now();
+    try {
+      const { propositions, marques } = await fouillerLesFiches(liste, {});
+      marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
+      if (propositions.length) {
+        setPropsAuto(propositions);
+        const n = propositions.length;
+        informer(`✨ ${n} fiche${n > 1 ? 's' : ''} complétée${n > 1 ? 's' : ''} en ligne`,
+          { label: 'Voir', onClick: () => voirPropsAuto(propositions) });
+      }
+    } catch { /* hors ligne en cours de route : on réessaiera */ } finally {
+      f.enCours = false;
+    }
+  };
+  const fouillerEnSilenceRef = useRef(null);
+  useEffect(() => { fouillerEnSilenceRef.current = fouillerEnSilence; });
+  useEffect(() => {
+    if (!trip?.id) return undefined;
+    const lancer = () => fouillerEnSilenceRef.current?.();
+    const minuteur = setTimeout(lancer, 10000);
+    window.addEventListener('online', lancer);
+    return () => { clearTimeout(minuteur); window.removeEventListener('online', lancer); };
+  }, [trip?.id]);
 
   const dismissUndo = () => {
     clearTimeout(undoTimerRef.current);
@@ -425,6 +498,21 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     })();
     return () => ctrl.abort();
   }, [tab, trip?.id, trip?.carteHorsLigne]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Le moteur de lecture des tickets, gardé avant d'en avoir besoin. Même
+  // règle que la carte ci-dessus, et comme elle sans aucune interface : huit
+  // secondes après l'ouverture du voyage, quand l'écran a fini de se dessiner.
+  // Au premier ticket photographié hors ligne, il est là (audit A-040).
+  useEffect(() => {
+    if (!trip?.id) return undefined;
+    let annule = false;
+    const minuteur = setTimeout(() => {
+      import('../utils/ocrTicket')
+        .then(({ prechargerMoteur }) => { if (!annule) return prechargerMoteur(tripRef.current); })
+        .catch(() => {});
+    }, 8000);
+    return () => { annule = true; clearTimeout(minuteur); };
+  }, [trip?.id]);
 
   if (!trip) return (
     <div className="trip-view">
@@ -719,9 +807,13 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   };
 
   const fouiller = async () => {
+    // Déjà trouvées en silence : les montrer, pas les rechercher.
+    if (propsAuto?.length) { voirPropsAuto(propsAuto); return; }
     if (demandeLeReseau('Compléter les fiches')) return;
     const liste = aEnrichir(tripRef.current);
     if (!liste.length) return;
+    // Une recherche à la main compte : l'automatique ne la refait pas derrière.
+    fouilleAutoRef.current.derniere = Date.now();
     const ctrl = new AbortController();
     setFouilleEnCours({ fait: 0, total: liste.length, titre: null, ctrl });
     const { propositions, marques } = await fouillerLesFiches(liste, {
@@ -998,9 +1090,11 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       </div>
 
       {/* Cover photo */}
-      {trip.coverPhoto && (
+      {/* Le cadre attend la photo : rangée à part, elle peut ne pas être
+          encore arrivée sur ce téléphone (utils/pieces.js). */}
+      {couverture && (
         <div className="trip-cover-photo">
-          <img src={trip.coverPhoto} alt="" className="trip-cover-photo__img" />
+          <img src={couverture} alt="" className="trip-cover-photo__img" />
         </div>
       )}
 
@@ -1573,6 +1667,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
             onAddExpense={(exp) => addExpense(tripId, exp)}
             onUpdateExpense={(expId, patch) => updateExpense(tripId, expId, patch)}
             currentUserId={userId}
+            paysDestination={anchor?.pays}
             onDeleteExpense={undoableDeleteExpense}
             onDeleteTraveler={undoableDeleteTraveler}
           />
@@ -1649,8 +1744,27 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
           <EnrichSheet
             propositions={enrichProps}
             onAppliquer={(location, actId, patch) => updateActivity(tripId, location, actId, patch)}
-            onIgnorer={(actId) => setEnrichProps(l => l.filter(p => p.id !== actId))}
+            onIgnorer={(actId) => {
+              // Refusée, elle ne revient pas demain : l'empreinte « cherché »
+              // se pose aussi quand on laisse (deepEnrich le prévoyait, rien
+              // ne le faisait). Sans ça, la complétion automatique la
+              // reproposerait à chaque ouverture.
+              const p = enrichProps.find(x => x.id === actId);
+              if (p?.marque) updateActivity(tripId, p.emplacement, actId, p.marque);
+              setEnrichProps(l => l.filter(x => x.id !== actId));
+            }}
             onClose={() => setEnrichProps([])}
+          />
+        </Suspense>
+      )}
+
+      {groupesConflits.length > 0 && (
+        <Suspense fallback={null}>
+          <ConflitsSheet
+            groupes={groupesConflits}
+            onRemettre={remettreSaVersion}
+            onLaisser={(g) => oublierConflits(tripId, g.conflits)}
+            onClose={() => oublierConflits(tripId, conflitsBruts || [])}
           />
         </Suspense>
       )}
@@ -1809,6 +1923,9 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
           bandeau derrière afficherait deux fois la même sortie. */}
       <div className={`undo-toast${undoVisible && !proposition ? ' undo-toast--visible' : ''}${undoDone ? ' undo-toast--done' : ''}${undoInfo ? ' undo-toast--info' : ''}`} role="status">
         <span className="undo-toast__msg">{undoDone && !undoInfo ? '↩ ' : ''}{undoMsg}</span>
+        {undoInfo && infoAction && (
+          <button className="undo-toast__btn" onClick={infoAction.onClick}>{infoAction.label}</button>
+        )}
         {!undoDone && (
           <>
             <button className="undo-toast__btn" onClick={handleUndo}>↩ Annuler</button>

@@ -24,6 +24,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { joindre, lireCorps, PRIVE, urlSure } from "../_shared/reseau.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
+import { BUDGET_MS, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -42,11 +43,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function withTimeout(ms: number) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  return { signal: ctrl.signal, clear: () => clearTimeout(id) };
-}
+// `withTimeout` vient de `_shared/budget.ts` : chaque requête garde son délai,
+// plafonné par le budget de l'appel entier (20 s, audit A-012).
 
 // Le filtre d'hôte vit dans `_shared/reseau.ts` : écrit ici seul, il n'avait
 // pas suivi `extract-place`, qui récupère aussi des URL fournies.
@@ -320,7 +318,12 @@ function lireLesDonnees(html: string) {
 }
 
 // ── Point d'entrée ───────────────────────────────────────────────────────────
-Deno.serve(async (req) => {
+// Tout l'appel tient dans un budget : au-delà, ce qui est en vol s'arrête et
+// la fonction rend ce qu'elle a trouvé. L'appelant qui raccroche arrête aussi
+// le travail (`req.signal`).
+Deno.serve((req) => dansLeBudget(BUDGET_MS, req.signal, () => traiter(req)));
+
+async function traiter(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ erreur: "methode" }, 405);
   // Cette fonction ne coûte plus rien depuis qu'elle lit les données
@@ -383,4 +386,4 @@ Deno.serve(async (req) => {
     confiance: lu.confiance,
     source: "site",
   });
-});
+}

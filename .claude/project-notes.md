@@ -43,6 +43,12 @@ trace de ce qu'on a sciemment écarté.
 | E6 · Prouver qu'on est arrivé | Champ `repere` de chaque écran dans `verif-ui.mjs` |
 | E7 · Une échelle récitable | `--t-xs…--t-3xl`, 3 graisses, `--radius-xs…lg` + `pill` |
 | F1 · Cache PWA | `vercel.json` |
+| F6 · Saisie locale jamais écrasée | `src/utils/synchro.js`, clé `provo_synchro`, `verif-synchro-demarrage` |
+| E3 · Corollaire, état vierge | Parcours « Un lien ouvre le voyage dès le tout premier lancement » (désinscrit le service worker avant de suivre le lien) |
+| C3 · Complétion auto, sans bouton | `TripView` : fouille 10 s après l'ouverture et au retour du réseau (≤ 1 fois / 30 min), annonce « ✨ N fiches complétées en ligne · Voir » |
+| D1 · Proposer, jamais imposer | `ConflitsSheet` : « Laisser ainsi » / « Remettre la mienne » quand un champ a changé ici ET ailleurs |
+| C2 · Chemin direct | `deviseParDefaut` : la dernière devise notée, sinon celle du pays |
+| E6 · Écrans visités | `verif-ui` : Partager, Hors ligne, Fiche de la Réserve, Annuler, Fiches complétées, Conflits, Piocher (heure fixée à 10 h) |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -155,6 +161,39 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   · Reste à faire à la main : la protection contre les mots de passe
     compromis (Supabase › Authentication), peut-être réservée aux offres
     payantes.
+
+- **Améliorations proposées après l'audit, 30 septembre 2026** (PR #99).
+  · **Devise par défaut** du formulaire de dépense : la dernière notée dans
+    le voyage, sinon celle du pays de destination, sinon l'euro.
+  · **Moteur des tickets préchargé** (4,5 Mo) quand le départ est dans
+    10 jours ou moins, en ligne et hors économie de données ; hors ligne sans
+    moteur, le message le dit au lieu de « illisible ».
+  · **Complétion automatique** au retour du réseau, résultats proposés
+    (barre de messages « Voir »), rien d'écrit sans accord.
+  · **Conflits visibles** : la fusion relève ce qu'elle tranche contre ce
+    téléphone (champ modifié des deux côtés, fiche modifiée ici et supprimée
+    ailleurs) ; le serveur reste en place, la feuille laisse remettre sa
+    version. Champs techniques jamais montrés. Au passage : l'écho de sa
+    propre écriture n'est plus fusionné comme une version d'ailleurs.
+  · **Pièces jointes à côté du voyage** (`utils/pieces.js`) : IndexedDB sur
+    le téléphone, référence `pj:<empreinte SHA-256 du contenu>` dans le
+    voyage, copie dans le dossier privé Supabase Storage
+    `pieces/<voyage>/<empreinte>` (migration `20260930_pieces_jointes.sql`,
+    appliquée ; propriétaire et membres seulement). Tout est rapatrié
+    aussitôt sur chaque téléphone. Seuils : JPEG/PNG/WebP/GIF/PDF de plus
+    de 2 ko ; un SVG reste dans le voyage. « Envoyer une copie » ne
+    transporte plus les billets ni les PDF. Limite : une ancienne version
+    installée de l'app (APK Android) affiche une image cassée à la place
+    d'une pièce rangée à part.
+  · **Budget de 20 s** pour tout un appel d'`extract-place` et
+    d'`enrich-place` (`_shared/budget.ts`, `AsyncLocalStorage`) ; la sonde
+    de santé dit `budget: true` s'il fonctionne chez l'hébergeur.
+  · **Correctif urgent** : annuler une activité du jour faisait planter l'app
+    (créneau `null` lu par `tempsRestant`, depuis la ligne « piocher » de la
+    PR #98). Trouvé par les nouveaux écrans de `verif-ui`.
+  · `verif-ui` a aussi trouvé : le badge « Modifier ensemble » de Partager
+    (4,09:1 clair, 2,78:1 sombre) et le lien des fiches (3,51:1), passés
+    sur `--accent-texte`.
 
 - **Liens et complétion, 29 septembre 2026.**
   · `extract-place` lit, sans réseau, les liens Plans (Apple), OpenStreetMap,

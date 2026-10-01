@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
+import { usePiece } from '../hooks/usePiece';
 import { formatDateShort } from '../utils/helpers';
 
 export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate, onPreview }) {
+  // La couverture peut être rangée à part (utils/pieces.js) : la carte ne
+  // s'habille qu'une fois la photo réellement là.
+  const couverture = usePiece(trip.coverPhoto);
   const [menuOpen, setMenuOpen] = useState(false);
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
   const menuRef = useRef(null);
@@ -57,14 +61,14 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
   return (
     <>
     <div
-      className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}${trip.coverPhoto ? ' trip-card--has-cover' : ''}`}
+      className={`trip-card${isPast ? ' trip-card--past' : isActive ? ' trip-card--active' : ''}${couverture ? ' trip-card--has-cover' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchMove={cancelLongPress}
       onTouchEnd={cancelLongPress}
     >
-      {trip.coverPhoto && (
+      {couverture && (
         <div className="trip-card__cover-wrap">
-          <img src={trip.coverPhoto} className="trip-card__cover-blur" alt="" loading="lazy" decoding="async" />
+          <img src={couverture} className="trip-card__cover-blur" alt="" loading="lazy" decoding="async" />
         </div>
       )}
       <div

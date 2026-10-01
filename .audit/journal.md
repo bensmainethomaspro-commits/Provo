@@ -120,6 +120,11 @@ Exemple de ligne, à supprimer :
 | A-042 | 2026-09-30 | Fiabilité | Clos. Reproduit puis corrigé : le lien d'une notification se consomme en quittant le voyage | Majeur | CORRIGÉ |
 | A-043 | 2026-09-30 | Fiabilité | Clos. `.github/workflows/verif.yml` : build, suites, dette ESLint plafonnée, 87 parcours, sur chaque PR | Majeur | CORRIGÉ |
 | A-044 | 2026-09-30 | Sécurité | Toujours ouvert : la protection contre les mots de passe compromis est un réglage du tableau de bord (Authentication › Providers › Email), pas du SQL. Peut-être réservée aux offres payantes : à vérifier | Mineur | PROPOSÉ |
+| A-058 | 2026-09-30 | Fiabilité | Annuler (« Nogo ») une activité du jour affichait l'écran d'erreur : `tempsRestant` et `signauxAjout` lisaient `s.start`/`s.end` sur le créneau `null` d'une activité annulée. En production depuis la PR #98. Trouvé par `/verif-ui` ; parcours « Annuler une activité du jour, puis se raviser » | Critique | CORRIGÉ |
+| A-059 | 2026-09-30 | Produit et UX | Feuille Partager : badge « Modifier ensemble » à 4,09:1 (clair) et 2,78:1 (sombre) ; lien des fiches à 3,51:1 et 15 px de haut. Aucun des deux écrans n'était visité par `/verif-ui` | Mineur | CORRIGÉ |
+| A-060 | 2026-09-30 | Fiabilité | La réception temps réel fusionnait l'écho de sa propre écriture comme une version d'ailleurs quand il arrivait avant la réponse de l'envoi : ce qui avait été tapé entre-temps était écrasé | Majeur | CORRIGÉ |
+| A-012 | 2026-09-30 | Fiabilité | Clos côté serveur : budget de 20 s pour tout l'appel (`_shared/budget.ts`), `extract-place` et `enrich-place`. Réseau muet : 27 s avant, moins de 21,5 s après (`verif-budget`). À confirmer en production : la sonde de santé doit répondre `budget: true` | Majeur | CORRIGÉ |
+| A-040 | 2026-09-30 | Fiabilité | Clos. Le moteur des tickets se précharge à 10 jours du départ ; hors ligne sans moteur, le message le dit | Majeur | CORRIGÉ |
 
 ## Dernier audit effectif
 
@@ -262,3 +267,4 @@ numéros.
 | 2026-09-29 | Regroupement | Sécurité, Fiabilité, Performance et coûts | A-039 à A-044, clôture d'A-033 à A-036 |
 | 2026-09-30 | LÉGER | Sécurité, Fiabilité | A-045 à A-050, clôture d'A-032 |
 | 2026-09-30 | Audit Pareto (session) | Tous axes, code et UX/UI | A-051 à A-057 ; clôture d'A-001, A-003, A-004, A-007, A-012 (client), A-041 à A-043 |
+| 2026-09-30 | Améliorations (session, PR #99) | Fiabilité, Produit et UX | A-058 à A-060 ; clôture d'A-012 (serveur) et A-040 |

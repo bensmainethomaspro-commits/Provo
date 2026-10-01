@@ -46,7 +46,12 @@ export function tempsRestant(jour, maintenant = new Date()) {
   // simplement prévue plus tard, non : la compter reviendrait à dire qu'on est
   // occupé jusqu'à la fin d'un opéra qui n'a pas commencé, donc qu'il ne reste
   // aucun temps libre avant lui.
+  // `filter(Boolean)` : une activité annulée (« nogo ») a un créneau `null`.
+  // Sans ce filtre, annuler une activité du jour faisait planter l'app entière
+  // (la carte du jour appelle cette fonction à chaque rendu) — vu le
+  // 30 septembre 2026 par /verif-ui, le jour où il a enfin annulé quelque chose.
   const finsEnCours = Object.values(slots)
+    .filter(Boolean)
     .map(s => ({ d: timeToMin(s.start), f: timeToMin(s.end) }))
     .filter(({ d, f }) => Number.isFinite(d) && Number.isFinite(f) && d <= t && f > t)
     .map(({ f }) => f);

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import ImagePiece from './ImagePiece';
+import { enPiece } from '../utils/pieces';
 import { TRIP_EMOJIS } from '../utils/helpers';
 
 // Local date (not UTC) — toISOString would give yesterday between midnight and ~2am in France.
@@ -43,7 +45,8 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
     const file = e.target.files[0];
     if (!file) return;
     const compressed = await compressCoverPhoto(file);
-    set('coverPhoto', compressed);
+    // Rangée à part tout de suite (utils/pieces.js) : le voyage ne garde qu'une référence.
+    set('coverPhoto', await enPiece(compressed));
     e.target.value = '';
   };
 
@@ -78,7 +81,7 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
               <label className="form-label">Photo de couverture <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— optionnel</span></label>
               {form.coverPhoto ? (
                 <div className="cover-photo-preview">
-                  <img src={form.coverPhoto} alt="" className="cover-photo-preview__img" />
+                  <ImagePiece valeur={form.coverPhoto} alt="" className="cover-photo-preview__img" />
                   <button type="button" className="cover-photo-preview__remove" onClick={() => set('coverPhoto', null)}>✕</button>
                 </div>
               ) : (

@@ -4,6 +4,8 @@ import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 import { lienPartage, lireGeo, premierLien } from '../utils/lienColle';
+import ImagePiece from './ImagePiece';
+import { enPiece } from '../utils/pieces';
 import { trouverDoublon } from '../utils/doublon';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
@@ -533,7 +535,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     const slots = 3 - existing.length;
     if (slots <= 0) return;
     const files = Array.from(e.target.files).slice(0, slots);
-    const results = await Promise.all(files.map(compressImage));
+    // Rangées à part tout de suite (utils/pieces.js) : le voyage ne garde que des références.
+    const results = await Promise.all(files.map(f => compressImage(f).then(enPiece)));
     set('screenshots', [...existing, ...results].slice(0, 3));
     e.target.value = '';
   };
@@ -547,8 +550,9 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) { setError('PDF trop volumineux (max 3 Mo).'); return; }
     const reader = new FileReader();
-    reader.onload = ev => {
-      set('pdfs', [...(form.pdfs || []), { name: file.name, data: ev.target.result }]);
+    reader.onload = async ev => {
+      const data = await enPiece(ev.target.result);
+      setForm(f => ({ ...f, pdfs: [...(f.pdfs || []), { name: file.name, data }] }));
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -851,7 +855,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             <div className="form-group">
               <label className="form-label">Photo du lieu</label>
               <div style={{ position: 'relative', display: 'inline-block' }}>
-                <img src={form.photoUrl} alt="" className="import-photo-preview" />
+                <ImagePiece valeur={form.photoUrl} alt="" className="import-photo-preview" />
                 <button type="button" className="screenshot-remove"
                   style={{ top: -5, right: -5 }}
                   onClick={() => set('photoUrl', '')}>✕</button>
@@ -997,7 +1001,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               <div className="screenshots-preview">
                 {form.screenshots.map((src, i) => (
                   <div key={i} className="screenshot-preview-wrap">
-                    <img src={src} className="screenshot-preview-img" alt="" />
+                    <ImagePiece valeur={src} className="screenshot-preview-img" alt="" />
                     <button type="button" className="screenshot-remove" onClick={() => removeScreenshot(i)}>✕</button>
                   </div>
                 ))}

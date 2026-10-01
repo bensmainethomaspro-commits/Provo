@@ -18,6 +18,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
+import { BUDGET_MS, budgetActif, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
 import {
   accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, titreDeSite,
@@ -58,11 +59,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function withTimeout(ms: number) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  return { signal: ctrl.signal, clear: () => clearTimeout(id) };
-}
+// `withTimeout` vient de `_shared/budget.ts` : chaque requête garde son délai,
+// plafonné par le budget de l'appel entier (20 s, audit A-012).
 
 // ── Geocoding (Nominatim / OpenStreetMap) ─────────────────────────────────
 const CAT_RULES: [RegExp, string][] = [
@@ -1329,7 +1327,12 @@ function aiguillage(cible: URL): "tiktok" | "maps" | "generique" {
   return "generique";
 }
 
-Deno.serve(async (req) => {
+// Tout l'appel tient dans un budget : au-delà, ce qui est en vol s'arrête et
+// la fonction rend ce qu'elle a trouvé. L'appelant qui raccroche arrête aussi
+// le travail (`req.signal`).
+Deno.serve((req) => dansLeBudget(BUDGET_MS, req.signal, () => traiter(req)));
+
+async function traiter(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
@@ -1352,7 +1355,9 @@ Deno.serve(async (req) => {
   // fonction marche. Elle répond `modele: false` sans détour — ce n'est pas une
   // panne, c'est l'état normal depuis le passage au tout-gratuit, et le canari
   // ne doit plus en faire une alerte.
-  if (sante) return json({ ok: true, modele: false, gratuit: true });
+  // `budget` : le budget de temps suit-il bien l'appel sur cet hébergeur ?
+  // Faux, chaque requête garde son délai mais l'appel entier n'est plus borné.
+  if (sante) return json({ ok: true, modele: false, gratuit: true, budget: budgetActif() });
   traceGeo = [];
 
   // Une légende collée à la main. C'est la porte de secours quand la nôtre
@@ -1381,7 +1386,7 @@ Deno.serve(async (req) => {
       category: VALID_CATEGORIES.includes(l.category) ? l.category : "visite",
       location: l.location || "",
     }));
-    return json({ ok: true, result, autres, geocodeurs: traceGeo }, 200);
+    return json({ ok: true, result, autres, geocodeurs: traceGeo, budget: budgetActif() }, 200);
   }
 
   if (!url || !/^https?:\/\//i.test(url)) {
@@ -1425,8 +1430,8 @@ Deno.serve(async (req) => {
     // perdus alors qu'ils étaient déjà lus.
     const autres = Array.isArray(result.autres) ? result.autres : [];
     delete result.autres;
-    return json({ ok: true, result, autres, geocodeurs: traceGeo }, 200);
+    return json({ ok: true, result, autres, geocodeurs: traceGeo, budget: budgetActif() }, 200);
   } catch (e) {
     return json({ error: "extraction_failed", detail: String(e) }, 200);
   }
-});
+}

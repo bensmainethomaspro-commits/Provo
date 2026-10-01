@@ -4,7 +4,7 @@ import {
   partEnEuros, partageInegal, evaluerMontant, estUnCalcul, formatMontantExact,
   dateLocale, enEuros,
 } from '../utils/helpers';
-import { useCurrencyRates, SUPPORTED_CURRENCIES } from '../hooks/useCurrencyRates';
+import { useCurrencyRates, SUPPORTED_CURRENCIES, deviseParDefaut } from '../hooks/useCurrencyRates';
 import TravelerBalanceSheet from './TravelerBalanceSheet';
 import SpinWheel from './SpinWheel';
 
@@ -284,7 +284,7 @@ function DonutChart({ byCategory, total }) {
   );
 }
 
-export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId }) {
+export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDeleteExpense, onDeleteTraveler, currentUserId, paysDestination }) {
   const travelers = trip.tripTravelers || [];
   const hasTravelers = travelers.length > 0;
   const expenses = trip.expenses || [];
@@ -359,6 +359,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       payerId: me?.id || travelers[0]?.id || '',
       participantIds: travelers.map(t => t.id),
       date: aujourdhui(),
+      currency: deviseParDefaut(trip.expenses || [], paysDestination),
     });
     setEditingId(null);
     setEmojisOuverts(false);
@@ -427,7 +428,9 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
         setRecuMsg(`Lecture du ticket… ${Math.round(avance * 100)} %`);
       });
       if (!lu || lu.error) {
-        setRecuMsg("Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
+        setRecuMsg(lu?.error === 'moteur_absent'
+          ? "La lecture des tickets n'est pas encore sur ce téléphone : elle se télécharge une fois, avec du réseau. Saisis le montant à la main."
+          : "Ce ticket n'a pas pu être lu. Saisis le montant à la main.");
         return;
       }
       // Le champ s'écrit comme on l'y taperait : virgule, et les deux centimes.
