@@ -1,5 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 const WHEEL_COLORS = [
   '#35A7DD', '#3b82f6', '#8b5cf6', '#22c55e',
@@ -153,8 +155,8 @@ export default function SpinWheel({ travelers, onClose }) {
     <div className="spinwheel-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="spinwheel-modal">
         <div className="spinwheel-modal__header">
-          <h2 className="spinwheel-modal__title">🎰 Roue de la fortune</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+          <h2 className="spinwheel-modal__title">Roue de la fortune</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
 
         <div className="spinwheel-body">

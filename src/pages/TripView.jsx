@@ -12,6 +12,8 @@ import PackingList from '../components/PackingList';
 import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
+import Icone from '../components/Icone';
+import { ChevronLeft, ChevronDown, Plus, Ellipsis, Search, NotebookPen, Luggage, Scale, Dices, Sparkles, MapPinCheck, UserPlus, ChartColumn, Settings, Trash2, CalendarDays, Wallet, Lightbulb, Map as MapIcone, ClipboardPaste, X, LayoutGrid, List, GripVertical } from 'lucide-react';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useEtatRetenu } from '../hooks/useEtatRetenu';
@@ -21,7 +23,7 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, formatPrice, CATEGORIES, CATEGORY_COLORS, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
+import { budgetStats, repasEnAttente, destinationUtile, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
@@ -615,8 +617,6 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   const allActivities = [...trip.days.flatMap(d => d.activities), ...trip.reserve];
   const stats = budgetStats(allActivities);
 
-  const actTotal = trip.days.reduce((s, d) => s + d.activities.length, 0);
-
   const initBudget = parseFloat(trip.initialBudget) || 0;
   const showBudget = initBudget > 0 || stats.total > 0;
 
@@ -682,14 +682,9 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   const compareActivities = allActivities.filter(a => compareSelectedIds.has(a.id));
 
   const VIEW_MODES = [
-    { id: 'timeline', icon: '🗓', label: 'Timeline' },
-    { id: 'agenda',   icon: '📆', label: 'Agenda' },
+    { id: 'timeline', label: 'Frise' },
+    { id: 'agenda',   label: 'Grille' },
   ];
-  const cycleView = () => {
-    const idx = VIEW_MODES.findIndex(v => v.id === viewMode);
-    setViewMode(VIEW_MODES[(idx + 1) % VIEW_MODES.length].id);
-  };
-  const currentViewMeta = VIEW_MODES.find(v => v.id === viewMode);
 
   // ─── Handlers ────────────────────────────────────────
   const handleStatusChange = (dayId, activityId, status) => {
@@ -987,26 +982,38 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const n = new Date(); n.setHours(0, 0, 0, 0);
     return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
   })();
-  const resteADebourser = prixDe(
-    trip.days
-      .filter(d => !d.date || d.date >= aujourdhui)
-      .flatMap(d => d.activities)
-      .filter(a => a.status !== 'nogo' && a.status !== 'done' && !activitesReglees.has(a.id)));
+  const aVenir = trip.days
+    .filter(d => !d.date || d.date >= aujourdhui)
+    .flatMap(d => d.activities)
+    .filter(a => a.status !== 'nogo' && a.status !== 'done' && !activitesReglees.has(a.id));
+  const resteADebourser = prixDe(aVenir);
+  /* Les repas posés d'office restent dans la prévision : c'est leur seule
+     raison d'avoir un prix (helpers.js, budgetStats). Mais un chiffre que
+     l'utilisateur n'a jamais saisi doit dire d'où il vient : un voyage tout
+     juste créé annonçait « 200 € estimé » sans un mot (critique design du
+     1er octobre 2026). */
+  const repasPrevus = prixDe(aVenir.filter(repasEnAttente));
   const totalTripCost = alreadySpent + resteADebourser;
   const budgetExceeded = initBudget > 0 && alreadySpent > initBudget;
 
   // Budget « dépliant » : le chiffre principal (restant / dépassé, sinon estimé)
   // reste visible ; les autres n'apparaissent qu'une fois déplié.
   const budgetItems = [];
+  const queDesRepas = repasPrevus > 0 && totalTripCost === repasPrevus;
   if (initBudget > 0) {
     budgetItems.push(budgetExceeded
-      ? { key: 'over', cls: 'budget-inline__item--over', txt: `🚨 ${formatPrice(alreadySpent - initBudget)} dépassé` }
-      : { key: 'left', cls: 'budget-inline__item--ok', txt: `💵 ${formatPrice(initBudget - alreadySpent)} restants` });
-    budgetItems.push({ key: 'init', cls: '', txt: `💰 ${formatPrice(initBudget)}` });
+      ? { key: 'over', cls: 'budget-inline__item--over', txt: `${formatPrice(alreadySpent - initBudget)} de dépassement` }
+      : { key: 'left', cls: 'budget-inline__item--ok', txt: `${formatPrice(initBudget - alreadySpent)} restants` });
+    budgetItems.push({ key: 'init', cls: '', txt: `budget ${formatPrice(initBudget)}` });
   }
   if (totalTripCost > 0) {
-    budgetItems.push({ key: 'est', cls: 'budget-inline__item--est', txt: `🧮 ${formatPrice(totalTripCost)} estimé` });
+    budgetItems.push({ key: 'est', cls: 'budget-inline__item--est',
+      txt: queDesRepas ? `≈ ${formatPrice(totalTripCost)} de repas prévus` : `${formatPrice(totalTripCost)} estimé` });
+    if (repasPrevus > 0 && !queDesRepas) {
+      budgetItems.push({ key: 'repas', cls: '', txt: `dont ${formatPrice(repasPrevus)} de repas` });
+    }
   }
+  const destination = destinationUtile(trip);
 
   return (
     <div className="trip-view" style={{ '--trip-accent': tripAccent }}>
@@ -1018,36 +1025,71 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       )}
       {/* Header */}
       <div className="header">
-        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">←</button>
+        <button className="header__back" onClick={onBack} aria-label="Retour au tableau de bord">
+          <Icone de={ChevronLeft} taille={24} />
+        </button>
         <div className="header__title">
           <h1>{trip.emoji || '✈️'} {trip.name}</h1>
-          {trip.destination && <p className="header__dest">📍 {trip.destination}</p>}
+          {/* Une seule ligne sous le nom : la destination (si elle dit autre
+              chose que le nom) et le budget. Le budget occupait une rangée
+              entière, seul, sur trois onglets sur quatre : 56 px de chrome
+              au-dessus du contenu (règle A5). */}
+          {(destination || (showBudget && budgetItems.length > 0)) && (
+            <div className="header__sous-titre">
+              {destination && <span className="header__dest">{destination}</span>}
+              {/* Un seul chiffre : du texte. Un bouton qui ne déplie rien se
+                  lirait comme une panne (règle A8). */}
+              {showBudget && budgetItems.length === 1 && (
+                <span className="budget-inline budget-inline--seul">
+                  <span className={`budget-inline__item ${budgetItems[0].cls}`}>{budgetItems[0].txt}</span>
+                </span>
+              )}
+              {showBudget && budgetItems.length > 1 && (
+                <button
+                  type="button"
+                  className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
+                  onClick={() => setBudgetOpen(o => !o)}
+                  aria-expanded={budgetOpen}
+                  title="Détail du budget"
+                >
+                  {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
+                    <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
+                  ))}
+                  <Icone de={ChevronDown} taille={14} className={`budget-inline__chevron${budgetOpen ? ' budget-inline__chevron--ouvert' : ''}`} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="header__action">
-          <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">＋</button>
+          <button className="header__add-btn" onClick={() => openAddSheet(null)} title="Ajouter une activité" aria-label="Ajouter une activité">
+            <Icone de={Plus} taille={24} />
+          </button>
           <div className="trip-header-menu-wrap" ref={tripMenuRef}>
-            <button className="btn btn--ghost-white btn--sm" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">⋯</button>
+            <button className="header__menu-btn" onClick={() => setTripMenuOpen(o => !o)} title="Options" aria-label="Options du voyage" aria-expanded={tripMenuOpen} aria-haspopup="menu">
+              <Icone de={Ellipsis} taille={22} />
+            </button>
             {tripMenuOpen && (
               <div className="trip-header-menu">
                 <button className="trip-header-menu__item" onClick={() => { setShowSearch(true); setTripMenuOpen(false); }}>
-                  🔍 Rechercher dans le voyage
+                  <Icone de={Search} /> Rechercher dans le voyage
                 </button>
                 {/* « Mode sombre » et « Recharger l'app » vivent sur l'accueil, à
                     un geste d'ici : les répéter dans le menu du voyage en faisait
                     13 entrées pour un menu qu'on ouvre en marchant (règle A2). */}
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('notes'); setTripMenuOpen(false); }}>
-                  📝 Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
+                  <Icone de={NotebookPen} /> Notes et documents{trip.tripNotes?.trim() || trip.documents?.length ? ' •' : ''}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { navigateTab('valise'); setTripMenuOpen(false); }}>
-                  🎒 Valise{(trip.packingList?.length || 0) > 0
+                  <Icone de={Luggage} /> Valise{(trip.packingList?.length || 0) > 0
                     ? ` · ${trip.packingList.filter(i => i.checked).length}/${trip.packingList.length}`
                     : ''}
                 </button>
                 <div className="trip-header-menu__divider" />
                 {tab === 'planning' && (
                   <button className="trip-header-menu__item" onClick={() => { setCompareMode(true); setTripMenuOpen(false); }}>
-                    ⚖️ Comparer des activités
+                    <Icone de={Scale} /> Comparer des activités
                   </button>
                 )}
                 {todayDay && (
@@ -1055,33 +1097,33 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                     setTripMenuOpen(false);
                     piocherMaintenant();
                   }}>
-                    🎯 Que faire maintenant ?
+                    <Icone de={Dices} /> Que faire maintenant ?
                   </button>
                 )}
                 <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); fouiller(); }}>
-                  ✨ Compléter les fiches
+                  <Icone de={Sparkles} /> Compléter les fiches
                   {ficheseIncompletes > 0 && (
                     <span className="trip-header-menu__count">{ficheseIncompletes}</span>
                   )}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setTripMenuOpen(false); ouvrirControleLieux(); }}>
-                  📍 Vérifier les lieux
+                  <Icone de={MapPinCheck} /> Vérifier les lieux
                   {analysePlaces.nouveaux > 0 && (
                     <span className="trip-header-menu__count">{analysePlaces.nouveaux}</span>
                   )}
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowShare(true); setTripMenuOpen(false); }}>
-                  🔗 Partager
+                  <Icone de={UserPlus} /> Partager
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowRecap(true); setTripMenuOpen(false); }}>
-                  📊 Bilan du voyage
+                  <Icone de={ChartColumn} /> Bilan du voyage
                 </button>
                 <button className="trip-header-menu__item" onClick={() => { setShowTripSettings(true); setTripMenuOpen(false); }}>
-                  ⚙️ Paramètres du voyage
+                  <Icone de={Settings} /> Paramètres du voyage
                 </button>
                 <div className="trip-header-menu__divider" />
                 <button className="trip-header-menu__item trip-header-menu__item--danger" onClick={() => { setShowDeleteTrip(true); setTripMenuOpen(false); }}>
-                  🗑️ Supprimer le voyage
+                  <Icone de={Trash2} /> Supprimer le voyage
                 </button>
               </div>
             )}
@@ -1098,8 +1140,9 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
         </div>
       )}
 
-      {/* Rangée de contrôles alignée : budget à gauche · vue (ou comparaison) à droite */}
-      {(showBudget || compareMode || tab === 'planning') && (
+      {/* La rangée de contrôles n'existe plus que là où elle sert : le choix de
+          la vue sur le Planning, ou la comparaison en cours. */}
+      {(compareMode || tab === 'planning') && (
         <div className="trip-controls">
           {compareMode ? (
             <>
@@ -1107,58 +1150,48 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                 {compareSelectedIds.size === 0 ? 'Touche des activités' : `${compareSelectedIds.size} sélectionné${compareSelectedIds.size > 1 ? 's' : ''}`}
               </span>
               <button className="btn btn--xs btn--secondary" onClick={() => { setCompareMode(false); setCompareSelectedIds(new Set()); setShowCompare(false); }}>
-                ✕ Quitter
+                Quitter
               </button>
             </>
           ) : (
-            <>
-              {showBudget && budgetItems.length > 0 ? (
+            /* Deux vues, un contrôle segmenté. Le bouton « Timeline › »
+               affichait la vue EN COURS mais basculait vers l'autre : on ne
+               savait pas si on lisait un état ou une action. */
+            <div className="segmente" role="group" aria-label="Vue du planning">
+              {VIEW_MODES.map(v => (
                 <button
+                  key={v.id}
                   type="button"
-                  className={`budget-inline${budgetOpen ? ' budget-inline--open' : ''}`}
-                  onClick={() => budgetItems.length > 1 && setBudgetOpen(o => !o)}
-                  aria-expanded={budgetItems.length > 1 ? budgetOpen : undefined}
-                  title={budgetItems.length > 1 ? 'Détail du budget' : undefined}
-                >
-                  {(budgetOpen ? budgetItems : budgetItems.slice(0, 1)).map(it => (
-                    <span key={it.key} className={`budget-inline__item ${it.cls}`}>{it.txt}</span>
-                  ))}
-                  {budgetItems.length > 1 && (
-                    <span className="budget-inline__chevron" aria-hidden="true">{budgetOpen ? '▴' : '▾'}</span>
-                  )}
-                </button>
-              ) : <span className="trip-controls__spacer" />}
-              {tab === 'planning' ? (
-                <button className="tool-btn tool-btn--view-cycle" onClick={cycleView} title="Changer de vue">
-                  <span className="tool-btn__icon">{currentViewMeta.icon}</span>
-                  <span className="tool-btn__label">{currentViewMeta.label}</span>
-                  <span className="tool-btn__chevron">›</span>
-                </button>
-              ) : <span className="trip-controls__spacer" />}
-            </>
+                  className={`segmente__choix${viewMode === v.id ? ' segmente__choix--actif' : ''}`}
+                  aria-pressed={viewMode === v.id}
+                  onClick={() => setViewMode(v.id)}
+                >{v.label}</button>
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {/* Tabs */}
+      {/* Pas de compteur sur les onglets : ils avaient la forme d'une
+          notification non lue (16, 2, 8) pour de simples totaux, que l'onglet
+          lui-même donne déjà (règle A6). Un nouveau voyage affichait « 10 »
+          sans qu'on y ait rien mis. */}
       <div className="tabs" ref={tabsRef} role="tablist" aria-label="Sections du voyage">
         <button role="tab" aria-selected={tab === 'planning'} className={`tab-btn${tab === 'planning' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('planning')}>
-          <span className="tab-btn__icon">📅</span>
+          <Icone de={CalendarDays} taille={22} className="tab-btn__icon" />
           <span className="tab-btn__label">Planning</span>
-          {actTotal > 0 && <span className="tab-badge" aria-label={`${actTotal} activités`}>{actTotal}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'depenses'} className={`tab-btn${tab === 'depenses' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('depenses')}>
-          <span className="tab-btn__icon">💸</span>
+          <Icone de={Wallet} taille={22} className="tab-btn__icon" />
           <span className="tab-btn__label">Dépenses</span>
-          {(trip.expenses?.length || 0) > 0 && <span className="tab-badge" aria-label={`${trip.expenses.length} dépenses`}>{trip.expenses.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'reserve'} className={`tab-btn${tab === 'reserve' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('reserve')}>
-          <span className="tab-btn__icon">📦</span>
+          <Icone de={Lightbulb} taille={22} className="tab-btn__icon" />
           <span className="tab-btn__label">Réserve</span>
-          {trip.reserve.length > 0 && <span className="tab-badge" aria-label={`${trip.reserve.length} idées`}>{trip.reserve.length}</span>}
         </button>
         <button role="tab" aria-selected={tab === 'map'} className={`tab-btn${tab === 'map' ? ' tab-btn--active' : ''}`} onClick={() => navigateTab('map')}>
-          <span className="tab-btn__icon">🗺️</span>
+          <Icone de={MapIcone} taille={22} className="tab-btn__icon" />
           <span className="tab-btn__label">Carte</span>
         </button>
         {/* Notes et Valise sont rarement utilisés → sortis de la barre du bas et
@@ -1166,20 +1199,14 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
             l'onglet actif reste visible ici quand on y navigue depuis le menu. */}
         {tab === 'notes' && (
           <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('notes')}>
-            <span className="tab-btn__icon">📝</span>
+            <Icone de={NotebookPen} taille={22} className="tab-btn__icon" />
             <span className="tab-btn__label">Notes</span>
-            {trip.documents?.length > 0 && (
-              <span className="tab-badge" aria-label={`${trip.documents.length} documents`}>{trip.documents.length}</span>
-            )}
           </button>
         )}
         {tab === 'valise' && (
           <button role="tab" aria-selected className="tab-btn tab-btn--active" onClick={() => navigateTab('valise')}>
-            <span className="tab-btn__icon">🎒</span>
+            <Icone de={Luggage} taille={22} className="tab-btn__icon" />
             <span className="tab-btn__label">Valise</span>
-            {(trip.packingList?.length || 0) > 0 && (
-              <span className="tab-badge" aria-label={`${trip.packingList.filter(i => i.checked).length} sur ${trip.packingList.length} emballés`}>{trip.packingList.filter(i => i.checked).length}/{trip.packingList.length}</span>
-            )}
           </button>
         )}
       </div>
@@ -1313,9 +1340,18 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                 onDragLeave={() => setReserveDragOver(false)}
                 onDrop={handleDropOnReserve}
               >
-                <div className="reserve-section__empty-icon">💡</div>
-                <p style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>Boîte à idées vide</p>
-                <p style={{ color: 'var(--text-light)', fontSize: 13 }}>Glisse des activités ici ou clique + pour en ajouter.</p>
+                {/* L'écran qui EST le produit avait l'état vide le plus pauvre :
+                    aucun bouton, « clique » sur un téléphone, un autre nom que
+                    l'onglet, et pas un mot sur le geste qui fait la force de
+                    Provo. La commande « Coller » existait déjà dans la rangée
+                    de la Réserve : c'est elle qu'on montre ici (règle A7). */}
+                <Icone de={Lightbulb} taille={32} className="reserve-section__empty-icon" />
+                <p className="reserve-vide__titre">Ta Réserve est vide</p>
+                <p className="reserve-vide__texte">Avant de partir, garde ici les lieux qui te tentent. Sur place, tu n'auras plus qu'à piocher.</p>
+                <button type="button" className="btn btn--primary reserve-vide__coller" onClick={collerUnLien}>
+                  <Icone de={ClipboardPaste} /> Coller un lien
+                </button>
+                <p className="reserve-vide__aide">Un lien TikTok, Google Maps ou d’un site, ou une confirmation de réservation.</p>
               </div>
             ) : (
               <>
@@ -1352,13 +1388,13 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         onClick={collerUnLien}
                         title="Coller un lien depuis le presse-papier"
                         aria-label="Coller un lien depuis le presse-papier"
-                      >📋</button>
+                      ><Icone de={ClipboardPaste} /></button>
                       <button
                         type="button"
                         className="reserve-cmd"
                         onClick={() => { setRechercheOuverte(false); setReserveSearch(''); }}
                         aria-label="Fermer la recherche"
-                      >✕</button>
+                      ><Icone de={X} /></button>
                     </div>
                   ) : (
                     <>
@@ -1367,7 +1403,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         className={`reserve-cmd${reserveSearch ? ' reserve-cmd--on' : ''}`}
                         onClick={() => setRechercheOuverte(true)}
                         aria-label="Chercher une idée"
-                      >🔍</button>
+                      ><Icone de={Search} /></button>
                       {/* Remplir le vivier est le geste le plus fréquent avant le
                           départ. Sur iPhone, le menu Partager ne peut pas viser
                           une app web (WebKit n'implémente pas le Web Share
@@ -1380,21 +1416,21 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         onClick={collerUnLien}
                         title="Coller un lien depuis le presse-papier"
                         aria-label="Coller un lien depuis le presse-papier"
-                      >📋</button>
+                      ><Icone de={ClipboardPaste} /></button>
                       {/* Un lieu dont on ignore les horaires n'est jamais masqué :
                           le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
                       <button
                         className={`reserve-filter__pill reserve-filter__pill--ouvert${ouvertSeul ? ' reserve-filter__pill--active' : ''}`}
                         onClick={() => setOuvertSeul(v => !v)}
                         aria-pressed={ouvertSeul}
-                      >🟢 Ouvert</button>
+                      ><span className="point-ouvert" aria-hidden="true" />Ouvert</button>
                       <button
                         className={`reserve-cmd${grouper ? ' reserve-cmd--on' : ''}`}
                         onClick={() => setGrouper(v => !v)}
                         aria-pressed={grouper}
                         aria-label={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
                         title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
-                      >{grouper ? '⊞' : '☰'}</button>
+                      ><Icone de={grouper ? LayoutGrid : List} /></button>
                       {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
@@ -1406,8 +1442,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
                         {geoReserve.position && <option value="proche">Le plus proche</option>}
-                        {hotelReserve && <option value="hotel">🏠 Hôtel</option>}
-                        {lieuxRepere.length > 0 && <option value="depuis">📍 Depuis…</option>}
+                        {hotelReserve && <option value="hotel">Depuis l'hôtel</option>}
+                        {lieuxRepere.length > 0 && <option value="depuis">Depuis un lieu…</option>}
                       </select>
                     </>
                   )}
@@ -1526,7 +1562,6 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                     <div key={g.cat?.id || 'autres'} className="reserve-groupe">
                       {g.cat && (
                         <div className="reserve-groupe__titre">
-                          <span className="reserve-groupe__dot" style={{ background: CATEGORY_COLORS[g.cat.id] }} />
                           {g.cat.emoji} {g.cat.label}
                           <span className="reserve-groupe__n">{g.items.length}</span>
                         </div>
@@ -1544,7 +1579,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         className="reserve-card__grip"
                         onPointerDown={(e) => reorder.demarrer(activity.id, e)}
                         aria-label={`Déplacer ${activity.title}`}
-                      >⠿</button>
+                      ><Icone de={GripVertical} taille={18} /></button>
                     )}
                     <ActivityCard
                       activity={activity}

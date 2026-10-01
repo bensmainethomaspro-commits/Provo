@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chercherCorrections, aExaminer, signaturePlace, formatKm } from '../utils/verifyPlaces';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 /**
  * Contrôle des lieux — propose, n'impose pas.
@@ -73,8 +75,8 @@ export default function PlaceCheckSheet({ analyse, destination, ancre, onAppliqu
       <div className="sheet sheet--check" onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">📍 Contrôle des lieux</span>
-          <button className="sheet__close" onClick={fermer} aria-label="Fermer">✕</button>
+          <span className="sheet__title">Contrôle des lieux</span>
+          <button className="sheet__close" onClick={fermer} aria-label="Fermer"><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">

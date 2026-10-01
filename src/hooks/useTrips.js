@@ -593,6 +593,10 @@ export function useTrips() {
     const trip = {
       id, name: data.name, destination: data.destination || '',
       emoji: data.emoji || '✈️',
+      // La couleur choisie dans le formulaire n'était jamais recopiée : le
+      // voyage prenait celle du pays (indigo pour le Portugal), et le choix ne
+      // marchait qu'en modification (critique design, 1er octobre 2026).
+      color: data.color || null,
       coverPhoto: data.coverPhoto || null,
       travelers: parseInt(data.travelers) || 1,
       initialBudget: parseFloat(data.initialBudget) || 0,

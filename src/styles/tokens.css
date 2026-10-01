@@ -1,0 +1,118 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   JETONS · la seule source des valeurs de l'interface
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Chaque jeton est déclaré ICI, une fois (une seconde fois pour le thème
+   sombre s'il y change), et nulle part ailleurs.
+
+   Pourquoi ce fichier existe : jusqu'au 1er octobre 2026, `index.css`
+   empilait quatre « design systems » successifs, et chacun redéclarait les
+   mêmes jetons. `--text-muted` l'était huit fois. Les commentaires de ces
+   couches décrivaient des teintes chaudes (« ambre », « braise »,
+   « papier ») sur des valeurs qui étaient en réalité bleu froid. Corriger
+   une couleur commençait donc toujours par chercher laquelle des huit
+   déclarations gagnait (règle B5 du playbook, cinq occurrences notées).
+
+   Le contenu de ce fichier est exactement ce qui gagnait : le passage s'est
+   fait sans aucun écart sur les styles calculés, contrôlé élément par
+   élément sur tous les écrans de `verif-ui`, dans les deux thèmes.
+
+   `scripts/verif-jetons.mjs` refuse qu'un jeton racine réapparaisse dans
+   `index.css`. */
+
+:root {
+  /* ─── Texte ──────────────────────────────────────────────────────────────
+     Sept pas, rapport d'environ 1,2. Les six premiers portent le texte ;
+     --t-3xl est réservé aux chiffres qui répondent à la question de l'écran
+     (règle A4). Trois graisses en clair dans le code : 400, 600, 800. */
+  --t-xs:  11px;   /* métadonnées, compteurs, mentions */
+  --t-sm:  13px;   /* texte secondaire, libellés */
+  --t-md:  15px;   /* texte courant, titre d'une ligne de liste */
+  --t-lg:  18px;   /* titre d'un objet */
+  --t-xl:  22px;   /* titre d'écran */
+  --t-2xl: 28px;   /* chiffre principal */
+  --t-3xl: 40px;   /* chiffre héros */
+  /* La police du téléphone : SF Pro sur iPhone, Roboto sur Android. Inter
+     venait de Google Fonts, que le service worker ne garde pas : hors ligne,
+     au premier lancement sans réseau et dans l'APK, l'app changeait de
+     police. Aucun téléchargement désormais, et le rendu natif. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+  /* ─── Rayons ───────────────────────────────────────────────────────────── */
+  --radius-xs:    4px;   /* lignes internes, barres */
+  --radius-sm:   10px;   /* petits contrôles, vignettes */
+  --radius-md:   14px;   /* boutons, champs, feuilles */
+  --radius-lg:   20px;   /* cartes */
+  --radius-pill: 999px;  /* pastilles */
+
+  /* ─── Marque : bleu clair ────────────────────────────────────────────────
+     Deux jetons de bleu, deux métiers.
+     · --accent est la teinte : traits, bordures, surfaces décoratives. Elle
+       ne porte AUCUN texte : 2,72:1 contre le blanc, dans les deux sens.
+     · --accent-deep reçoit du blanc (4,59:1) : boutons pleins, pastilles.
+     · --accent-texte EST du texte, sur les surfaces claires de l'app.
+     --orange et --yellow sont des alias hérités, référencés partout. */
+  --accent:       #35A7DD;
+  --accent-light: #7FD1F0;
+  --accent-deep:  #287DA6;   /* blanc dessus : 4,59:1 */
+  --accent-texte: #22719A;   /* sur --surface-sunken : 4,75:1 ; sur blanc : 5,39:1 */
+  --orange:       var(--accent-deep);
+  --yellow:       #7FD1F0;
+  --primary-shadow: rgba(53,167,221, 0.38);
+
+  /* ─── Surfaces et texte (thème clair) ─────────────────────────────────── */
+  --white:          #FFFFFF;
+  --surface:        #F7FAFD;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #E9EFF5;
+  --text:           #12202B;
+  --text-muted:     #576A78;
+  /* Assombri jusqu'à 4,5:1 : l'app se lit dehors, en plein soleil. */
+  --text-light:     #606D78;
+  --border:         rgba(16, 45, 70, 0.10);
+  --border-strong:  rgba(16, 45, 70, 0.18);
+
+  /* ─── Ombres (teintées bleu nuit, jamais de noir pur en clair) ─────────── */
+  --shadow-sm:  0 1px 3px rgba(20,55,80, 0.07), 0 0 0 1px rgba(20,55,80, 0.03);
+  --shadow-md:  0 6px 20px rgba(20,55,80, 0.12), 0 2px 6px rgba(20,55,80, 0.06);
+  --shadow-lg:  0 14px 44px rgba(20,55,80, 0.18), 0 3px 10px rgba(20,55,80, 0.08);
+
+  /* ─── Mouvement ───────────────────────────────────────────────────────────
+     Trois durées et deux courbes (il y en avait 29 et 14). La réduction de
+     mouvement demandée par le système les ramène à zéro (index.css). */
+  --d-1: 120ms;   /* retour d'un toucher : enfoncement, survol */
+  --d-2: 200ms;   /* un état qui change : coche, pli, onglet */
+  --d-3: 320ms;   /* un calque qui entre ou sort : feuille, menu */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-feuille: cubic-bezier(0.32, 0.72, 0, 1);   /* la courbe des feuilles iOS */
+
+  /* ─── Couleurs sémantiques ────────────────────────────────────────────────
+     Rouge = erreur, ambre = alerte, vert = montants. Les teintes vives ne
+     portent pas de texte ; leurs variantes « deep » reçoivent du blanc,
+     leurs variantes « texte » sont du texte. */
+  --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --blue: #3b82f6;
+  --green-deep:  #178841;   /* blanc dessus : 4,53:1 */
+  --red-deep:    #C42B2B;   /* blanc dessus : 4,52:1 */
+  --red-texte:   #B31F1F;   /* sur une carte claire : 5,4:1 */
+  --green-texte: #146F35;   /* sur une carte claire : 6:1 */
+}
+
+/* ─── Thème sombre : seulement ce qui change ─────────────────────────────── */
+[data-theme="dark"] {
+  --surface:        #111A22;
+  --surface-raised: #1A252F;
+  --surface-sunken: #0B1218;
+  --text:           #E6EEF4;
+  --text-muted:     #A5B6C2;
+  /* 3,86:1 sur la surface haute : éclairci pour la même raison. */
+  --text-light:     #798D9B;
+  --border:         rgba(170,214,255, 0.10);
+  --border-strong:  rgba(170,214,255, 0.20);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md: 0 6px 20px rgba(0,0,0,0.55);
+  --shadow-lg: 0 14px 44px rgba(0,0,0,0.65);
+  /* En sombre, un texte d'accent s'éclaircit au lieu de s'assombrir. */
+  --accent-texte: var(--accent-light);
+  --red-texte:    #FF8A8A;
+  --green-texte:  #4ADE80;
+}

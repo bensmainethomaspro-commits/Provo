@@ -423,12 +423,14 @@ const PARCOURS = [
   { groupe: 'Accueil', nom: 'Créer un voyage', depart: 'vierge',
     intention: "Première ouverture : créer un voyage et arriver dedans.",
     async faire(t) {
-      await t.clic('button', { texte: /Nouveau voyage|Créer mon premier/i, delai: 700 });
-      await t.saisir('.modal input.form-input', 'Lisbonne', { index: 0 });
-      await t.saisir('.modal input.form-input', 'Lisbonne, Portugal', { index: 1 });
-      await t.clic('.modal button', { texte: /Créer/, delai: 1400 });
+      await t.clic('button', { texte: /Nouveau voyage|Créer un voyage/i, delai: 700 });
+      // La destination d'abord ; le nom s'en déduit quand on le laisse vide.
+      await t.saisir('#nv-destination', 'Lisbonne, Portugal');
+      await t.clic('.nouveau-voyage button[type="submit"]', { delai: 1400 });
       const v = await t.voyage();
       t.verifier('le voyage est enregistré', !!v && v.name === 'Lisbonne', v?.name);
+      t.verifier('le nom vient de la destination', v?.destination === 'Lisbonne, Portugal', v?.destination);
+      t.verifier('la couleur choisie est gardée', !!v?.color, String(v?.color));
       t.verifier('il apparaît sur l\'accueil',
         (await t.texte()).includes('Lisbonne') || (await t.combien('.trip-card')) > 0);
       t.verifier('des jours ont été créés', (v?.days?.length || 0) > 0, `${v?.days?.length} jours`);
@@ -584,7 +586,7 @@ const PARCOURS = [
       for (let i = 0; i < 4; i++) {
         vues.add(await t.p.evaluate(() =>
           ['.timeline-view', '.agenda-view', '.day-section', '.tl-day'].find(s => document.querySelector(s)) || 'aucune'));
-        if (!(await t.clic('.tool-btn--view-cycle', { delai: 700, obligatoire: false }))) break;
+        if (!(await t.clic('.segmente__choix:not(.segmente__choix--actif)', { delai: 700, obligatoire: false }))) break;
       }
       t.verifier('au moins deux vues différentes', vues.size >= 2, [...vues].join(' · '));
     } },
@@ -1054,7 +1056,7 @@ const PARCOURS = [
       t.verifier("plus de promesse de « temps réel » d'une photo figée", !/temps réel/i.test(txt));
       t.verifier('inviter sans compte : la raison et le geste qui débloque',
         /Il faut un compte/i.test(txt) && (await t.combien('button:has-text("Se connecter")')) > 0);
-      await t.clic('button', { texte: /Envoyer une copie/, delai: 800 });
+      await t.clic('button', { texte: /Envoyer la copie/, delai: 800 });
       t.verifier('la copie est prête, et ça se dit', /Copie prête/i.test(await t.texte()));
     } },
 

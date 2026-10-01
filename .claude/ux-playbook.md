@@ -93,6 +93,17 @@ dans les deux thèmes.** Un jeton de couleur juste dans l'absolu peut être
 invisible sur le fond où il atterrit.
 *Origine : « il y a des boutons qui ne se voient pas » — un badge horaire en
 couleur d'accent posé sur un fond de la même couleur d'accent.*
+**Corollaire : un fond qui n'a pas UNE couleur se mesure quand même, au
+pixel.** Dégradé, photo, voile translucide : le contraste ne se calcule plus
+depuis les couleurs déclarées, mais l'écran, lui, en a une sous chaque lettre.
+Capturer, capturer à nouveau avec le texte rendu transparent, comparer la
+couleur du texte au fond réellement peint sous ses lettres. Une sonde qui range
+ces cas en « à vérifier à l'œil » ne les vérifie jamais : personne ne relit la
+liste.
+*Origine : une sonde de contraste à zéro défaut pendant des mois, qui rangeait
+989 textes posés sur un dégradé en « non compté ». Parmi eux, le libellé de
+l'onglet actif (2,66:1), le bouton principal de l'accueil et le « + » de
+l'en-tête : les éléments les plus vus de l'app, tous sous le seuil.*
 
 **B2. Une seule grille d'alignement par écran.** Une rangée de contrôles est un
 conteneur unique avec des espaceurs explicites, pas des éléments posés côte à
@@ -116,6 +127,28 @@ un changement de palette, balayer le CSS à la recherche des anciennes teintes
 en dur et des redéfinitions du même jeton.
 *Origine : une seconde déclaration `--orange` dans un calque inférieur écrasait
 silencieusement la nouvelle palette ; la moitié de l'interface restait orange.*
+**Corollaire : la parade durable n'est pas le balayage, c'est l'impossibilité.**
+Toutes les valeurs dans UN fichier de jetons, déclarées une fois par thème, et
+un contrôle automatique qui refuse un jeton redéclaré ailleurs et plafonne les
+couleurs et ombres en dur. Une refonte visuelle ne s'ajoute pas en couche au
+bas de la feuille : elle remplace la description du composant, et l'ancienne
+disparaît. Le passage vers ce fichier se prouve sans écart : relever le style
+calculé de chaque élément avant et après, sur chaque écran.
+*Origine : après cinq corrections annulées par une redéclaration, un audit a
+compté quatre « design systems » empilés dans la même feuille, un jeton déclaré
+huit fois, un bouton décrit par cinq couches, et des commentaires décrivant des
+teintes chaudes sur des valeurs bleu froid.*
+
+**B6. L'émoji est du contenu, l'icône est du chrome.** Ce que l'utilisateur
+choisit (l'émoji d'un objet, une catégorie, un drapeau) peut être un émoji. Ce
+que l'application dessine pour qu'on agisse (onglets, en-têtes, menus,
+boutons, fermetures) passe par une seule famille d'icônes, même trait, couleur
+du texte. Un émoji ne se teinte pas pour un état actif, change de dessin d'un
+téléphone à l'autre, et certains disent faux.
+*Origine : 130 émojis différents dans l'interface d'une app. L'onglet du
+programme affichait un calendrier « 17 juillet » toute l'année, alors que le
+même projet avait déjà banni cet émoji d'un bouton pour exactement cette
+raison ; une voiture illustrait des billets de train.*
 
 ---
 
@@ -494,6 +527,9 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-08 | trois audits de suite : une règle posée à un endroit ne suit pas les autres | E13 |
 | 2026-09 | une dépense notée hors ligne effacée par la version du serveur au retour dans l'app | F6 |
 | 2026-09 | le test de notification passait : il chargeait l'app avant de suivre le lien | E3 (corollaire) |
+| 2026-10 | « critique impitoyable, design system, gradients » : 989 textes sur dégradé jamais mesurés | B1 (corollaire) |
+| 2026-10 | même demande : quatre design systems empilés, un jeton déclaré huit fois | B5 (corollaire) |
+| 2026-10 | même demande : 130 émojis servant d'icônes, un calendrier « 17 juillet » en onglet | B6 |
 
 ### Récidives repérées
 
@@ -518,8 +554,16 @@ revient trois fois est un problème structurel, pas un détail.
   croyait regarder. **Quatrième et cinquième fois en septembre 2026** : une
   sonde d'interface qui réamorçait le stockage en rechargeant et n'atteignait
   jamais son écran, et un parcours de notification entré par une autre porte
-  que l'utilisateur (E3, corollaire). → E6, et vérifier qu'un écran exerce
-  chaque sonde avant de l'ajouter ; puis se demander par où la sonde entre.
+  que l'utilisateur (E3, corollaire). **Sixième et septième fois en octobre
+  2026** : la création d'un objet et les états vides n'étaient ouverts par
+  aucun outil (un champ y débordait de 34 px), et la sonde de contraste
+  écartait tout texte posé sur un dégradé (B1, corollaire). → E6, et vérifier
+  qu'un écran exerce chaque sonde avant de l'ajouter ; puis se demander par où
+  la sonde entre, et ce qu'elle met de côté sans le compter.
+- **Une valeur redéclarée plus bas dans la feuille** : cinq fois en deux mois
+  (B5), puis un jeton déclaré huit fois. Le balayage ne tenait pas : chaque
+  refonte s'ajoutait en couche au bas du fichier. → B5, corollaire : un seul
+  fichier de jetons et un contrôle qui rend la redéclaration impossible.
 - **Un `position: fixed` enfermé par un ancêtre** : trois fois — la roue,
   la barre d'onglets sur les dépôts, puis le menu ⋯ d'une activité. À chaque
   fois le calque semblait correct dans le code et se dessinait au mauvais

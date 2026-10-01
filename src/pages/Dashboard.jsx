@@ -8,6 +8,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AccountSheet from '../components/AccountSheet';
 import { getCategoryMeta, formatDate, getTimeSlots } from '../utils/helpers';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import Icone from '../components/Icone';
+import { Moon, Sun, Download, UserRound, Plus } from 'lucide-react';
 
 function todayStr() {
   const d = new Date();
@@ -82,12 +84,11 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   return (
     <div className="dashboard">
       <div className="dashboard__logo">
-        <span className="dashboard__logo-icon">🧳</span>
         <span className="dashboard__logo-text">Provo</span>
         <div className="dashboard__logo-actions">
           <RefreshButton className="btn btn--ghost-white btn--round" />
           <button className="btn btn--ghost-white btn--round" onClick={onToggleDark} title={darkMode ? 'Mode clair' : 'Mode sombre'} aria-label={darkMode ? 'Passer en mode clair' : 'Passer en mode sombre'}>
-            {darkMode ? '☀️' : '🌙'}
+            <Icone de={darkMode ? Sun : Moon} />
           </button>
           {/* Seulement là où le bouton installe vraiment. Sur iOS il ne pouvait
               qu'expliquer une manipulation manuelle, ce qui encombrait l'en-tête
@@ -98,7 +99,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
               onClick={install}
               title="Installer l'application"
             >
-              📲 Installer
+              <Icone de={Download} taille={18} /> Installer
             </button>
           )}
           {userId
@@ -112,17 +113,17 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
                 {userProfile?.emoji || '😀'}
               </button>
             )
-            : <button className="btn btn--ghost-white btn--sm" onClick={onShowAuth} title="Se connecter">🔑 Connexion</button>
+            : <button className="btn btn--ghost-white btn--sm" onClick={onShowAuth} title="Se connecter"><Icone de={UserRound} taille={18} /> Connexion</button>
           }
         </div>
       </div>
-      <p className="dashboard__logo-sub">{userId ? '☁️ Voyages synchronisés' : 'Ton gestionnaire de voyages'}</p>
+      <p className="dashboard__logo-sub">{userId ? 'Voyages synchronisés' : 'Ton gestionnaire de voyages'}</p>
 
       {!isEmpty && (
         <div className="dashboard__search">
           <input
             className="dashboard__search-input"
-            placeholder="🔍 Voyage ou activité…"
+            placeholder="Chercher un voyage ou une activité"
             aria-label="Rechercher un voyage ou une activité"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -138,7 +139,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
           <div className="today-hero" onClick={() => onNavigate('trip', activeTrip.id)}>
             <div className="today-hero__header">
               <div className="today-hero__meta">
-                <span className="today-hero__tag">🟢 En voyage</span>
+                <span className="today-hero__tag">En voyage</span>
                 <span className="today-hero__day">Jour {activeDayIdx + 1}/{activeTrip.days.length} · {formatDate(activeTodayDay.date)}</span>
               </div>
               <div className="today-hero__name">{activeTrip.emoji || '✈️'} {activeTrip.name}</div>
@@ -147,7 +148,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
               {activeTodayDay.activities.length === 0
                 ? <span className="today-hero__empty">Aucune activité planifiée aujourd'hui</span>
                 : aVenirAujourdhui.length === 0
-                  ? <span className="today-hero__empty">🎉 Plus rien au programme aujourd'hui</span>
+                  ? <span className="today-hero__empty">Plus rien au programme aujourd'hui</span>
                   : aVenirAujourdhui.slice(0, 4).map(({ a, debut }) => {
                       const meta = getCategoryMeta(a.category);
                       return (
@@ -168,27 +169,27 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
 
         {/* ── EN COURS & À VENIR ── */}
         <div className="dashboard__section">
-          <div className="dashboard__section-title">En cours & à venir</div>
+          {!isEmpty && <div className="dashboard__section-title">En cours & à venir</div>}
           {search && filteredCurrent.length === 0 && filteredPast.length === 0 && (
             <div className="dashboard__search-empty">Aucun résultat pour « {search} »</div>
           )}
           {filteredCurrent.length === 0 && !search
             ? isEmpty ? (
+              /* Le seul accueil : l'ancien carrousel de quatre écrans
+                 passait avant, disait « Bienvenue » une première fois et
+                 promettait des choses fausses (« pas besoin de compte » pour
+                 partager, un glissement absent de la frise). Ici : une
+                 phrase sur ce que fait Provo, un bouton, rien d'autre. */
               <div className="dashboard__empty-hero">
-                <div className="dashboard__empty-art">🌍 ✈️ 🗺️</div>
-                <h2 className="dashboard__empty-title">Bienvenue sur Provo !</h2>
-                <p className="dashboard__empty-text">Planifie tes voyages, gère le programme jour par jour, retrouve tout hors-ligne.</p>
+                <h2 className="dashboard__empty-title">Prépare ton prochain voyage</h2>
+                <p className="dashboard__empty-text">Garde tes idées avant de partir, pioche dedans une fois sur place. Tout reste sur ce téléphone, même sans réseau, et sans compte.</p>
                 <button className="btn btn--primary dashboard__empty-cta" onClick={() => setShowNew(true)}>
-                  ✈️ Créer mon premier voyage
+                  Créer un voyage
                 </button>
-                <p className="dashboard__empty-offline">📵 Fonctionne 100% sans connexion</p>
               </div>
             ) : (
               <div className="dashboard__empty">
-                <div className="dashboard__empty-icon">🗓</div>
-                <p>Aucun voyage à venir.<br />
-                  <button className="btn btn--primary btn--sm" style={{ marginTop: 10 }} onClick={() => setShowNew(true)}>+ Nouveau voyage</button>
-                </p>
+                <p>Aucun voyage à venir.</p>
               </div>
             )
             : filteredCurrent.map(trip => (
@@ -230,11 +231,15 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
       </div>
 
 
-      <div className="fab">
-        <button className="fab__btn" onClick={() => setShowNew(true)}>
-          ✈️ Nouveau voyage
-        </button>
-      </div>
+      {/* Un seul bouton pour la même action : sur l'accueil vide, c'est
+          celui de l'état vide qui la porte. */}
+      {!isEmpty && (
+        <div className="fab">
+          <button className="fab__btn" onClick={() => setShowNew(true)}>
+            <Icone de={Plus} /> Nouveau voyage
+          </button>
+        </div>
+      )}
 
       {showNew && <NewTripModal onClose={() => setShowNew(false)} onCreate={handleCreate} />}
       {editingTrip && <NewTripModal editTrip={editingTrip} onClose={() => setEditingTrip(null)} onCreate={handleEdit} />}

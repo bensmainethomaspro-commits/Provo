@@ -129,7 +129,7 @@ const SONDES = `(() => {
       .replace(/\\s+/g, ' ').trim().slice(0, 44);
 
   // 1 · Contraste — uniquement les nœuds qui portent vraiment du texte.
-  const contraste = [], incertains = [];
+  const contraste = [], incertains = [], aMesurer = [];
   const vus = new Set();
   document.querySelectorAll('body *').forEach(el => {
     if (!visible(el)) return;
@@ -157,13 +157,40 @@ const SONDES = `(() => {
       return;
     }
     const fond = fondReel(el);
-    if (fond.incertain) {
-      vus.add(cle);
-      incertains.push({ texte: propre.slice(0, 40), classe: String(el.className).slice(0, 38) });
-      return;
-    }
     const px = parseFloat(s.fontSize), gras = parseInt(s.fontWeight, 10) >= 700;
     const seuil = (px >= 24 || (px >= 18.66 && gras)) ? ${CONTRASTE_GRAND} : ${CONTRASTE_NORMAL};
+    if (fond.incertain) {
+      vus.add(cle);
+      // Un dégradé n'a pas UNE couleur, mais l'écran, lui, en a une sous
+      // chaque lettre. Ces textes partaient « à l'œil, non comptés » : 989
+      // d'entre eux en septembre 2026, dont le libellé de l'onglet actif à
+      // 2,66:1, l'élément le plus vu de l'app. On les note ici avec la place
+      // exacte de leurs lettres, et ils sont mesurés au pixel juste après
+      // (mesurerAuPixel). Seulement ceux qu'on voit vraiment : un texte
+      // passé sous un voile ou sous la barre d'onglets n'est pas à mesurer.
+      const zones = [];
+      for (const n of el.childNodes) {
+        if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+        const rg = document.createRange(); rg.selectNodeContents(n);
+        for (const q of rg.getClientRects()) {
+          if (q.width < 1 || q.height < 1) continue;
+          const cx = q.left + q.width / 2, cy = q.top + q.height / 2;
+          if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) continue;
+          const dessus = document.elementFromPoint(cx, cy);
+          if (dessus && (dessus === el || el.contains(dessus))) {
+            zones.push({ x: q.left, y: q.top, l: q.width, h: q.height });
+          }
+        }
+      }
+      if (zones.length) {
+        el.setAttribute('data-verif-pixel', String(aMesurer.length));
+        aMesurer.push({ texte: propre.slice(0, 40), classe: String(el.className).slice(0, 38),
+          fg: fg.rgb, alpha: fg.a, seuil, px: Math.round(px), zones });
+      } else {
+        incertains.push({ texte: propre.slice(0, 40), classe: String(el.className).slice(0, 38) });
+      }
+      return;
+    }
     const bg = fond.fond;
     // Un texte semi-transparent se compose lui aussi sur son fond.
     const fgc = fg.a >= 0.999 ? fg.rgb : fg.rgb.map((v, k) => Math.round(v * fg.a + bg[k] * (1 - fg.a)));
@@ -261,6 +288,18 @@ const SONDES = `(() => {
       // Un bouton passé sous l'en-tête au défilement n'est pas un défaut de
       // dessin — il est simplement plus haut que le cadre.
       if (calque) return;
+      // Sous une feuille ouverte, on ne touche pas ce qu'il y a dessous : ce
+      // n'est pas une cible trop petite, c'est une cible cachée. Sans ce
+      // filtre, chaque bouton de l'écran du dessous ressortait sous 44 px dès
+      // qu'une feuille s'ouvrait par-dessus (octobre 2026).
+      const centre = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (centre && centre !== el && !el.contains(centre) && !centre.contains(el)) {
+        for (let n = centre; n && n !== document.body; n = n.parentElement) {
+          const q = n.getBoundingClientRect();
+          if (getComputedStyle(n).position === 'fixed'
+            && q.width >= window.innerWidth * 0.9 && q.height >= window.innerHeight * 0.9) return;
+        }
+      }
       const cle = String(el.className) + '|' + nomme(el);
       if (vusC.has(cle)) return;
       vusC.add(cle);
@@ -282,6 +321,30 @@ const SONDES = `(() => {
       }
     });
   }
+
+  // 3 bis · Un panneau qui défile de côté. La page tient dans l'écran, mais
+  // un panneau qui défile verticalement (une fenêtre, une feuille) contient
+  // plus large que lui : il se met à glisser aussi de gauche à droite, et un
+  // champ y est coupé. Le champ « Retour » de la création de voyage sortait
+  // ainsi de 34 px de sa fenêtre, que le contrôle de la page ne voyait pas.
+  // Une rangée de pastilles qui défile exprès de côté est basse : on ne
+  // regarde que les panneaux d'au moins 200 px de haut, et pas les
+  // carrousels voulus (la frise des jours s'aimante de côté : scroll-snap x).
+  document.querySelectorAll('body *').forEach(el => {
+    if (!visible(el)) return;
+    const s = getComputedStyle(el);
+    if (!/auto|scroll/.test(s.overflowX) || el.clientHeight < 200) return;
+    if (/x|both|inline/.test(s.scrollSnapType)) return;
+    if (el.scrollWidth <= el.clientWidth + 2) return;
+    const q = el.getBoundingClientRect();
+    const fautif = [...el.querySelectorAll('*')].find(c => {
+      const r = c.getBoundingClientRect();
+      return r.width > 0 && r.right > q.left + el.clientWidth + 2;
+    });
+    coupables.push({ classe: String(el.className).slice(0, 38) + ' défile de côté, à cause de '
+      + String(fautif?.className || fautif?.tagName || '?').slice(0, 30),
+      gauche: Math.round(q.left), droite: Math.round(q.left + el.scrollWidth) });
+  });
 
   // 4 · Action principale hors écran — « il faut scroller pour rien ».
   //
@@ -363,14 +426,61 @@ const SONDES = `(() => {
     }
   });
 
-  return { contraste, incertains, cibles, deborde, coupables, horsEcran, recouverts, muets, captifs };
+  return { contraste, incertains, aMesurer, cibles, deborde, coupables, horsEcran, recouverts, muets, captifs };
 })()`;
 
 // ── Parcours ─────────────────────────────────────────────────────────────────
 // L'onglet « Aujourd'hui » a été retiré du produit : le laisser ici ferait
 // mesurer le Planning deux fois, sous un nom qui n'existe plus.
+// Prépare un stockage particulier, puis recharge pour que l'app le lise.
+// `verif_garder` empêche l'amorçage habituel d'écraser ce préparatif.
+const preparer = async (p, modifier) => {
+  await p.evaluate((src) => {
+    const t = JSON.parse(localStorage.getItem('provo_trips') || '[]');
+    localStorage.setItem('provo_trips', JSON.stringify(new Function('t', src)(t)));
+    sessionStorage.setItem('verif_garder', '1');
+  }, modifier);
+  await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(900);
+};
+
 const ECRANS = [
   { nom: 'Accueil', aller: async () => {} },
+  // Le premier contact, et les états vides : aucun outil ne les ouvrait
+  // (octobre 2026). C'est pourtant là qu'un nouvel utilisateur décide s'il
+  // reste, et le champ « Retour » de la création de voyage débordait de
+  // 34 px sans que rien ne le dise.
+  {
+    nom: 'Accueil vide',
+    repere: '.dashboard__empty-hero',
+    aller: async (p) => { await preparer(p, 'return []'); },
+  },
+  {
+    nom: 'Nouveau voyage',
+    repere: '.nouveau-voyage',
+    aller: async (p) => {
+      await p.locator('.fab__btn').click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(700);
+      // Tout déplié : un contrôle replié n'est pas mesuré.
+      await p.locator('.nouveau-voyage__plus').click({ timeout: 2000 }).catch(() => {});
+      await p.waitForTimeout(400);
+    },
+  },
+  {
+    nom: 'Réserve vide',
+    repere: '.reserve-section__empty',
+    aller: async (p) => {
+      await preparer(p, 't[0].reserve = []; return t');
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+    },
+  },
+  {
+    nom: 'Dépenses vide',
+    repere: '.expenses-list__empty',
+    aller: async (p) => {
+      await preparer(p, 't[0].expenses = []; return t');
+      await ouvrirVoyage(p); await onglet(p, /Dépenses/i);
+    },
+  },
   { nom: 'Planning', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Planning/i); } },
   { nom: 'Réserve', aller: async (p) => { await ouvrirVoyage(p); await onglet(p, /Réserve/i); } },
   {
@@ -716,6 +826,56 @@ try {
 const navigateur = await chromium.launch({ executablePath: trouverChromium() });
 const rapport = [];
 
+// ── Contraste au pixel, pour les textes posés sur un dégradé ─────────────────
+// Deux captures de l'écran : telle quelle, puis avec ces textes rendus
+// transparents. Là où les deux diffèrent, il y a une lettre ; la seconde
+// capture donne, à cet endroit précis, le fond réellement peint dessous.
+// On compare la couleur du texte à ce fond, lettre par lettre, et on garde la
+// valeur médiane. Sans cette mesure, le blanc sur le dégradé bleu clair des
+// boutons et de l'onglet actif (2,6:1) passait au vert depuis toujours.
+const outilPixel = await navigateur.newPage();
+async function mesurerAuPixel(p, liste) {
+  const dpr = await p.evaluate(() => devicePixelRatio);
+  const avant = await p.screenshot();
+  await p.addStyleTag({ content: '[data-verif-pixel] { color: transparent !important; '
+    + '-webkit-text-fill-color: transparent !important; text-shadow: none !important; '
+    + 'transition: none !important; }' });
+  await p.waitForTimeout(120);
+  const apres = await p.screenshot();
+  return outilPixel.evaluate(async ({ a, b, liste, dpr }) => {
+    const charger = async (b64) => {
+      const img = new Image(); img.src = 'data:image/png;base64,' + b64; await img.decode();
+      const c = new OffscreenCanvas(img.width, img.height); const g = c.getContext('2d');
+      g.drawImage(img, 0, 0);
+      return { l: img.width, h: img.height, d: g.getImageData(0, 0, img.width, img.height).data };
+    };
+    const [A, B] = [await charger(a), await charger(b)];
+    const lum = ([r, g, bl]) => {
+      const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bl);
+    };
+    return liste.map(m => {
+      const ratios = [];
+      for (const z of m.zones) {
+        const x0 = Math.max(0, Math.floor(z.x * dpr)), x1 = Math.min(A.l, Math.ceil((z.x + z.l) * dpr));
+        const y0 = Math.max(0, Math.floor(z.y * dpr)), y1 = Math.min(A.h, Math.ceil((z.y + z.h) * dpr));
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+          const i = (y * A.l + x) * 4;
+          const ecart = Math.abs(A.d[i] - B.d[i]) + Math.abs(A.d[i + 1] - B.d[i + 1]) + Math.abs(A.d[i + 2] - B.d[i + 2]);
+          if (ecart < 40) continue;                       // pas une lettre
+          const fond = [B.d[i], B.d[i + 1], B.d[i + 2]];
+          const texte = m.alpha >= 0.999 ? m.fg : m.fg.map((v, k) => v * m.alpha + fond[k] * (1 - m.alpha));
+          const [hi, lo] = [lum(texte), lum(fond)].sort((u, v) => v - u);
+          ratios.push((hi + 0.05) / (lo + 0.05));
+        }
+      }
+      if (ratios.length < 12) return { ...m, ratio: null };
+      ratios.sort((u, v) => u - v);
+      return { ...m, ratio: Math.round(ratios[Math.floor(ratios.length / 2)] * 100) / 100 };
+    });
+  }, { a: avant.toString('base64'), b: apres.toString('base64'), liste, dpr });
+}
+
 for (const theme of ['light', 'dark']) {
   const ctx = await navigateur.newContext({
     viewport: { width: LARGEUR, height: HAUTEUR }, deviceScaleFactor: 2,
@@ -756,6 +916,16 @@ for (const theme of ['light', 'dark']) {
       ? (await p.locator(ecran.repere).count().catch(() => 0)) === 0
       : false;
     const r = await p.evaluate(SONDES);
+    if (r.aMesurer.length) {
+      for (const m of await mesurerAuPixel(p, r.aMesurer)) {
+        if (m.ratio === null) r.incertains.push({ texte: m.texte, classe: m.classe });
+        else if (m.ratio < m.seuil) {
+          r.contraste.push({ texte: m.texte, classe: m.classe, ratio: m.ratio, seuil: m.seuil,
+            px: m.px, pixel: true });
+        }
+      }
+    }
+    delete r.aMesurer;
     rapport.push({ theme, ecran: ecran.nom, ...r, plante: plante > 0, perdu,
       repere: ecran.repere, erreurs: [...erreurs] });
     erreurs.length = 0;
@@ -776,7 +946,7 @@ if (JSON_OUT) {
   console.log('─'.repeat(95));
   for (const l of rapport) {
     console.log(pad(l.ecran, 18) + pad(l.theme, 8) + pad(l.contraste.length || '·', 11)
-      + pad(l.cibles.length || '·', 9) + pad(l.deborde ? l.deborde + ' px' : '·', 9)
+      + pad(l.cibles.length || '·', 9) + pad(l.deborde ? l.deborde + ' px' : l.coupables.some(c => / défile de côté/.test(c.classe)) ? 'panneau' : '·', 9)
       + pad(l.horsEcran.length || '·', 12) + pad(l.recouverts.length || '·', 11)
       + pad(l.muets.length || '·', 8) + (l.captifs.length || '·'));
   }
@@ -792,7 +962,7 @@ if (JSON_OUT) {
   };
 
   detail('Contraste sous le seuil WCAG AA', l => l.contraste,
-    x => `${x.ratio}:1 (seuil ${x.seuil}) — « ${x.texte} » [${x.classe}] ${x.px}px`);
+    x => `${x.ratio}:1 (seuil ${x.seuil}) — « ${x.texte} » [${x.classe}] ${x.px}px${x.pixel ? ' · sur dégradé, mesuré au pixel' : ''}`);
   detail(`Cibles tactiles sous ${CIBLE_MIN} px`, l => l.cibles,
     x => `${x.l}×${x.h} — « ${x.libelle} » [${x.classe}]`);
   detail('Éléments hors du cadre horizontal', l => l.coupables,
@@ -809,7 +979,7 @@ if (JSON_OUT) {
   detail('Erreurs JavaScript', l => l.erreurs, x => x);
   // Non compté comme défaut : une photo de fond n'a pas de couleur unique.
   // La machine ne peut pas trancher — l'œil, si.
-  detail('Fond non uni (dégradé ou photo) — à vérifier à l’œil, non compté', l => l.incertains,
+  detail('Texte qu’on n’a pas pu mesurer au pixel (émoji seul, ou caché) — à l’œil, non compté', l => l.incertains,
     x => `« ${x.texte} » [${x.classe}]`);
 }
 
@@ -817,6 +987,7 @@ const plantes = rapport.filter(l => l.plante);
 const perdus = rapport.filter(l => l.perdu);
 const total = rapport.reduce((n, l) =>
   n + l.contraste.length + l.cibles.length + (l.deborde ? 1 : 0)
+    + l.coupables.filter(c => / défile de côté/.test(c.classe)).length
     + l.horsEcran.length + l.recouverts.length + l.muets.length + l.captifs.length
     + l.erreurs.length, 0);
 if (!JSON_OUT) {

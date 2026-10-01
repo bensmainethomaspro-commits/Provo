@@ -676,7 +676,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
     <div className="expenses-tab">
       {!hasTravelers && expenses.length === 0 && !showForm && (
         <div className="expenses-hint">
-          💡 Vous êtes plusieurs ? Ajoute des voyageurs dans <strong>⚙️ Paramètres du voyage</strong> pour répartir les dépenses. Sinon, ajoute directement une dépense ci-dessous.
+          Tu voyages à plusieurs ? Ajoute tes compagnons dans <strong>Paramètres du voyage</strong> (menu ⋯) : l'app partagera chaque dépense. Sinon, note directement ta première dépense.
         </div>
       )}
       {selectedTraveler && (
@@ -941,7 +941,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
               <select className="form-select" value={form.activityId}
                 aria-label="Lier à une activité"
                 onChange={e => set('activityId', e.target.value)}>
-                <option value="">🔗 Aucune activité liée — optionnel</option>
+                <option value="">Aucune activité liée</option>
                 {activitiesByDay.map(({ day, dayIdx }) => (
                   <optgroup key={day.id} label={`Jour ${dayIdx + 1} · ${formatDateShort(day.date)}`}>
                     {day.activities.map(a => (
@@ -1016,14 +1016,14 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       {expenses.length > 0 && (
         <div className="expenses-sections">
           <button className={`expenses-section-btn${activeSection === 'list' ? ' active' : ''}`} onClick={() => setActiveSection('list')}>
-            📋 Liste
+            Liste
           </button>
           <button className={`expenses-section-btn${activeSection === 'categories' ? ' active' : ''}`} onClick={() => setActiveSection('categories')}>
-            📊 Catégories
+            Catégories
           </button>
           {travelers.length > 0 && (
             <button className={`expenses-section-btn${activeSection === 'travelers' ? ' active' : ''}`} onClick={() => setActiveSection('travelers')}>
-              👥 Par personne
+              Par personne
             </button>
           )}
         </div>
@@ -1131,7 +1131,7 @@ export default function ExpensesTab({ trip, onAddExpense, onUpdateExpense, onDel
       {activeSection === 'travelers' && (
         <div className="traveler-summary">
           <button className="spinwheel-trigger-btn" onClick={() => setShowSpinWheel(true)}>
-            🎰 Roue de la fortune — qui paie ?
+            Roue de la fortune : qui paie ?
           </button>
           {travelerTotals.map(t => {
             const myOwes = debts.filter(d => d.from === t.id);

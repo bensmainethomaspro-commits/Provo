@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDate, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
+import Icone from './Icone';
+import { Plus } from 'lucide-react';
 
 /**
  * Assigner une idée de la Réserve à un jour.
@@ -36,11 +38,11 @@ export default function ReserveAssign({ days, onAssign, titre }) {
         title="Assigner à un jour"
         onClick={(e) => { e.stopPropagation(); setOpen(true); vibrate([6]); }}
       >
-        {/* Un signe typographique, pas un émoji : tous les émojis de calendrier
-            portent un quantième (17), et une fiche PAS ENCORE assignée qui
-            affiche une date se lit comme une fiche déjà posée. Le « + » se
-            range à côté du ⋯ comme deux commandes de même famille. */}
-        <span aria-hidden="true">＋</span>
+        {/* Un « + », pas un émoji : tous les émojis de calendrier portent un
+            quantième (17), et une fiche PAS ENCORE assignée qui affiche une
+            date se lit comme une fiche déjà posée. Le « + » se range à côté
+            du ⋯ comme deux commandes de même famille. */}
+        <Icone de={Plus} taille={20} />
       </button>
 
       {open && createPortal(

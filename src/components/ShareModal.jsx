@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { encodeTrip } from '../utils/helpers';
 import { useTripsContext } from '../context/TripsContext';
+import Icone from './Icone';
+import { X, UserPlus, Share } from 'lucide-react';
 
 /**
  * Partager un voyage : deux intentions, et chacune dit ce qu'elle fait.
@@ -85,27 +87,27 @@ export default function ShareModal({ trip, onClose, onShowAuth }) {
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal__header">
-          <h2 className="modal__title">🔗 Partager le voyage</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+          <h2 className="modal__title">Partager le voyage</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
         <div className="modal__body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
           <div className="share-section">
             <div className="share-section__label">
-              <span className="share-section__badge share-section__badge--collab">👥 Modifier ensemble</span>
+              <h3 className="share-section__titre">Modifier ensemble</h3>
               <span className="share-section__desc">
                 Tes proches rejoignent ce voyage : même programme, mêmes dépenses, pour tout le monde.
               </span>
             </div>
             {userId ? (
               <button className="btn btn--primary btn--full" onClick={inviter} disabled={!!enCours}>
-                {enCours === 'invitation' ? '⏳ Préparation…' : '📨 Inviter'}
+                {enCours === 'invitation' ? 'Préparation…' : <><Icone de={UserPlus} taille={18} /> Inviter</>}
               </button>
             ) : (
               <>
                 <p className="share-section__desc">Il faut un compte pour inviter : c'est lui qui garde le voyage commun.</p>
                 <button className="btn btn--primary btn--full" onClick={() => { onClose(); onShowAuth?.(); }}>
-                  🔑 Se connecter
+                  Se connecter
                 </button>
               </>
             )}
@@ -115,21 +117,18 @@ export default function ShareModal({ trip, onClose, onShowAuth }) {
 
           <div className="share-section">
             <div className="share-section__label">
-              <span className="share-section__badge">📤 Envoyer une copie</span>
+              <h3 className="share-section__titre">Envoyer une copie</h3>
               <span className="share-section__desc">
                 Ton ami reçoit le voyage pour lui. Ce qu'il y change ne touche pas au tien.
               </span>
             </div>
             <button className="btn btn--secondary btn--full" onClick={envoyerCopie} disabled={!!enCours}>
-              {enCours === 'copie' ? '⏳ Préparation…' : '📤 Envoyer une copie'}
+              {enCours === 'copie' ? 'Préparation…' : <><Icone de={Share} taille={18} /> Envoyer la copie</>}
             </button>
           </div>
 
-          {fait && <div className="share-copied" role="status">✅ {fait}</div>}
+          {fait && <div className="share-copied" role="status">{fait}</div>}
           {erreur && <div className="share-error" role="alert">{erreur}</div>}
-        </div>
-        <div className="modal__footer">
-          <button className="btn btn--secondary btn--full" onClick={onClose}>Fermer</button>
         </div>
       </div>
     </div>
