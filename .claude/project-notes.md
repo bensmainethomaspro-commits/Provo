@@ -187,7 +187,8 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     d'une pièce rangée à part.
   · **Budget de 20 s** pour tout un appel d'`extract-place` et
     d'`enrich-place` (`_shared/budget.ts`, `AsyncLocalStorage`) ; la sonde
-    de santé dit `budget: true` s'il fonctionne chez l'hébergeur.
+    de santé dit `budget: true` s'il fonctionne chez l'hébergeur, et le
+    canari quotidien le relève (orange s'il est inactif).
   · **Correctif urgent** : annuler une activité du jour faisait planter l'app
     (créneau `null` lu par `tempsRestant`, depuis la ligne « piocher » de la
     PR #98). Trouvé par les nouveaux écrans de `verif-ui`.

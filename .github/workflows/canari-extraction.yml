@@ -6,7 +6,9 @@ name: Canari — chaîne d'extraction
 # échelon tous les jours et ouvre une alerte AVANT que le dernier ne lâche.
 #
 #   vert   → rien à dire, et l'alerte ouverte est refermée.
-#   orange → l'app tient encore, mais sur ses échelons de secours. On prévient.
+#   orange → rien n'est cassé, mais quelque chose s'écarte de l'attendu (un
+#            échelon qui ressuscite, ou le budget de 20 s de la fonction
+#            inactif chez l'hébergeur). On prévient.
 #   rouge  → plus rien ne nomme le lieu. On prévient fort.
 
 on:
@@ -79,8 +81,8 @@ jobs:
             ETAT="🔴 **Rouge — l'ajout par lien est cassé.**"
             QUOI="Plus aucun échelon ne nomme le lieu : les fiches sortent vides. À traiter tout de suite."
           else
-            ETAT="🟠 **Orange — l'app ne tient plus que sur ses échelons de secours.**"
-            QUOI="Rien n'est cassé pour l'utilisateur aujourd'hui, mais la marge a disparu : la prochaine panne se verra. C'est le moment d'ajouter un échelon, pas quand tout sera rouge."
+            ETAT="🟠 **Orange — rien n'est cassé, mais quelque chose s'écarte de l'attendu.**"
+            QUOI="La cause est dans la dernière ligne des mesures ci-dessous : un échelon qui rend de nouveau une légende, des liens témoins à remplacer, ou le budget de 20 s de la fonction inactif chez l'hébergeur (l'appel entier n'est alors plus borné, chaque requête garde son délai)."
           fi
 
           CORPS=$(printf '%s\n\n%s\n\n<details open><summary>Ce que chaque échelon a répondu</summary>\n\n```\n%s\n```\n\n</details>\n\nMesuré par `scripts/canari-extraction.mjs` — %s\n' \
