@@ -55,7 +55,7 @@ export default function AuthScreen({ onSignIn, onSignUp, onResetPassword, onSkip
         <div className="auth-card">
           <div className="auth-confirm-icon">📬</div>
           <h2 className="auth-title">Vérifie tes emails</h2>
-          <p className="auth-subtitle">Un lien de confirmation t'a été envoyé à <strong>{email}</strong>. Clique dessus pour activer ton compte.</p>
+          <p className="auth-subtitle">Un lien de confirmation t'a été envoyé à <strong>{email}</strong>. Ouvre-le pour activer ton compte.</p>
           <button className="btn btn--secondary auth-btn" onClick={() => { setMode('login'); setDone(false); }}>
             J'ai confirmé → Se connecter
           </button>

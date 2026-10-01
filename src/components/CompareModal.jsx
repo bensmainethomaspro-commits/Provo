@@ -1,6 +1,8 @@
 import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, CATEGORY_COLORS, haversineKm } from '../utils/helpers';
 import ImagePiece from './ImagePiece';
 import { ouvrirPiece } from '../utils/pieces';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 export default function CompareModal({ activities, onClose, onChoose }) {
   if (!activities?.length) return null;
@@ -29,7 +31,7 @@ export default function CompareModal({ activities, onClose, onChoose }) {
               <div className="compare-subtitle">{activities.length} activités · Tape pour choisir</div>
             </div>
           </div>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
 
         <div className="compare-body">

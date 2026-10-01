@@ -1,3 +1,6 @@
+import Icone from './Icone';
+import { RotateCw } from 'lucide-react';
+
 // Forces the installed/cached app onto the latest Vercel deploy: clears cached
 // assets, pulls the newest service worker, and reloads from the network — without
 // having to re-add the app to the home screen.
@@ -34,7 +37,7 @@ export default function RefreshButton({ className = 'btn btn--ghost-white btn--s
       title="Mettre à jour vers la dernière version"
       aria-label="Rafraîchir l'application"
     >
-      🔄
+      <Icone de={RotateCw} />
     </button>
   );
 }

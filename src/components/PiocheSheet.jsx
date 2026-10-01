@@ -1,5 +1,7 @@
 import { getCategoryMeta } from '../utils/helpers';
 import { formatDistance } from '../hooks/useLiveLocation';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 /**
  * Ce qui, dans ta Réserve, tient dans le temps qu'il te reste.
@@ -21,8 +23,8 @@ export default function PiocheSheet({ resultat, onPiocher, onClose }) {
       <div className="sheet sheet--pioche" onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">🎯 Il te reste {duree}</span>
-          <button className="sheet__close" onClick={onClose} aria-label="Fermer">✕</button>
+          <span className="sheet__title">Il te reste {duree}</span>
+          <button className="sheet__close" onClick={onClose} aria-label="Fermer"><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">

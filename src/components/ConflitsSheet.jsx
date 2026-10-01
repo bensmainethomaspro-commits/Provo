@@ -11,6 +11,9 @@
  * sienne. Elle propose, elle n'impose rien (principe produit) : la fermer
  * revient à tout laisser ainsi.
  */
+import Icone from './Icone';
+import { X } from 'lucide-react';
+
 export default function ConflitsSheet({ groupes, onRemettre, onLaisser, onClose }) {
   if (!groupes.length) return null;
   const plusieurs = groupes.length > 1;
@@ -21,8 +24,8 @@ export default function ConflitsSheet({ groupes, onRemettre, onLaisser, onClose 
         onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">↔️ Modifié ailleurs en même temps</span>
-          <button className="sheet__close" onClick={onClose} aria-label="Fermer">✕</button>
+          <span className="sheet__title">Modifié ailleurs en même temps</span>
+          <button className="sheet__close" onClick={onClose} aria-label="Fermer"><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">

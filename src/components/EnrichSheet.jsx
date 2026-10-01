@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 /**
  * Ce que l'app a trouvé sur le site du lieu — à confirmer.
@@ -35,8 +37,8 @@ export default function EnrichSheet({ propositions, onAppliquer, onIgnorer, onCl
       <div className="sheet sheet--check" onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">✨ Informations trouvées</span>
-          <button className="sheet__close" onClick={onClose} aria-label="Fermer">✕</button>
+          <span className="sheet__title">Informations trouvées</span>
+          <button className="sheet__close" onClick={onClose} aria-label="Fermer"><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">

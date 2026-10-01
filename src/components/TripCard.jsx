@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePiece } from '../hooks/usePiece';
-import { formatDateShort } from '../utils/helpers';
+import Icone from './Icone';
+import { Ellipsis } from 'lucide-react';
+import { formatDateShort, repasEnAttente, destinationUtile } from '../utils/helpers';
 
 export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate, onPreview }) {
   // La couverture peut être rangée à part (utils/pieces.js) : la carte ne
@@ -20,7 +22,8 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
   const daysUntil = Math.round((startDate - today) / 86400000);
   const dayIdx = isActive ? Math.round((today - startDate) / 86400000) : -1;
 
-  const dayActs = trip.days.reduce((s, d) => s + d.activities.length, 0);
+  // Un repas posé d'office n'est pas une activité (helpers.js, repasEnAttente).
+  const dayActs = trip.days.reduce((s, d) => s + d.activities.filter(a => !repasEnAttente(a)).length, 0);
   const doneActs = trip.days.reduce((s, d) => s + d.activities.filter(a => a.status === 'done').length, 0);
   const actCount = dayActs + trip.reserve.length;
 
@@ -78,16 +81,15 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
         title={onPreview ? 'Aperçu rapide' : undefined}
       >
         {trip.emoji || '✈️'}
-        {onPreview && <span className="trip-card__emoji-hint">ℹ</span>}
       </div>
       <div className="trip-card__info trip-card--clickable" onClick={onClick} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
         <div className="trip-card__name">{trip.name}</div>
-        {trip.destination && <div className="trip-card__dest">📍 {trip.destination}</div>}
+        {destinationUtile(trip) && <div className="trip-card__dest">{destinationUtile(trip)}</div>}
         <div className="trip-card__dates">
           {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)}
           {' · '}{trip.days.length}j
           {actCount > 0 && ` · ${actCount} activité${actCount > 1 ? 's' : ''}`}
-          {(trip.travelers || 1) > 1 && <span className="trip-card__travelers"> · 👥 {trip.travelers}</span>}
+          {(trip.travelers || 1) > 1 && <span className="trip-card__travelers"> · {trip.travelers} voyageurs</span>}
         </div>
         {dayActs > 0 && (
           <div className="trip-card__progress-row">
@@ -103,7 +105,7 @@ export default function TripCard({ trip, onClick, onEdit, onDelete, onDuplicate,
       </span>
       <div className="trip-card__menu" ref={menuRef}>
         <button className="trip-card__menu-btn" onClick={(e) => { e.stopPropagation(); setMenuOpen(o => !o); }} title="Options" aria-label={`Options pour ${trip.name}`} aria-expanded={menuOpen} aria-haspopup="menu">
-          ⋮
+          <Icone de={Ellipsis} taille={20} />
         </button>
         {menuOpen && (
           <div className="trip-card__dropdown">

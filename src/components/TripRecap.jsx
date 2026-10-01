@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { formatPrice, formatDateShort, getCategoryMeta, haversineKm, enEuros } from '../utils/helpers';
+import { useState, useEffect } from 'react';
+import { formatPrice, formatDateShort, getCategoryMeta, haversineKm, enEuros, repasEnAttente, destinationUtile } from '../utils/helpers';
 import RecapCarte from './RecapCarte';
+import Icone from './Icone';
+import { X, Share } from 'lucide-react';
 
 // Bilan de voyage (« Provo Wrapped ») : chiffres clés du séjour, partageables.
 export default function TripRecap({ trip, onClose }) {
@@ -8,11 +10,31 @@ export default function TripRecap({ trip, onClose }) {
   const [copied, setCopied] = useState(false);
   const close = () => { setClosing(true); setTimeout(onClose, 250); };
 
-  const allActs = trip.days.flatMap(d => d.activities);
+  // Les repas posés d'office ne sont pas des activités : ils gonflaient le
+  // total (« 0/16 ») et sacraient « Resto ×12 » activité préférée.
+  const allActs = trip.days.flatMap(d => d.activities).filter(a => !repasEnAttente(a));
   const done = allActs.filter(a => a.status === 'done');
   const skipped = allActs.filter(a => a.status === 'nogo');
   const total = allActs.length;
   const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
+
+  // Le pourcentage monte jusqu'à sa valeur à l'ouverture : le seul moment
+  // du bilan qui mérite un mouvement. Rien si le système demande moins
+  // d'animations.
+  const [pctAffiche, setPctAffiche] = useState(() =>
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? pct : 0);
+  useEffect(() => {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    let image = 0;
+    const debut = performance.now(), duree = 700;
+    const pas = (t) => {
+      const x = Math.min(1, (t - debut) / duree);
+      setPctAffiche(Math.round(pct * (1 - Math.pow(1 - x, 3))));
+      if (x < 1) image = requestAnimationFrame(pas);
+    };
+    image = requestAnimationFrame(pas);
+    return () => cancelAnimationFrame(image);
+  }, [pct]);
 
   // Budget : prévu vs réel (activités faites + dépenses hors remboursements)
   const initBudget = parseFloat(trip.initialBudget) || 0;
@@ -33,7 +55,8 @@ export default function TripRecap({ trip, onClose }) {
   km = Math.round(km * 10) / 10;
 
   // Top catégories (sur les activités faites, sinon toutes)
-  const catSource = done.length > 0 ? done : allActs;
+  // Un repas n'est pas une préférence, même mangé : on parle de ce qu'on a choisi de faire.
+  const catSource = (done.length > 0 ? done : allActs).filter(a => !a.isMeal);
   const catCounts = {};
   catSource.forEach(a => { catCounts[a.category] = (catCounts[a.category] || 0) + 1; });
   const topCats = Object.entries(catCounts)
@@ -78,21 +101,20 @@ export default function TripRecap({ trip, onClose }) {
       <div className="sheet recap">
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <h2 className="sheet__title">📊 Bilan du voyage</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
+          <h2 className="sheet__title">Bilan du voyage</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}><Icone de={X} /></button>
         </div>
         <div className="sheet__body">
 
-          {/* Carte hero golden hour */}
           <div className="recap-hero">
             <div className="recap-hero__emoji">{trip.emoji || '✈️'}</div>
             <div className="recap-hero__name">{trip.name}</div>
-            {trip.destination && <div className="recap-hero__dest">📍 {trip.destination}</div>}
+            {destinationUtile(trip) && <div className="recap-hero__dest">{destinationUtile(trip)}</div>}
             <div className="recap-hero__dates">
               {formatDateShort(trip.startDate)} → {formatDateShort(trip.endDate)} · {trip.days.length}j
             </div>
             <div className="recap-hero__pct">
-              <div className="recap-hero__pct-value">{pct}%</div>
+              <div className="recap-hero__pct-value">{pctAffiche}%</div>
               <div className="recap-hero__pct-label">du programme réalisé</div>
             </div>
           </div>
@@ -105,22 +127,22 @@ export default function TripRecap({ trip, onClose }) {
           {/* Grille de stats */}
           <div className="recap-grid">
             <div className="recap-stat">
-              <div className="recap-stat__value">✅ {done.length}</div>
+              <div className="recap-stat__value">{done.length}</div>
               <div className="recap-stat__label">activités faites</div>
             </div>
             <div className="recap-stat">
-              <div className="recap-stat__value">❌ {skipped.length}</div>
-              <div className="recap-stat__label">passées</div>
+              <div className="recap-stat__value">{skipped.length}</div>
+              <div className="recap-stat__label">annulées</div>
             </div>
             {km > 0 && (
               <div className="recap-stat">
-                <div className="recap-stat__value">🛣️ {km} km</div>
+                <div className="recap-stat__value">{km} km</div>
                 <div className="recap-stat__label">entre les lieux</div>
               </div>
             )}
             {(trip.expenses || []).length > 0 && (
               <div className="recap-stat">
-                <div className="recap-stat__value">🧾 {(trip.expenses || []).filter(e => !e.isSettlement).length}</div>
+                <div className="recap-stat__value">{(trip.expenses || []).filter(e => !e.isSettlement).length}</div>
                 <div className="recap-stat__label">dépenses notées</div>
               </div>
             )}
@@ -129,7 +151,7 @@ export default function TripRecap({ trip, onClose }) {
           {/* Budget */}
           {(realSpent > 0 || initBudget > 0) && (
             <div className="recap-section">
-              <div className="recap-section__title">💶 Budget</div>
+              <div className="recap-section__title">Budget</div>
               <div className="recap-budget">
                 <div className="recap-budget__row">
                   <span>Dépensé (activités faites + dépenses)</span>
@@ -143,8 +165,8 @@ export default function TripRecap({ trip, onClose }) {
                     </div>
                     <div className={`recap-budget__verdict${budgetDelta >= 0 ? ' recap-budget__verdict--ok' : ' recap-budget__verdict--over'}`}>
                       {budgetDelta >= 0
-                        ? `🎯 ${formatPrice(budgetDelta)} sous le budget — bravo !`
-                        : `🚨 ${formatPrice(-budgetDelta)} au-dessus du budget`}
+                        ? `${formatPrice(budgetDelta)} sous le budget, bravo !`
+                        : `${formatPrice(-budgetDelta)} au-dessus du budget`}
                     </div>
                   </>
                 )}
@@ -155,7 +177,7 @@ export default function TripRecap({ trip, onClose }) {
           {/* Top catégories */}
           {topCats.length > 0 && (
             <div className="recap-section">
-              <div className="recap-section__title">🏆 Vos activités préférées</div>
+              <div className="recap-section__title">Tes activités préférées</div>
               <div className="recap-cats">
                 {topCats.map((c, i) => (
                   <div key={c.label} className="recap-cat">
@@ -179,7 +201,7 @@ export default function TripRecap({ trip, onClose }) {
           )}
 
           <button className="btn btn--primary btn--full" style={{ marginTop: 14 }} onClick={handleShare}>
-            {copied ? '✅ Copié !' : '📤 Partager le bilan'}
+            {copied ? 'Copié' : <><Icone de={Share} taille={18} /> Partager le bilan</>}
           </button>
         </div>
       </div>

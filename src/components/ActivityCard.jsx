@@ -1,6 +1,8 @@
 import { memo, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { getCategoryMeta, CATEGORY_COLORS, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
+import Icone from './Icone';
+import { Check, X, Clock, Ellipsis, Pencil, ArrowUp, ArrowDown, Sunrise, Copy, Share, Trash2, GripVertical } from 'lucide-react';
+import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 import ImagePiece from './ImagePiece';
@@ -180,22 +182,15 @@ function ActivityCard({
                 aria-label={checkLabel}
                 aria-pressed={activity.status === 'done'}
               >
-                {activity.status === 'done' ? '✓' : activity.status === 'nogo' ? '✕' : ''}
+                {activity.status === 'done' ? <Icone de={Check} taille={18} /> : activity.status === 'nogo' ? <Icone de={X} taille={18} /> : null}
               </button>
             )}
             <div className="activity-card__emoji">{meta.emoji}</div>
             <div className="activity-card__main">
               <div className="activity-card__title">
-                {/* La carte est colorée par catégorie, les listes ne l'étaient
-                    pas : l'œil ne pouvait pas trier. Un point de 8 px rebranche
-                    les deux, sans la lourdeur des barres colorées. */}
-                {!activity.isMeal && (
-                  <span
-                    className="activity-card__dot"
-                    style={{ background: CATEGORY_COLORS[activity.category] || 'var(--accent)' }}
-                    aria-hidden="true"
-                  />
-                )}
+                {/* Plus de point de couleur devant le titre : la catégorie se
+                    disait trois fois (émoji, point, titre de section). L'émoji
+                    de gauche suffit à trier d'un coup d'œil (octobre 2026). */}
                 {/* Un titre est un nom, jamais une adresse. « Café bel étage,
                     Kärntner Straße 38, 1010 Vienna Austria » tenait sur trois
                     lignes ici, avec la même adresse répétée juste dessous. Le
@@ -236,7 +231,7 @@ function ActivityCard({
                   e.preventDefault();
                   onTouchDragStart(activity.id, e.touches[0], e.currentTarget.closest('.activity-card'));
                 }}
-              >⠿</div>
+              ><Icone de={GripVertical} taille={18} /></div>
             )}
             {!compareMode && action}
             {!compareMode && (
@@ -246,7 +241,7 @@ function ActivityCard({
                 title="Options"
                 aria-label="Options de l'activité"
               >
-                ⋯
+                <Icone de={Ellipsis} taille={20} />
               </button>
             )}
           </div>
@@ -278,7 +273,7 @@ function ActivityCard({
                     <button key={s}
                       className={`status-btn status-btn--${s}${activity.status === s ? ' active' : ''}`}
                       onClick={() => { onStatusChange(s); vibrate([10]); }}>
-                      {cfg.emoji} {cfg.label}
+                      <Icone de={{ todo: Clock, done: Check, nogo: X }[s]} taille={16} /> {cfg.label}
                     </button>
                   ))}
                 </div>
@@ -311,7 +306,7 @@ function ActivityCard({
             {swipeDir === 'right' ? (
               <><span className="swipe-hint__icon">✅</span><span className="swipe-hint__label">Fait</span></>
             ) : (
-              <><span className="swipe-hint__label">Skip</span><span className="swipe-hint__icon">❌</span></>
+              <><span className="swipe-hint__label">Annulée</span><span className="swipe-hint__icon">❌</span></>
             )}
           </div>
         )}
@@ -333,21 +328,21 @@ function ActivityCard({
             <div className="act-sheet__title">{activity.title}</div>
             <div className="act-sheet__actions">
               <button className="act-sheet__item" onClick={() => { onEdit(); setMenuOpen(false); }}>
-                ✏️ Modifier
+                <Icone de={Pencil} /> Modifier
               </button>
               {!isFirst && onReorderUp && (
                 <button className="act-sheet__item" onClick={() => { onReorderUp(); setMenuOpen(false); }}>
-                  ▲ Remonter
+                  <Icone de={ArrowUp} /> Plus haut dans la liste
                 </button>
               )}
               {!isLast && onReorderDown && (
                 <button className="act-sheet__item" onClick={() => { onReorderDown(); setMenuOpen(false); }}>
-                  ▼ Descendre
+                  <Icone de={ArrowDown} /> Plus bas dans la liste
                 </button>
               )}
               {context === 'day' && onMoveToNextDay && (
                 <button className="act-sheet__item" onClick={() => { onMoveToNextDay(); setMenuOpen(false); }}>
-                  🌅 On verra plus tard
+                  <Icone de={Sunrise} /> On verra plus tard
                 </button>
               )}
               {onDuplicate && otherDays.length > 0 && (
@@ -358,7 +353,7 @@ function ActivityCard({
                     const idx = days.findIndex(x => x.id === d.id);
                     return (
                       <button key={d.id} className="act-sheet__item" onClick={() => { onDuplicate(d.id); setMenuOpen(false); }}>
-                        📋 {getDayLabel(idx, days.length)}
+                        <Icone de={Copy} /> {getDayLabel(idx, days.length)}
                       </button>
                     );
                   })}
@@ -366,10 +361,10 @@ function ActivityCard({
               )}
               <div className="act-sheet__sep" />
               <button className="act-sheet__item" onClick={handleShareActivity}>
-                ↗️ Partager
+                <Icone de={Share} /> Partager
               </button>
               <button className="act-sheet__item act-sheet__item--danger" onClick={() => { setDeleteConfirm(true); setMenuOpen(false); }}>
-                🗑️ Supprimer
+                <Icone de={Trash2} /> Supprimer
               </button>
             </div>
             <button className="act-sheet__cancel" onClick={() => setMenuOpen(false)}>

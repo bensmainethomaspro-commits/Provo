@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, ChevronDown, Camera } from 'lucide-react';
+import Icone from './Icone';
 import ImagePiece from './ImagePiece';
 import { enPiece } from '../utils/pieces';
-import { TRIP_EMOJIS } from '../utils/helpers';
+import { TRIP_EMOJIS, COULEURS_VOYAGE } from '../utils/helpers';
 
 // Local date (not UTC) — toISOString would give yesterday between midnight and ~2am in France.
 const today = () => {
@@ -29,15 +32,31 @@ function compressCoverPhoto(file) {
   });
 }
 
-const TRIP_COLORS = ['#35A7DD','#3b82f6','#8b5cf6','#22c55e','#ef4444','#06b6d4','#14b8a6','#ec4899'];
 
+// « Lisbonne, Portugal » → « Lisbonne » : le nom par défaut d'un voyage.
+const nomDepuis = (destination) => (destination || '').split(',')[0].trim();
+
+/**
+ * Créer (ou modifier) un voyage.
+ *
+ * Jusqu'au 1er octobre 2026 : une fenêtre centrée de 34 contrôles, où le nom
+ * était obligatoire et la destination facultative, alors que c'est elle qui
+ * situe chaque lieu ajouté ensuite. Trois choix décoratifs (couleur, émoji,
+ * photo) passaient avant même que le voyage existe, la couleur choisie était
+ * ignorée à la création, et le champ « Retour » sortait de 34 px de la
+ * fenêtre.
+ *
+ * Maintenant : une feuille plein écran comme les autres, la destination
+ * d'abord, le nom qui s'en déduit, les dates, et le reste replié.
+ */
 export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
-    ? { name: editTrip.name, destination: editTrip.destination, emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#35A7DD' }
+    ? { name: editTrip.name, destination: editTrip.destination || '', emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#35A7DD' }
     : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
   );
   const [error, setError] = useState('');
+  const [plusOuvert, setPlusOuvert] = useState(false);
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -52,107 +71,136 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name.trim()) { setError('Nomme ton voyage !'); return; }
-    if (!form.startDate || !form.endDate) { setError('Dates requises'); return; }
-    if (form.endDate < form.startDate) { setError('La date de fin doit être après le début'); return; }
-    onCreate(form);
+    const destination = form.destination.trim();
+    // Un ancien voyage peut ne pas avoir de destination : on ne l'exige qu'à la création.
+    if (!isEdit && !destination) { setError('Où pars-tu ? La destination sert à situer tes lieux.'); return; }
+    const name = form.name.trim() || nomDepuis(destination);
+    if (!name) { setError('Donne un nom à ton voyage.'); return; }
+    if (!form.startDate || !form.endDate) { setError('Choisis les dates du voyage.'); return; }
+    if (form.endDate < form.startDate) { setError('Le retour doit venir après le départ.'); return; }
+    onCreate({ ...form, name, destination });
   };
 
-  return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal__header">
-          <h2 className="modal__title">{isEdit ? '✏️ Modifier le voyage' : '✈️ Nouveau voyage'}</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+  const resumeOptions = [
+    form.initialBudget ? `budget ${form.initialBudget} €` : null,
+    (form.travelers || 1) > 1 ? `${form.travelers} voyageurs` : null,
+  ].filter(Boolean).join(' · ') || 'budget, voyageurs, couleur, émoji, photo';
+
+  // Un calque plein écran se pose sur le document, pas dans le composant qui
+  // l'ouvre (règle E8).
+  return createPortal(
+    <div className="sheet-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="sheet nouveau-voyage" role="dialog" aria-modal="true" aria-labelledby="nv-titre">
+        <div className="sheet__header">
+          <h2 className="sheet__title" id="nv-titre">{isEdit ? 'Modifier le voyage' : 'Nouveau voyage'}</h2>
+          <button type="button" aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body">
+        <form onSubmit={handleSubmit} className="nouveau-voyage__form" noValidate>
+          <div className="sheet__body">
             <div className="form-group">
-              <label className="form-label">Nom du voyage *</label>
-              <input className="form-input" placeholder="Ex: Road trip Islande" value={form.name}
-                onChange={e => set('name', e.target.value)} autoFocus />
+              <label className="form-label" htmlFor="nv-destination">Destination</label>
+              <input id="nv-destination" className="form-input" placeholder="Ex : Lisbonne, Portugal"
+                value={form.destination} autoFocus={!isEdit} autoComplete="off"
+                onChange={e => { set('destination', e.target.value); setError(''); }} />
             </div>
             <div className="form-group">
-              <label className="form-label">Destination</label>
-              <input className="form-input" placeholder="Ex: Reykjavik, Islande" value={form.destination}
-                onChange={e => set('destination', e.target.value)} />
+              <label className="form-label" htmlFor="nv-nom">Nom du voyage <span className="form-label__facultatif">facultatif</span></label>
+              <input id="nv-nom" className="form-input" autoComplete="off"
+                placeholder={nomDepuis(form.destination) || 'Ex : Road trip en Islande'}
+                value={form.name} onChange={e => set('name', e.target.value)} />
             </div>
-            <div className="form-group">
-              <label className="form-label">Photo de couverture <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)' }}>— optionnel</span></label>
-              {form.coverPhoto ? (
-                <div className="cover-photo-preview">
-                  <ImagePiece valeur={form.coverPhoto} alt="" className="cover-photo-preview__img" />
-                  <button type="button" className="cover-photo-preview__remove" onClick={() => set('coverPhoto', null)}>✕</button>
-                </div>
-              ) : (
-                <label className="btn btn--secondary btn--sm" style={{ cursor: 'pointer', display: 'inline-flex', gap: 6 }}>
-                  📷 Choisir une photo
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCoverPhoto} />
-                </label>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <div className="nouveau-voyage__dates">
               <div className="form-group">
-                <label className="form-label">Budget initial (€) <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--text-light)', fontSize: 11 }}>optionnel</span></label>
-                <input className="form-input" type="number" min="0" step="10" placeholder="Ex: 2000"
-                  value={form.initialBudget} onChange={e => set('initialBudget', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Voyageurs</label>
-                <div className="travelers-row">
-                  <button type="button" className="travelers-btn" onClick={() => set('travelers', Math.max(1, (form.travelers||1) - 1))}>−</button>
-                  <span className="travelers-count">{form.travelers || 1}</span>
-                  <button type="button" className="travelers-btn" onClick={() => set('travelers', (form.travelers||1) + 1)}>+</button>
-                </div>
-              </div>
-            </div>
-            {(form.travelers || 1) > 1 && (
-              <p className="travelers-hint">Transport & hébergement seront divisés par {form.travelers} dans le budget.</p>
-            )}
-            <div className="form-group">
-              <label className="form-label">Couleur du voyage</label>
-              <div className="color-swatches">
-                {TRIP_COLORS.map(c => (
-                  <button key={c} type="button"
-                    className={`color-swatch${form.color === c ? ' color-swatch--active' : ''}`}
-                    style={{ background: c }}
-                    onClick={() => set('color', c)}
-                  />
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div className="form-group">
-                <label className="form-label">Départ</label>
-                <input className="form-input" type="date" value={form.startDate}
+                <label className="form-label" htmlFor="nv-depart">Départ</label>
+                <input id="nv-depart" className="form-input" type="date" value={form.startDate}
                   onChange={e => { set('startDate', e.target.value); if (e.target.value > form.endDate) set('endDate', e.target.value); }} />
               </div>
               <div className="form-group">
-                <label className="form-label">Retour</label>
-                <input className="form-input" type="date" value={form.endDate} min={form.startDate}
+                <label className="form-label" htmlFor="nv-retour">Retour</label>
+                <input id="nv-retour" className="form-input" type="date" value={form.endDate} min={form.startDate}
                   onChange={e => set('endDate', e.target.value)} />
               </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Emoji du voyage</label>
-              <div className="emoji-grid emoji-grid--scroll">
-                {TRIP_EMOJIS.map(em => (
-                  <button key={em} type="button"
-                    className={`emoji-option${form.emoji === em ? ' selected' : ''}`}
-                    onClick={() => set('emoji', em)}>
-                    {em}
-                  </button>
-                ))}
+
+            <button type="button" className="details-pli nouveau-voyage__plus" aria-expanded={plusOuvert}
+              onClick={() => setPlusOuvert(o => !o)}>
+              <span><Icone de={ChevronDown} taille={16} className={`details-pli__chevron${plusOuvert ? ' details-pli__chevron--ouvert' : ''}`} /> Plus d'options</span>
+              <small>{resumeOptions}</small>
+            </button>
+
+            {plusOuvert && (
+              <div className="nouveau-voyage__options">
+                <div className="nouveau-voyage__ligne">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="nv-budget">Budget (€)</label>
+                    <input id="nv-budget" className="form-input" type="number" min="0" step="10" inputMode="decimal"
+                      placeholder="Ex : 2000" value={form.initialBudget} onChange={e => set('initialBudget', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <span className="form-label" id="nv-voyageurs">Voyageurs</span>
+                    <div className="travelers-row" role="group" aria-labelledby="nv-voyageurs">
+                      <button type="button" className="travelers-btn" aria-label="Un voyageur de moins"
+                        onClick={() => set('travelers', Math.max(1, (form.travelers || 1) - 1))}>−</button>
+                      <span className="travelers-count">{form.travelers || 1}</span>
+                      <button type="button" className="travelers-btn" aria-label="Un voyageur de plus"
+                        onClick={() => set('travelers', (form.travelers || 1) + 1)}>+</button>
+                    </div>
+                  </div>
+                </div>
+                {(form.travelers || 1) > 1 && (
+                  <p className="travelers-hint">Transport et hébergement seront divisés par {form.travelers} dans le budget.</p>
+                )}
+                <div className="form-group">
+                  <span className="form-label" id="nv-couleur">Couleur</span>
+                  <div className="color-swatches" role="radiogroup" aria-labelledby="nv-couleur">
+                    {COULEURS_VOYAGE.map(({ value: c, label }) => (
+                      <button key={c} type="button" role="radio" aria-checked={form.color === c}
+                        aria-label={label}
+                        className={`color-swatch${form.color === c ? ' color-swatch--active' : ''}`}
+                        onClick={() => set('color', c)}>
+                        <span className="color-swatch__pastille" style={{ background: c }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <span className="form-label" id="nv-emoji">Émoji</span>
+                  <div className="emoji-grid" role="radiogroup" aria-labelledby="nv-emoji">
+                    {TRIP_EMOJIS.map(em => (
+                      <button key={em} type="button" role="radio" aria-checked={form.emoji === em}
+                        aria-label={`Émoji ${em}`}
+                        className={`emoji-option${form.emoji === em ? ' selected' : ''}`}
+                        onClick={() => set('emoji', em)}>
+                        {em}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <span className="form-label">Photo de couverture</span>
+                  {form.coverPhoto ? (
+                    <div className="cover-photo-preview">
+                      <ImagePiece valeur={form.coverPhoto} alt="" className="cover-photo-preview__img" />
+                      <button type="button" className="cover-photo-preview__remove" aria-label="Retirer la photo"
+                        onClick={() => set('coverPhoto', null)}><Icone de={X} taille={16} /></button>
+                    </div>
+                  ) : (
+                    <label className="btn btn--secondary nouveau-voyage__photo">
+                      <Icone de={Camera} taille={18} /> Choisir une photo
+                      <input type="file" accept="image/*" hidden onChange={handleCoverPhoto} />
+                    </label>
+                  )}
+                </div>
               </div>
-            </div>
-            {error && <p style={{ color: 'var(--red)', fontSize: '13px', marginTop: '4px' }}>{error}</p>}
+            )}
+            {error && <p className="form-erreur" role="alert">{error}</p>}
           </div>
-          <div className="modal__footer">
-            <button type="button" className="btn btn--secondary btn--full" onClick={onClose}>Annuler</button>
-            <button type="submit" className="btn btn--primary btn--full">{isEdit ? '✅ Enregistrer' : '🚀 Créer'}</button>
+          <div className="sheet__footer">
+            <button type="submit" className="btn btn--primary btn--full">{isEdit ? 'Enregistrer' : 'Créer le voyage'}</button>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -32,7 +32,11 @@
   --t-xl:  22px;   /* titre d'écran */
   --t-2xl: 28px;   /* chiffre principal */
   --t-3xl: 40px;   /* chiffre héros */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* La police du téléphone : SF Pro sur iPhone, Roboto sur Android. Inter
+     venait de Google Fonts, que le service worker ne garde pas : hors ligne,
+     au premier lancement sans réseau et dans l'APK, l'app changeait de
+     police. Aucun téléchargement désormais, et le rendu natif. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
 
   /* ─── Rayons ───────────────────────────────────────────────────────────── */
   --radius-xs:    4px;   /* lignes internes, barres */
@@ -55,7 +59,6 @@
   --orange:       var(--accent-deep);
   --yellow:       #7FD1F0;
   --primary-shadow: rgba(53,167,221, 0.38);
-  --accent-grad:  linear-gradient(135deg, #5CBEEA 0%, var(--accent) 55%, #1B7DB5 100%);
 
   /* ─── Surfaces et texte (thème clair) ─────────────────────────────────── */
   --white:          #FFFFFF;
@@ -73,7 +76,15 @@
   --shadow-sm:  0 1px 3px rgba(20,55,80, 0.07), 0 0 0 1px rgba(20,55,80, 0.03);
   --shadow-md:  0 6px 20px rgba(20,55,80, 0.12), 0 2px 6px rgba(20,55,80, 0.06);
   --shadow-lg:  0 14px 44px rgba(20,55,80, 0.18), 0 3px 10px rgba(20,55,80, 0.08);
-  --btn-shadow: 0 1px 2px rgba(0,0,0,0.12);
+
+  /* ─── Mouvement ───────────────────────────────────────────────────────────
+     Trois durées et deux courbes (il y en avait 29 et 14). La réduction de
+     mouvement demandée par le système les ramène à zéro (index.css). */
+  --d-1: 120ms;   /* retour d'un toucher : enfoncement, survol */
+  --d-2: 200ms;   /* un état qui change : coche, pli, onglet */
+  --d-3: 320ms;   /* un calque qui entre ou sort : feuille, menu */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-feuille: cubic-bezier(0.32, 0.72, 0, 1);   /* la courbe des feuilles iOS */
 
   /* ─── Couleurs sémantiques ────────────────────────────────────────────────
      Rouge = erreur, ambre = alerte, vert = montants. Les teintes vives ne

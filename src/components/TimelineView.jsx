@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useReorderDrag } from '../hooks/useReorderDrag';
+import Icone from './Icone';
+import { GripVertical, Dices } from 'lucide-react';
 import { tempsRestant } from '../utils/piocheGuidee';
 import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts, nomDeLieu } from '../utils/helpers';
 
@@ -201,7 +203,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
                   onPointerDown={(e) => reorder.demarrer(a.id, e)}
                   data-jour-source={day.id}
                   aria-label={`Déplacer ${nomDeLieu(a.title)}`}
-                >⠿</button>
+                ><Icone de={GripVertical} taille={18} /></button>
               )}
             <TlActivity
               activity={a}
@@ -225,7 +227,7 @@ function TlDayCard({ day, dayIndex, totalDays, days, onMoveToDay, onMoveToReserv
           className="tl-day__piocher"
           onClick={(e) => { e.stopPropagation(); onPiocher(); }}
         >
-          🎯 {formatDuration(libre)} de libre · piocher une idée
+          <Icone de={Dices} taille={18} /> {formatDuration(libre)} de libre · piocher une idée
         </button>
       )}
     </div>

@@ -253,8 +253,25 @@ export const CATEGORIES = [
 export const STATUS_CONFIG = {
   todo: { emoji: '⏳', label: 'À faire', cls: 'status--todo' },
   done: { emoji: '✅', label: 'Fait',    cls: 'status--done' },
-  nogo: { emoji: '❌', label: 'Nogo',    cls: 'status--nogo' },
+  nogo: { emoji: '❌', label: 'Annulée', cls: 'status--nogo' },
 };
+
+/**
+ * La palette des voyages : une seule liste, lue par la création et par les
+ * Paramètres (elle était recopiée dans les deux, règle E13). Pas de rouge : il
+ * est réservé aux erreurs (CLAUDE.md), et un voyage rouge faisait lire chaque
+ * bordure de jour comme une alerte. Sept teintes tiennent sur une ligne de
+ * cibles de 44 px.
+ */
+export const COULEURS_VOYAGE = [
+  { value: '#35A7DD', label: 'Bleu Provo' },
+  { value: '#3b82f6', label: 'Bleu' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#22c55e', label: 'Vert' },
+  { value: '#06b6d4', label: 'Cyan' },
+  { value: '#14b8a6', label: 'Sarcelle' },
+  { value: '#ec4899', label: 'Rose' },
+];
 
 export const TRIP_EMOJIS = ['✈️','🌍','🗺️','🏕️','🚢','🗽','🏔️','🏖️','🌅','🎡','🏯','🧳','🚂','🚗','⛵'];
 
@@ -310,6 +327,38 @@ export function totalBudget(activities) {
 export function formatPrice(amount) {
   if (!amount && amount !== 0) return null;
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(amount);
+}
+
+/**
+ * Un repas posé d'office par l'app (« Repas midi », « Repas soir », 20 €) et
+ * que personne n'a encore touché : ni renommé, ni situé, ni repris au prix, ni
+ * coché.
+ *
+ * Il réserve un créneau dans la journée, pour que le temps libre se calcule
+ * juste, et son prix reste dans la prévision du budget (voir ci-dessous).
+ * Mais ce n'est pas une activité : il ne se compte ni dans « N activités », ni
+ * dans l'avancement, ni dans les « activités préférées » du bilan. Mesuré le
+ * 1er octobre 2026 : un voyage de cinq jours tout juste créé annonçait déjà
+ * dix activités, et un bilan sacrait « Resto ×12 », les douze repas posés
+ * d'office.
+ */
+/**
+ * La destination, seulement si elle apprend quelque chose de plus que le nom
+ * du voyage. « Vienne » écrit sous « Vienne » occupait une ligne pour rien,
+ * sur l'accueil comme dans l'en-tête du voyage.
+ */
+export function destinationUtile(trip) {
+  const d = (trip?.destination || '').trim();
+  if (!d) return '';
+  const plat = (x) => (x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return plat(d.split(',')[0]) === plat(trip.name) ? '' : d;
+}
+
+export function repasEnAttente(a) {
+  if (!a?.isMeal || a.status === 'done') return false;
+  const prix = a.price === undefined || a.price === null ? '' : String(a.price);
+  return /^Repas (midi|soir)$/.test((a.title || '').trim())
+    && !a.address && a.lat == null && (prix === '' || prix === '20');
 }
 
 /**

@@ -4,6 +4,8 @@ import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
 import { lienPartage, lireGeo, premierLien } from '../utils/lienColle';
+import Icone from './Icone';
+import { ChevronDown, X, Search } from 'lucide-react';
 import ImagePiece from './ImagePiece';
 import { enPiece } from '../utils/pieces';
 import { trouverDoublon } from '../utils/doublon';
@@ -225,7 +227,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg(`${choisis.length} lieu${choisis.length > 1 ? 'x' : ''} mis en réserve ✓`);
   };
 
-  // Chercher pendant qu'on tape. Le bouton ⬇️ reste — pour les liens, pour
+  // Chercher pendant qu'on tape. Le bouton de recherche reste — pour les liens, pour
   // valider une adresse complète — mais il n'est plus le seul chemin : sur un
   // téléphone, taper trois lettres et toucher le bon nom est le geste le plus
   // court qui existe pour remplir une fiche.
@@ -632,8 +634,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       <div className="sheet">
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <h2 className="sheet__title">{isEdit ? '✏️ Modifier' : '+ Nouvelle activité'}</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
+          <h2 className="sheet__title">{isEdit ? 'Modifier l’activité' : 'Nouvelle activité'}</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">
@@ -682,7 +684,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               elle attendait qu'on appuie sur un bouton, sous une rangée de
               raccourcis, au milieu d'un formulaire de onze champs. */}
           <div className="form-group import-section">
-            <label className="form-label">📍 Cherche un lieu — ou colle un lien, ou une confirmation</label>
+            <label className="form-label">Cherche un lieu, ou colle un lien ou une confirmation</label>
             <div className="import-row">
               <input
                 className="form-input"
@@ -699,7 +701,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 disabled={!importUrl.trim() || importing}
                 aria-label="Chercher ce lieu"
               >
-                {importing ? '…' : '⬇️'}
+                {importing ? '…' : <Icone de={Search} taille={18} />}
               </button>
             </div>
             {importMsg && <p className="import-msg">{importMsg}</p>}
@@ -875,7 +877,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             onClick={() => setDetailsOuverts(o => !o)}
             aria-expanded={detailsOuverts}
           >
-            <span>{detailsOuverts ? '▴' : '▾'} Détails</span>
+            <span><Icone de={ChevronDown} taille={16} className={`details-pli__chevron${detailsOuverts ? ' details-pli__chevron--ouvert' : ''}`} /> Détails</span>
             <small>titre, catégorie, durée, horaires, prix, notes</small>
           </button>
           {detailsOuverts && (<>

@@ -6,6 +6,8 @@
  * journée déborde, c'est à l'autre bout de la ville. Rien n'est réorganisé,
  * rien n'est bloqué ; on garde, ou on annule.
  */
+import Icone from './Icone';
+import { X } from 'lucide-react';
 export default function PropositionSheet({ titre, jour, signaux, onGarder, onAnnuler }) {
   if (!signaux?.length) return null;
 
@@ -14,8 +16,8 @@ export default function PropositionSheet({ titre, jour, signaux, onGarder, onAnn
       <div className="sheet sheet--proposition" onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
-          <span className="sheet__title">💡 À savoir</span>
-          <button className="sheet__close" onClick={onGarder} aria-label="Fermer">✕</button>
+          <span className="sheet__title">À savoir</span>
+          <button className="sheet__close" onClick={onGarder} aria-label="Fermer"><Icone de={X} /></button>
         </div>
 
         <div className="sheet__body">
