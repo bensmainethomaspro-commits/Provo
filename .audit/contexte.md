@@ -340,6 +340,58 @@ deux requêtes Nominatim + Photon, puis Overpass), là où il en faisait 2 ou 3.
 Et **seuls les succès sont mis en cache** (`if (found) cache.set(...)`) : un
 échec est refait en entier au passage suivant.
 
+## Les pièces jointes vivent à côté du voyage — relevé le 2026-10-05
+
+Depuis la PR #99 (fusionnée le 2026-10-01), toute donnée lourde du voyage
+(photo de couverture, capture, billet en PDF) sort du JSON et le voyage n'en
+garde qu'une référence `pj:<24 hexa>` — 12 octets de SHA-256 du CONTENU, donc
+deux téléphones qui sortent la même photo écrivent la même référence et la
+fusion n'y voit aucun conflit. Trois endroits à connaître avant d'y toucher :
+
+- `src/utils/pieces.js` : l'extraction, le rangement IndexedDB (base `provo`,
+  magasin `pieces`, `{ data, envoyee: [idVoyage…] }`), et `pourUneCopie` pour
+  « Envoyer une copie ». Pur, testé par `scripts/verif-pieces.mjs` (18 cas).
+- `src/hooks/usePiecesSync.js` : trois temps dans un seul fichier — sortir les
+  données (600 ms après un changement), déposer au nuage, rapatrier ce qui
+  manque (2 500 ms). Le dépôt passe par l'API REST de Storage à la main, pas
+  par le client Supabase.
+- `supabase/migrations/20260930_pieces_jointes.sql` : dossier `pieces` privé,
+  `select` et `insert` pour `authenticated` filtrés par `est_du_voyage()`.
+  **Ni `update` ni `delete`, volontairement** : une pièce est identifiée par
+  son contenu, elle ne change jamais, et ouvrir l'effacement donnerait le
+  droit de supprimer les billets des autres membres. Conséquence à tenir : les
+  pièces d'un voyage supprimé restent dans Storage et deviennent illisibles
+  pour tout le monde (`est_du_voyage` rend alors faux).
+
+Trois propriétés que l'ordre du code garantit, et qu'il ne faut pas casser :
+
+1. **Le voyage n'est allégé qu'après un rangement RELU** (`stockerPieces`
+   réécrit puis relit chaque pièce, et rend `false` sinon). En revanche il
+   est allégé AVANT que le nuage ait sa copie : voir A-061.
+2. **`marquerEnvoyee` n'est posé qu'après un dépôt réussi**, et le ménage des
+   orphelines (`oublierPiecesOrphelines`) refuse d'effacer une pièce dont
+   `envoyee` est vide. C'est ce qui empêche la perte sèche ; ne pas appeler ce
+   ménage avec `memeNonEnvoyees: true` en dehors d'un cas démontré.
+3. **`ImagePiece` rend `null` quand la pièce n'est pas là** — c'est voulu (pas
+   d'icône cassée), donc tout écran qui l'utilise doit dire lui-même l'absence.
+   Fait pour les PDF d'activité, les papiers du voyage (A-063) ; pas encore
+   pour la visionneuse de captures d'`ActivityCard`.
+
+Enfin : **au 2026-10-05 cette chaîne n'avait jamais tourné en production**
+(zéro objet dans `pieces`, aucune référence `pj:` dans les cinq voyages).
+Tout constat à son sujet est lu sur le code, pas observé à l'usage.
+
+## Le budget de temps des fonctions Edge repose sur AsyncLocalStorage
+
+`supabase/functions/_shared/budget.ts` (PR #99) borne TOUT un appel à 20 s,
+sous les 25 s que l'app s'accorde. Il suit l'appel par `AsyncLocalStorage`
+importé de `node:async_hooks` en haut de module : si l'hébergeur ne porte pas
+le contexte, le module retombe silencieusement sur un délai par requête, ce
+que la sonde de santé dit (`budget: true/false`) et que le canari quotidien
+relève depuis la PR #100 (orange si inactif). **Ce fichier ne doit jamais
+entrer dans le bundle client** — contrairement à `lecture-lien.ts`, il utilise
+des API Deno/Node, et seul `verif-lecture-lien.mjs` garde ce dernier.
+
 ## Coexistence avec le système .claude/ existant
 
 Ce dépôt possède déjà une mémoire d'amélioration continue. Elle prime sur toi.
