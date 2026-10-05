@@ -17,7 +17,7 @@ export default function ConflitsSheet({ groupes, onRemettre, onLaisser, onClose 
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
-      <div className="sheet sheet--check" role="dialog" aria-label="Modifié ailleurs en même temps"
+      <div className="sheet sheet--check" role="dialog" aria-modal="true" aria-label="Modifié ailleurs en même temps"
         onClick={e => e.stopPropagation()}>
         <div className="sheet__handle" />
         <div className="sheet__header">
