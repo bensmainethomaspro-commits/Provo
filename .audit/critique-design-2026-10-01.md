@@ -21,7 +21,7 @@ raison :
   avec toi.
 
 Trouvé en chemin et corrigé : un champ de saisie posé dans une feuille ne se
-voyait plus du tout (A-067).
+voyait plus du tout (A-072).
 
 Vérifié : `verif-ui` à zéro hors carte sur 30 écrans par thème (26 avant),
 avec la nouvelle mesure au pixel ; 92 parcours et 21 suites verts ;
@@ -29,7 +29,7 @@ avec la nouvelle mesure au pixel ; 92 parcours et 21 suites verts ;
 rendu de SF Pro sur un vrai iPhone (captures faites sous Linux).
 
 Le détail des décisions est dans `.claude/project-notes.md` ; les constats
-sont dans `.audit/journal.md` (A-061 à A-069).
+sont dans `.audit/journal.md` (A-066 à A-074 ; numérotés après l'audit du 2026-10-05, fusionné avant).
 
 ## Méthode et limites
 

@@ -117,7 +117,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 ## Décisions récentes
 
 - **Critique design du 1er octobre 2026, appliquée** (rapport :
-  `.audit/critique-design-2026-10-01.md`, journal A-061 à A-069). Demandé :
+  `.audit/critique-design-2026-10-01.md`, journal A-066 à A-074). Demandé :
   « fais tout ce que tu penses être le mieux ». Mesuré avant, vérifié après :
   `verif-ui` à zéro hors carte sur 30 écrans par thème, 92 parcours verts,
   21 suites vertes.
@@ -167,7 +167,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   · **Mots** : « Annulée » (plus « Nogo »/« Skip »), « Plus haut / Plus bas
     dans la liste », tutoiement partout, plus de « clique ».
   · **Trouvé en chemin** : un champ posé dans une feuille ne se voyait pas
-    (`border: none` + le fond de la feuille, A-067). Le formulaire de dépense
+    (`border: none` + le fond de la feuille, A-072). Le formulaire de dépense
     garde ses champs gris, voulus comme Tricount (`.ef .form-input`).
   · Limite : les captures sont faites sans police Apple (Linux) ; le rendu
     SF Pro n'a pas été vu sur un vrai iPhone.

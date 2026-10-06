@@ -125,17 +125,69 @@ Exemple de ligne, à supprimer :
 | A-060 | 2026-09-30 | Fiabilité | La réception temps réel fusionnait l'écho de sa propre écriture comme une version d'ailleurs quand il arrivait avant la réponse de l'envoi : ce qui avait été tapé entre-temps était écrasé | Majeur | CORRIGÉ |
 | A-012 | 2026-09-30 | Fiabilité | Clos côté serveur : budget de 20 s pour tout l'appel (`_shared/budget.ts`), `extract-place` et `enrich-place`. Réseau muet : 27 s avant, moins de 21,5 s après (`verif-budget`). À confirmer en production : la sonde de santé doit répondre `budget: true` | Majeur | CORRIGÉ |
 | A-040 | 2026-09-30 | Fiabilité | Clos. Le moteur des tickets se précharge à 10 jours du départ ; hors ligne sans moteur, le message le dit | Majeur | CORRIGÉ |
-| A-061 | 2026-10-01 | Produit et UX | Texte blanc sur dégradé bleu clair, mesuré au pixel : libellé de l'onglet actif 2,66:1, « Nouveau voyage » 2,66:1, ＋ de l'en-tête 2,63:1, carte « En voyage » 3:1, « JOUR 1 » 2,47:1 (accent du voyage en couleur de texte). Invisible à `/verif-ui`, qui rangeait 989 textes sur fond non uni en « à l'œil, non compté » | Majeur | CORRIGÉ |
-| A-062 | 2026-10-01 | Dette technique | Quatre « design systems » empilés dans `index.css` : `--text-muted` déclaré 8 fois, 91 ombres distinctes, 29 durées, 68 `!important`, commentaires décrivant des teintes chaudes sur des valeurs bleu froid. `styles/tokens.css` (passage vérifié sans écart de style calculé) et `verif-jetons` | Majeur | CORRIGÉ |
-| A-063 | 2026-10-01 | Fiabilité | La couleur choisie à la création d'un voyage n'était jamais enregistrée (`createTrip` ne recopiait pas `color`) : le voyage prenait celle du pays, indigo pour le Portugal | Mineur | CORRIGÉ |
-| A-064 | 2026-10-01 | Produit et UX | Création de voyage : champ « Retour » sorti de 34 px de sa fenêtre, 34 contrôles dont 3 décoratifs, destination facultative. Écran absent de `/verif-ui` | Mineur | CORRIGÉ |
-| A-065 | 2026-10-01 | Produit et UX | Les repas posés d'office comptaient comme des activités : un voyage vide annonçait 10 activités, un bilan sacrait « Resto ×12 » ; l'estimé de 200 € s'affichait sans dire qu'il ne venait que des repas | Majeur | CORRIGÉ |
-| A-066 | 2026-10-01 | Produit et UX | Inter chargée depuis Google Fonts, que le service worker ne garde pas : l'app changeait de police hors ligne, au premier lancement sans réseau et dans l'APK | Mineur | CORRIGÉ |
-| A-067 | 2026-10-01 | Produit et UX | Un champ de saisie posé dans une feuille ne se voyait pas : une couche intermédiaire posait `border: none` et le fond même des feuilles. Trouvé pendant la refonte, à la capture | Majeur | CORRIGÉ |
-| A-068 | 2026-10-01 | Produit et UX | Quatre écrans d'introduction avant l'app, dont deux promesses fausses (« pas besoin de compte » alors que le partage en demande un ; un glissement absent de la frise) | Mineur | CORRIGÉ |
-| A-069 | 2026-10-01 | Produit et UX | Vus à la lecture, pas sur un écran mesuré : pastille de compte du menu ⋯ en blanc sur ambre (environ 2,2:1), bouton « Modifier » des bulles de la carte en blanc sur l'accent (2,72:1) | Mineur | CORRIGÉ |
+| A-061 | 2026-10-05 | Fiabilité | Le nuage perd sa copie AVANT que la pièce y soit. L'extraction remplace les données lourdes par `pj:<empreinte>` (`usePiecesSync.js:57-77`), ce qui marque le voyage à envoyer : `planifier` l'écrit à 700 ms (`useTrips.js:252`, `update({ data: trip })` remplace tout le JSON) et le dépôt de la pièce ne commence qu'à 2 500 ms (`usePiecesSync.js:132`). Pendant ~1,8 s, et aussi longtemps que le dépôt échoue, le nuage référence une pièce dont il n'a aucune copie, alors qu'il avait le base64 juste avant. Cas réel : le voyage `ms0rso33cuc7x` (321 ko, base64 inline, dernière écriture 2026-07-26, relevé au MCP ce jour) le fera à la prochaine ouverture. Pas de perte immédiate — la pièce est dans IndexedDB d'un téléphone, et `marquerEnvoyee` n'est posé qu'après un dépôt réussi, donc le ménage ne l'efface pas — mais la seule copie partagée a disparu | Majeur | PROPOSÉ |
+| A-062 | 2026-10-05 | Fiabilité | Une pièce absente n'est jamais redemandée. `rapatrier` rend `null` et rien ne retente (`usePiecesSync.js:104-114`) : les seuls déclencheurs d'`echanger` sont un changement de `trips` (2 500 ms de latence) et l'événement `online` (`usePiecesSync.js:131-139`) ; aucun minuteur, et `echanger` est stable (dépendances toutes des refs). Le voyage reçu par le temps réel déclenche UN essai 2,5 s après — avant la fin du dépôt du billet de 3 Mo parti de l'autre téléphone. Ensuite, tant que personne ne modifie le voyage, le billet n'arrive jamais. C'est l'inverse du but affiché par le module : « un billet doit être là AVANT d'arriver dans l'aéroport sans réseau » (`usePiecesSync.js:44-45`) | Majeur | PROPOSÉ |
+| A-063 | 2026-10-05 | Fiabilité | Un papier en image pas encore rapatrié ouvrait l'aperçu plein écran sur du vide, sans un mot : `ImagePiece` rend `null` par construction (`ImagePiece.jsx:10`) et la branche image d'`ouvrir` ne contrôlait rien (`TripDocuments.jsx`), alors que la branche PDF du même écran dit déjà « pas encore sur ce téléphone : il arrive avec du réseau ». Même asymétrie dans `ActivityCard` : le PDF a `pdf-list__absent`, la visionneuse de captures n'a rien | Mineur | CORRIGÉ (papiers) / PROPOSÉ (captures) |
+| A-064 | 2026-10-05 | Produit et UX | `ConflitsSheet` (PR #99) portait `role="dialog"` sans `aria-modal`, contrairement aux deux autres boîtes du dépôt (`ConfirmDialog.jsx:6`, `TripSearch.jsx:80`) : un lecteur d'écran continue à lire la page derrière la feuille | Mineur | CORRIGÉ |
+| A-065 | 2026-10-05 | Fiabilité | `memoire`, le cache en mémoire des pièces (`pieces.js:168`), n'a aucune borne : `lirePiece` et `stockerPieces` y posent le base64 entier de chaque pièce lue, et la seule suppression est le ménage des orphelines (`pieces.js:235`). Parcourir les billets d'un voyage garde donc leur poids cumulé en mémoire pour toute la session — le dépôt tient déjà les dizaines de Mo du moteur OCR pour un motif à éteindre (`ocrTicket.js`, « sur un téléphone, le garder… »). Raisonné sur le code, non mesuré sur appareil | Mineur | PROPOSÉ |
+| A-037 | 2026-10-05 | Méthode | Lint : **40 erreurs, 4 avertissements** — identique au relevé du 2026-09-30 après correction, donc dette non aggravée malgré +2 100 lignes (PR #99). `npm run build` vert, les 20 suites `verif-*` passent, `/verif-ui` ne relève aucun nouveau point sur les 11 écrans × 2 thèmes. Rien à signaler | Sans objet | PASSÉ |
+| A-066 | 2026-10-01 | Produit et UX | Texte blanc sur dégradé bleu clair, mesuré au pixel : libellé de l'onglet actif 2,66:1, « Nouveau voyage » 2,66:1, ＋ de l'en-tête 2,63:1, carte « En voyage » 3:1, « JOUR 1 » 2,47:1 (accent du voyage en couleur de texte). Invisible à `/verif-ui`, qui rangeait 989 textes sur fond non uni en « à l'œil, non compté » | Majeur | CORRIGÉ |
+| A-067 | 2026-10-01 | Dette technique | Quatre « design systems » empilés dans `index.css` : `--text-muted` déclaré 8 fois, 91 ombres distinctes, 29 durées, 68 `!important`, commentaires décrivant des teintes chaudes sur des valeurs bleu froid. `styles/tokens.css` (passage vérifié sans écart de style calculé) et `verif-jetons` | Majeur | CORRIGÉ |
+| A-068 | 2026-10-01 | Fiabilité | La couleur choisie à la création d'un voyage n'était jamais enregistrée (`createTrip` ne recopiait pas `color`) : le voyage prenait celle du pays, indigo pour le Portugal | Mineur | CORRIGÉ |
+| A-069 | 2026-10-01 | Produit et UX | Création de voyage : champ « Retour » sorti de 34 px de sa fenêtre, 34 contrôles dont 3 décoratifs, destination facultative. Écran absent de `/verif-ui` | Mineur | CORRIGÉ |
+| A-070 | 2026-10-01 | Produit et UX | Les repas posés d'office comptaient comme des activités : un voyage vide annonçait 10 activités, un bilan sacrait « Resto ×12 » ; l'estimé de 200 € s'affichait sans dire qu'il ne venait que des repas | Majeur | CORRIGÉ |
+| A-071 | 2026-10-01 | Produit et UX | Inter chargée depuis Google Fonts, que le service worker ne garde pas : l'app changeait de police hors ligne, au premier lancement sans réseau et dans l'APK | Mineur | CORRIGÉ |
+| A-072 | 2026-10-01 | Produit et UX | Un champ de saisie posé dans une feuille ne se voyait pas : une couche intermédiaire posait `border: none` et le fond même des feuilles. Trouvé pendant la refonte, à la capture | Majeur | CORRIGÉ |
+| A-073 | 2026-10-01 | Produit et UX | Quatre écrans d'introduction avant l'app, dont deux promesses fausses (« pas besoin de compte » alors que le partage en demande un ; un glissement absent de la frise) | Mineur | CORRIGÉ |
+| A-074 | 2026-10-01 | Produit et UX | Vus à la lecture, pas sur un écran mesuré : pastille de compte du menu ⋯ en blanc sur ambre (environ 2,2:1), bouton « Modifier » des bulles de la carte en blanc sur l'accent (2,72:1) | Mineur | CORRIGÉ |
 
 ## Dernier audit effectif
+
+Date : 2026-10-05
+Type : LÉGER (5 jours depuis le 2026-09-30, donc sécurité et fiabilité, pas
+d'axe rotatif ; une vingtaine de commits, sous le seuil de 40)
+Prochain axe rotatif : **Dette technique** (toujours pas consommé — quatre
+audits LÉGERS d'affilée l'ont repoussé)
+Référence ESLint à la date de l'audit : **40 erreurs, 4 avertissements**,
+inchangé depuis le 2026-09-30. `npm run build` vert, 20 suites `verif-*`
+vertes, `/verif-ui` sans nouveau point.
+
+### Ce que cet audit a lu, et pourquoi
+
+Le contrôle de pertinence passe largement : la PR #99, fusionnée le
+2026-10-01, porte +2 100 lignes et trois modules neufs
+(`utils/pieces.js`, `hooks/usePiecesSync.js`, `_shared/budget.ts`). Elle a
+été écrite ET arbitrée le 2026-09-30 dans la même session : personne ne
+l'avait relue depuis, exactement le cas que le journal note depuis le
+2026-09-28 (« l'auditeur ne relit pas ses propres correctifs le jour où il
+les écrit »). Les cinq constats ci-dessus vivent tous là.
+
+### La branche de cet audit ne s'appelle pas `claude/audit-…`
+
+La session a été provisionnée sur `claude/keen-fermat-ufkdfo` et n'a pas le
+droit de pousser ailleurs. Le préfixe `claude/` — la seule contrainte dure —
+est respecté. **Conséquence pour la routine suivante : chercher la PR d'audit
+en cours par son TITRE (« Audit … »), pas par le nom de sa branche.** Sinon
+elle en ouvrira une seconde, ce qui est précisément l'accident du 2026-09-29.
+
+### Ce que le MCP Supabase dit de la production, ce jour
+
+- La migration `20260930_pieces_jointes.sql` est bien appliquée : le dossier
+  `pieces` existe (privé, 6 MiB, cinq types MIME) et les deux politiques
+  `select`/`insert` sont en place sur `storage.objects`, réservées à
+  `authenticated` et filtrées par `est_du_voyage((storage.foldername(name))[1])`.
+  `trips.id` et `trip_members.trip_id` sont tous deux `text` : la fonction
+  compare bien ce qu'il faut.
+- **Zéro objet déposé** dans `pieces`, et aucun voyage ne porte encore de
+  référence `pj:`. La chaîne des pièces jointes n'a donc jamais tourné en
+  production : tout ce qui la concerne ci-dessus est lu sur le code, pas
+  observé à l'usage.
+- `trip_members` est vide : la collaboration non plus n'a jamais été exercée.
+- Advisors sécurité : rien de neuf. `auth_leaked_password_protection` est
+  A-044, déjà ouvert ; les quatre `security definer` signalés (dont
+  `est_du_voyage`) sont voulus et ne rendent qu'un booléen sur l'appelant.
+
+### Audit précédent
 
 Date : 2026-09-30
 Type : LÉGER (le dernier audit a été fusionné la veille — moins de trois
@@ -277,4 +329,5 @@ numéros.
 | 2026-09-30 | LÉGER | Sécurité, Fiabilité | A-045 à A-050, clôture d'A-032 |
 | 2026-09-30 | Audit Pareto (session) | Tous axes, code et UX/UI | A-051 à A-057 ; clôture d'A-001, A-003, A-004, A-007, A-012 (client), A-041 à A-043 |
 | 2026-09-30 | Améliorations (session, PR #99) | Fiabilité, Produit et UX | A-058 à A-060 ; clôture d'A-012 (serveur) et A-040 |
-| 2026-10-01 | Critique design (session) | Produit et UX, Dette technique | A-061 à A-069 |
+| 2026-10-01 | Critique design (session) | Produit et UX, Dette technique | A-066 à A-074 (numérotés après l'audit du 2026-10-05, fusionné avant) |
+| 2026-10-05 | LÉGER | Sécurité, Fiabilité | A-061 à A-065 |
