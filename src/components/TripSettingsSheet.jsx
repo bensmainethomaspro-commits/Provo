@@ -1,17 +1,9 @@
-import { voyageSansVoyageur } from '../utils/helpers';
+import { voyageSansVoyageur, COULEURS_VOYAGE } from '../utils/helpers';
 import { useState } from 'react';
 import { localiserHebergement } from '../utils/geocodeLodging';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
-const TRIP_COLORS = [
-  { value: '#35A7DD', label: 'Bleu clair' },
-  { value: '#3b82f6', label: 'Bleu' },
-  { value: '#8b5cf6', label: 'Violet' },
-  { value: '#22c55e', label: 'Vert' },
-  { value: '#ef4444', label: 'Rouge' },
-  { value: '#06b6d4', label: 'Cyan' },
-  { value: '#14b8a6', label: 'Turquoise' },
-  { value: '#ec4899', label: 'Rose' },
-];
 
 const TRAVELER_EMOJIS = ['😀','😎','🤩','🧑','👩','👨','🧔','👦','👧','🐶','🐱','🦊','🐻','🐼'];
 
@@ -76,8 +68,8 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
     <div className="sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="sheet sheet--settings">
         <div className="sheet__header">
-          <h2 className="sheet__title">⚙️ Paramètres du voyage</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+          <h2 className="sheet__title">Paramètres du voyage</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
         <div className="sheet__body">
 
@@ -233,14 +225,19 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
           <div className="settings-section">
             <div className="settings-section__title">Couleur du voyage</div>
             <div className="color-swatches">
-              {TRIP_COLORS.map(c => (
+              {COULEURS_VOYAGE.map(c => (
                 <button
                   key={c.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={(trip.color || '#35A7DD') === c.value}
+                  aria-label={c.label}
                   className={`color-swatch${(trip.color || '#35A7DD') === c.value ? ' color-swatch--active' : ''}`}
-                  style={{ background: c.value }}
                   onClick={() => handleColor(c.value)}
                   title={c.label}
-                />
+                >
+                  <span className="color-swatch__pastille" style={{ background: c.value }} />
+                </button>
               ))}
             </div>
           </div>

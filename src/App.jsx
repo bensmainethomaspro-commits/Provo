@@ -4,8 +4,6 @@ import Dashboard from './pages/Dashboard';
 import TripView from './pages/TripView';
 import AuthScreen from './components/AuthScreen';
 import { decodeTrip, premierLien, ressembleAUneLegende, texteDecode } from './utils/helpers';
-import { useSettings } from './hooks/useSettings';
-import OnboardingOverlay from './components/OnboardingOverlay';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Les onglets d'un voyage, dans l'ordre de la barre du bas. Un lien ne peut
@@ -14,7 +12,6 @@ const ONGLETS = ['planning', 'reserve', 'depenses', 'map', 'notes', 'valise'];
 
 function AppInner() {
   const { importTrip, loadSharedTrip, signIn, signUp, resetPassword, userId, authLoading, joinTripByInvite, currentTrips, stockagePlein, aEnvoyer, envoiRefuse, renvoyer } = useTripsContext();
-  const { settings, setSetting } = useSettings();
   const [showAuth, setShowAuth] = useState(false);
   const [route, setRoute] = useState({ page: 'dashboard', tripId: null });
   const [pendingImport, setPendingImport] = useState(null);
@@ -79,25 +76,15 @@ function AppInner() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  useEffect(() => {
-    function applyBackground() {
-      if (!darkMode) {
-        // Jour : fond bleu très clair et aéré (fini le dégradé orange plein cadre).
-        // Le bleu reste un accent, pas un mur — inspiration apps Apple/App Store.
-        document.body.style.background = 'linear-gradient(180deg, #E6F2FB 0%, #EFF5FA 42%, #F2F6FA 100%)';
-        document.body.style.backgroundAttachment = 'fixed';
-      } else {
-        // Nuit bleutée, cohérente avec la marque bleu clair.
-        document.body.style.background = 'linear-gradient(165deg, #08111A 0%, #0D1B26 45%, #122634 100%)';
-        document.body.style.backgroundAttachment = 'fixed';
-      }
-    }
-    applyBackground();
-  }, [darkMode]);
-
+  // Le fond de page vit dans le CSS (une surface unie par thème) : il était
+  // posé ici en dégradé, en style en ligne, hors de portée de la feuille et
+  // des jetons. La barre d'état du téléphone prend la même teinte que la
+  // page, au lieu du bleu de la marque qui tranchait au-dessus d'un écran clair.
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
     localStorage.setItem('provo_theme', darkMode ? 'dark' : 'light');
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', darkMode ? '#111A22' : '#F7FAFD');
   }, [darkMode]);
 
   useEffect(() => {
@@ -188,9 +175,6 @@ function AppInner() {
 
   return (
     <div className="app">
-      {!settings.onboardingDone && (
-        <OnboardingOverlay onDone={() => setSetting('onboardingDone', true)} />
-      )}
       {inviteError && (
         <div className="offline-banner" style={{ background: 'var(--red)' }}>
           ❌ {inviteError} <button onClick={() => setInviteError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>

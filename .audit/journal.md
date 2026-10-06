@@ -131,6 +131,15 @@ Exemple de ligne, à supprimer :
 | A-064 | 2026-10-05 | Produit et UX | `ConflitsSheet` (PR #99) portait `role="dialog"` sans `aria-modal`, contrairement aux deux autres boîtes du dépôt (`ConfirmDialog.jsx:6`, `TripSearch.jsx:80`) : un lecteur d'écran continue à lire la page derrière la feuille | Mineur | CORRIGÉ |
 | A-065 | 2026-10-05 | Fiabilité | `memoire`, le cache en mémoire des pièces (`pieces.js:168`), n'a aucune borne : `lirePiece` et `stockerPieces` y posent le base64 entier de chaque pièce lue, et la seule suppression est le ménage des orphelines (`pieces.js:235`). Parcourir les billets d'un voyage garde donc leur poids cumulé en mémoire pour toute la session — le dépôt tient déjà les dizaines de Mo du moteur OCR pour un motif à éteindre (`ocrTicket.js`, « sur un téléphone, le garder… »). Raisonné sur le code, non mesuré sur appareil | Mineur | PROPOSÉ |
 | A-037 | 2026-10-05 | Méthode | Lint : **40 erreurs, 4 avertissements** — identique au relevé du 2026-09-30 après correction, donc dette non aggravée malgré +2 100 lignes (PR #99). `npm run build` vert, les 20 suites `verif-*` passent, `/verif-ui` ne relève aucun nouveau point sur les 11 écrans × 2 thèmes. Rien à signaler | Sans objet | PASSÉ |
+| A-066 | 2026-10-01 | Produit et UX | Texte blanc sur dégradé bleu clair, mesuré au pixel : libellé de l'onglet actif 2,66:1, « Nouveau voyage » 2,66:1, ＋ de l'en-tête 2,63:1, carte « En voyage » 3:1, « JOUR 1 » 2,47:1 (accent du voyage en couleur de texte). Invisible à `/verif-ui`, qui rangeait 989 textes sur fond non uni en « à l'œil, non compté » | Majeur | CORRIGÉ |
+| A-067 | 2026-10-01 | Dette technique | Quatre « design systems » empilés dans `index.css` : `--text-muted` déclaré 8 fois, 91 ombres distinctes, 29 durées, 68 `!important`, commentaires décrivant des teintes chaudes sur des valeurs bleu froid. `styles/tokens.css` (passage vérifié sans écart de style calculé) et `verif-jetons` | Majeur | CORRIGÉ |
+| A-068 | 2026-10-01 | Fiabilité | La couleur choisie à la création d'un voyage n'était jamais enregistrée (`createTrip` ne recopiait pas `color`) : le voyage prenait celle du pays, indigo pour le Portugal | Mineur | CORRIGÉ |
+| A-069 | 2026-10-01 | Produit et UX | Création de voyage : champ « Retour » sorti de 34 px de sa fenêtre, 34 contrôles dont 3 décoratifs, destination facultative. Écran absent de `/verif-ui` | Mineur | CORRIGÉ |
+| A-070 | 2026-10-01 | Produit et UX | Les repas posés d'office comptaient comme des activités : un voyage vide annonçait 10 activités, un bilan sacrait « Resto ×12 » ; l'estimé de 200 € s'affichait sans dire qu'il ne venait que des repas | Majeur | CORRIGÉ |
+| A-071 | 2026-10-01 | Produit et UX | Inter chargée depuis Google Fonts, que le service worker ne garde pas : l'app changeait de police hors ligne, au premier lancement sans réseau et dans l'APK | Mineur | CORRIGÉ |
+| A-072 | 2026-10-01 | Produit et UX | Un champ de saisie posé dans une feuille ne se voyait pas : une couche intermédiaire posait `border: none` et le fond même des feuilles. Trouvé pendant la refonte, à la capture | Majeur | CORRIGÉ |
+| A-073 | 2026-10-01 | Produit et UX | Quatre écrans d'introduction avant l'app, dont deux promesses fausses (« pas besoin de compte » alors que le partage en demande un ; un glissement absent de la frise) | Mineur | CORRIGÉ |
+| A-074 | 2026-10-01 | Produit et UX | Vus à la lecture, pas sur un écran mesuré : pastille de compte du menu ⋯ en blanc sur ambre (environ 2,2:1), bouton « Modifier » des bulles de la carte en blanc sur l'accent (2,72:1) | Mineur | CORRIGÉ |
 
 ## Dernier audit effectif
 
@@ -320,4 +329,5 @@ numéros.
 | 2026-09-30 | LÉGER | Sécurité, Fiabilité | A-045 à A-050, clôture d'A-032 |
 | 2026-09-30 | Audit Pareto (session) | Tous axes, code et UX/UI | A-051 à A-057 ; clôture d'A-001, A-003, A-004, A-007, A-012 (client), A-041 à A-043 |
 | 2026-09-30 | Améliorations (session, PR #99) | Fiabilité, Produit et UX | A-058 à A-060 ; clôture d'A-012 (serveur) et A-040 |
+| 2026-10-01 | Critique design (session) | Produit et UX, Dette technique | A-066 à A-074 (numérotés après l'audit du 2026-10-05, fusionné avant) |
 | 2026-10-05 | LÉGER | Sécurité, Fiabilité | A-061 à A-065 |

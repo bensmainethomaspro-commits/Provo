@@ -49,6 +49,10 @@ trace de ce qu'on a sciemment écarté.
 | D1 · Proposer, jamais imposer | `ConflitsSheet` : « Laisser ainsi » / « Remettre la mienne » quand un champ a changé ici ET ailleurs |
 | C2 · Chemin direct | `deviseParDefaut` : la dernière devise notée, sinon celle du pays |
 | E6 · Écrans visités | `verif-ui` : Partager, Hors ligne, Fiche de la Réserve, Annuler, Fiches complétées, Conflits, Piocher (heure fixée à 10 h) |
+| B1 · Contraste réel, même sur un dégradé | `verif-ui` mesure au pixel les textes posés sur un fond non uni (deux captures, texte rendu transparent) |
+| B5 / E7 · Une seule déclaration | `src/styles/tokens.css` ; `verif-jetons` refuse un jeton racine hors de ce fichier et plafonne couleurs, ombres, dégradés, `!important` |
+| B6 · L'émoji est du contenu, l'icône est du chrome | `components/Icone.jsx` (Lucide, licence ISC) : barre d'onglets, en-têtes, menus, fermetures |
+| E6 · Écrans visités | `verif-ui` : Accueil vide, Nouveau voyage (tout déplié), Réserve vide, Dépenses vide |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -111,6 +115,62 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
+
+- **Critique design du 1er octobre 2026, appliquée** (rapport :
+  `.audit/critique-design-2026-10-01.md`, journal A-066 à A-074). Demandé :
+  « fais tout ce que tu penses être le mieux ». Mesuré avant, vérifié après :
+  `verif-ui` à zéro hors carte sur 30 écrans par thème, 92 parcours verts,
+  21 suites vertes.
+  · **Un seul design system.** `src/styles/tokens.css` porte chaque jeton une
+    fois (le passage a été vérifié sans un seul écart de style calculé, élément
+    par élément, sur tous les écrans des deux thèmes). Les composants refaits
+    (en-tête, budget, barre d'onglets, carte « En voyage », accueil, bouton
+    flottant, compte à rebours, menu ⋯, champ de saisie, couleur d'un voyage)
+    ont perdu leurs trois à dix couches : une description chacun, en fin
+    d'`index.css`, sous « COMPOSANTS ». `verif-jetons` empêche le retour en
+    arrière.
+  · **Aplats.** Plus de dégradé sous un texte : le blanc sur le dégradé bleu
+    clair tenait 2,6:1. Boutons pleins en `--accent-deep`, onglet actif teinté
+    (`--accent-texte`), ombres neutres, aucune ombre portée sur un texte. Le
+    fond de page n'est plus posé en JavaScript (`App.jsx`) mais par le CSS ; la
+    barre d'état du téléphone prend la teinte de la page.
+  · **Police système** (SF Pro sur iPhone, Roboto sur Android). Inter venait
+    de Google Fonts, jamais gardée par le service worker.
+  · **Mouvement** : trois durées (`--d-1/2/3`), deux courbes ; `transition:
+    all` interdit. Les feuilles entrent avec la courbe iOS. Deux animations
+    utiles : la coche « fait » qui se dessine, le pourcentage du bilan qui
+    monte. La réduction de mouvement les coupe.
+  · **Icônes** : `Icone.jsx` + Lucide. Les émojis restent là où l'utilisateur
+    les choisit (voyage, catégorie, voyageur, drapeau).
+  · **Premier contact** : l'introduction en quatre écrans est supprimée
+    (`OnboardingOverlay.jsx`) ; l'accueil vide dit ce que fait Provo et porte
+    un seul bouton (le bouton flottant n'apparaît qu'avec un premier voyage).
+    La Réserve vide montre « Coller un lien ». Elle ne promet PAS Instagram :
+    abandonné sciemment (voir plus bas).
+  · **Créer un voyage** : feuille plein écran, destination obligatoire et en
+    premier, nom déduit d'elle, dates sans débordement, le reste replié. La
+    couleur choisie est enregistrée (`createTrip` l'oubliait). Une seule
+    palette, `COULEURS_VOYAGE` dans `helpers.js`, sans rouge (réservé aux
+    erreurs).
+  · **Repas posés d'office** (`repasEnAttente`) : ce ne sont plus des
+    activités (compteurs, avancement, « activités préférées »). Leur prix
+    RESTE dans la prévision, comme le documentait `budgetStats` (« pour qu'on
+    sache à quoi s'attendre ») ; il est maintenant dit : « ≈ 200 € de repas
+    prévus » quand ce n'est que ça, « dont 200 € de repas » sinon. Arbitrage
+    pris contre ma propre recommandation du rapport (les sortir de
+    l'estimé) : ça aurait effacé une décision de conception documentée.
+  · **En-tête du voyage** : le budget passe dans la ligne sous le nom (une
+    rangée de moins sur trois onglets), la destination ne s'affiche que si
+    elle dit autre chose que le nom (`destinationUtile`). Plus de compteurs
+    sur les onglets. La vue se choisit par un contrôle segmenté « Frise ·
+    Grille ».
+  · **Mots** : « Annulée » (plus « Nogo »/« Skip »), « Plus haut / Plus bas
+    dans la liste », tutoiement partout, plus de « clique ».
+  · **Trouvé en chemin** : un champ posé dans une feuille ne se voyait pas
+    (`border: none` + le fond de la feuille, A-072). Le formulaire de dépense
+    garde ses champs gris, voulus comme Tricount (`.ef .form-input`).
+  · Limite : les captures sont faites sans police Apple (Linux) ; le rendu
+    SF Pro n'a pas été vu sur un vrai iPhone.
 
 - **Audit Pareto, 30 septembre 2026** (20 leviers, code et UX, PR #98).
   Mesuré et reproduit avant de corriger, chaque garde-fou prouvé rouge sur
@@ -1167,8 +1227,9 @@ chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/c
 browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 ```
 
-Le thème se bascule **par le bouton 🌙 de l'accueil** (il n'est plus dans le
-menu `⋯` du voyage depuis le 30 septembre 2026), pas par `localStorage` :
+Le thème se bascule **par le bouton lune/soleil de l'accueil**
+(`aria-label` « Passer en mode… » ; il n'est plus dans le menu `⋯` du voyage
+depuis le 30 septembre 2026), pas par `localStorage` :
 `addInitScript` réécrit la clé à chaque rechargement, sauf si le script
 l'amorce une seule fois (drapeau `sessionStorage`, comme `verif-ui` le fait
 désormais pour les écrans qui préparent leur propre stockage).
@@ -1179,17 +1240,20 @@ Puis, **avant toute livraison qui touche l'interface** :
 npm run verif-ui
 ```
 
-`/verif-ui` mesure ce qu'un coup d'œil ne tranche pas — contraste WCAG, cibles
-de 44 px, débordement horizontal, action passée sous la ligne de flottaison,
-boutons sans nom accessible, erreurs JS — sur les sept écrans principaux, dans
-les deux thèmes. Il complète `/audit`, qui juge et propose ; lui ne fait que
+`/verif-ui` mesure ce qu'un coup d'œil ne tranche pas : contraste WCAG, cibles
+de 44 px, débordement horizontal (y compris un panneau qui défile de côté),
+action passée sous la ligne de flottaison, boutons sans nom accessible, erreurs
+JS. Sur 30 écrans, dans les deux thèmes. `npm run verif-jetons` tient le
+design system (aussi lancé par `npm run verif`). Il complète `/audit`, qui juge et propose ; lui ne fait que
 compter. Le jeu de données de référence est `scripts/ui-fixture.mjs` : le même
 voyage à chaque exécution, pour que deux mesures soient comparables.
 
-Le contraste n'est calculé que sur fond **uni** : sur un dégradé ou une photo,
-la couleur derrière le texte dépend de l'endroit exact où il tombe. Ces cas
-sortent dans une liste séparée, non comptée en défaut. Un outil qui invente des
-défauts finit par ne plus être lu.
+Sur fond **uni**, le contraste se calcule depuis les couleurs. Sur un dégradé
+ou une photo, il se **mesure au pixel** (octobre 2026) : deux captures, la
+seconde avec ces textes rendus transparents, puis la valeur médiane du fond
+réellement peint sous chaque lettre. Avant, ces textes partaient « à l'œil,
+non compté », 989 d'entre eux, dont l'onglet actif à 2,66:1. Seuls un émoji
+seul ou un texte caché sous un voile restent hors mesure.
 
 Puis, **avant une livraison importante ou après une modification qui touche
 plusieurs écrans** :

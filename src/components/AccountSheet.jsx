@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useSettings } from '../hooks/useSettings';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { useNotifications } from '../hooks/useNotifications';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 const PROFILE_EMOJIS = [
   '😀','😎','🤩','🧑','👩','👨','🧔','👦','👧',
@@ -52,8 +54,8 @@ export default function AccountSheet({ onClose, userId, userEmail, userProfile, 
     <div className="sheet-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="sheet sheet--account">
         <div className="sheet__header">
-          <h2 className="sheet__title">👤 Mon compte</h2>
-          <button aria-label="Fermer" className="sheet__close" onClick={onClose}>✕</button>
+          <h2 className="sheet__title">Mon compte</h2>
+          <button aria-label="Fermer" className="sheet__close" onClick={onClose}><Icone de={X} /></button>
         </div>
         <div className="sheet__body">
 

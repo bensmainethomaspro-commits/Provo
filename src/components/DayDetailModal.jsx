@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { formatDate, getDayLabel, formatDuration, formatPrice, totalMinutes, getTimeSlots, budgetStats } from '../utils/helpers';
 import ActivityCard from './ActivityCard';
 import LogicAlerts from './LogicAlerts';
+import Icone from './Icone';
+import { X } from 'lucide-react';
 
 export default function DayDetailModal({
   day, dayIndex, totalDays, isPastTrip,
@@ -44,7 +46,7 @@ export default function DayDetailModal({
               {stats.total > 0 && ` · ${formatPrice(stats.total)}`}
             </div>
           </div>
-          <button aria-label="Fermer" className="sheet__close" onClick={close}>✕</button>
+          <button aria-label="Fermer" className="sheet__close" onClick={close}><Icone de={X} /></button>
         </div>
 
         <div className="day-detail__body">

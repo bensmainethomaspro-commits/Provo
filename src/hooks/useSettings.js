@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 const KEY = 'provo_settings';
 export const DEFAULTS = {
   haptics: true,
-  onboardingDone: false,
 };
 
 function load() {
