@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { reduireImage } from '../utils/helpers';
-import { enPiece, estRef, ouvrirPiece } from '../utils/pieces';
+import { enPiece, estRef, idDe, lirePiece, ouvrirPiece } from '../utils/pieces';
 import ImagePiece from './ImagePiece';
 
 /**
@@ -96,7 +96,17 @@ export default function TripDocuments({ documents, onChange }) {
   };
 
   const ouvrir = async (d) => {
-    if (d.image) { setApercu(d); return; }
+    if (d.image) {
+      // Rangée à part, l'image peut n'être pas encore arrivée sur ce téléphone.
+      // Sans ce contrôle, l'aperçu s'ouvrait vide et ne disait rien — alors que
+      // le PDF juste en dessous le dit depuis le 30 septembre 2026.
+      if (estRef(d.data) && !(await lirePiece(idDe(d.data)).catch(() => undefined))) {
+        setErreur(`« ${d.nom} » n'est pas encore sur ce téléphone : il arrive avec du réseau.`);
+        return;
+      }
+      setApercu(d);
+      return;
+    }
     // Un PDF s'ouvre dans le lecteur du téléphone. `data:` ne peut pas être
     // navigué directement sur certains navigateurs : `ouvrirPiece` passe par
     // un blob, et va chercher la pièce là où elle est rangée.
