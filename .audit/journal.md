@@ -140,6 +140,8 @@ Exemple de ligne, à supprimer :
 | A-072 | 2026-10-01 | Produit et UX | Un champ de saisie posé dans une feuille ne se voyait pas : une couche intermédiaire posait `border: none` et le fond même des feuilles. Trouvé pendant la refonte, à la capture | Majeur | CORRIGÉ |
 | A-073 | 2026-10-01 | Produit et UX | Quatre écrans d'introduction avant l'app, dont deux promesses fausses (« pas besoin de compte » alors que le partage en demande un ; un glissement absent de la frise) | Mineur | CORRIGÉ |
 | A-074 | 2026-10-01 | Produit et UX | Vus à la lecture, pas sur un écran mesuré : pastille de compte du menu ⋯ en blanc sur ambre (environ 2,2:1), bouton « Modifier » des bulles de la carte en blanc sur l'accent (2,72:1) | Mineur | CORRIGÉ |
+| A-061 | 2026-10-07 | Fiabilité | Clos. Un voyage que le nuage porte peut-être (session ou nuage pas encore lus, ou voyage déjà dans le nuage) ne perd une donnée lourde qu'une fois la pièce déposée dans son dossier (`envoyee` contient le voyage) : `usePiecesSync` range la pièce, la dépose, PUIS la remplace par sa référence (`enReferences`, `pieces.js`). Sans compte, ou pour un voyage que le nuage n'a pas, rien ne change : sortie immédiate. Gardé par `verif-demarrage` : à chaque écriture simulée, une donnée retirée du nuage doit déjà être dans le dossier (cas F), et le cas H coupe le dépôt (le nuage garde le base64, puis s'allège au retour du réseau). Rouge sur le code d'avant (4 vérifications), vert après. Prod relevée au MCP le jour même : `ms0rso33cuc7x` porte toujours son base64, zéro objet dans `pieces`, donc rien n'a été perdu avant le correctif. Reste non couvert : un téléphone qui aurait DÉJÀ allégé ce voyage hors ligne avec l'ancien code l'enverra allégé ; aucun signe que ce soit arrivé | Majeur | CORRIGÉ |
+| A-062 | 2026-10-07 | Fiabilité | Clos. Ce qui n'a pas pu être échangé (pièce absente, dépôt refusé, voyage pas encore dans le nuage) est retenté seul avec un recul croissant (5 s, 15 s, 45 s, 2 min, puis toutes les 5 min tant que l'app est ouverte), qui repart de zéro dès qu'une pièce passe, au retour du réseau et au retour au premier plan. Cas I de `verif-demarrage` : la pièce arrive dans le dossier après l'ouverture, sans modification du voyage ; rouge avant, vert après | Majeur | CORRIGÉ |
 
 ## Dernier audit effectif
 
@@ -331,3 +333,4 @@ numéros.
 | 2026-09-30 | Améliorations (session, PR #99) | Fiabilité, Produit et UX | A-058 à A-060 ; clôture d'A-012 (serveur) et A-040 |
 | 2026-10-01 | Critique design (session) | Produit et UX, Dette technique | A-066 à A-074 (numérotés après l'audit du 2026-10-05, fusionné avant) |
 | 2026-10-05 | LÉGER | Sécurité, Fiabilité | A-061 à A-065 |
+| 2026-10-07 | Correctif (session) | Fiabilité | Clôture d'A-061 et A-062 |

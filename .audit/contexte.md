@@ -350,11 +350,13 @@ fusion n'y voit aucun conflit. Trois endroits à connaître avant d'y toucher :
 
 - `src/utils/pieces.js` : l'extraction, le rangement IndexedDB (base `provo`,
   magasin `pieces`, `{ data, envoyee: [idVoyage…] }`), et `pourUneCopie` pour
-  « Envoyer une copie ». Pur, testé par `scripts/verif-pieces.mjs` (18 cas).
+  « Envoyer une copie ». Pur, testé par `scripts/verif-pieces.mjs` (20 cas).
 - `src/hooks/usePiecesSync.js` : trois temps dans un seul fichier — sortir les
   données (600 ms après un changement), déposer au nuage, rapatrier ce qui
   manque (2 500 ms). Le dépôt passe par l'API REST de Storage à la main, pas
-  par le client Supabase.
+  par le client Supabase. Depuis le 2026-10-07, ce qui n'a pas pu être
+  échangé est retenté seul : 5 s, 15 s, 45 s, 2 min, puis toutes les 5 min,
+  et tout de suite au retour du réseau ou au premier plan (A-062).
 - `supabase/migrations/20260930_pieces_jointes.sql` : dossier `pieces` privé,
   `select` et `insert` pour `authenticated` filtrés par `est_du_voyage()`.
   **Ni `update` ni `delete`, volontairement** : une pièce est identifiée par
@@ -366,8 +368,15 @@ fusion n'y voit aucun conflit. Trois endroits à connaître avant d'y toucher :
 Trois propriétés que l'ordre du code garantit, et qu'il ne faut pas casser :
 
 1. **Le voyage n'est allégé qu'après un rangement RELU** (`stockerPieces`
-   réécrit puis relit chaque pièce, et rend `false` sinon). En revanche il
-   est allégé AVANT que le nuage ait sa copie : voir A-061.
+   réécrit puis relit chaque pièce, et rend `false` sinon), **et, s'il est
+   peut-être dans le nuage, qu'après le dépôt de la pièce dans son dossier**
+   (A-061, corrigé le 2026-10-07). « Peut-être » : la session ou le nuage ne
+   sont pas encore lus, ou le voyage y est. Sans compte, ou pour un voyage que
+   le nuage n'a pas, la sortie reste immédiate. Une donnée qui attend son
+   dépôt reste en clair dans le voyage, ici et dans le nuage ; c'est le prix,
+   et il ne concerne que les données entrées sans passer par `enPiece`
+   (anciens voyages, copies reçues). `verif-demarrage` contrôle l'ordre à
+   chaque écriture simulée (cas F et H).
 2. **`marquerEnvoyee` n'est posé qu'après un dépôt réussi**, et le ménage des
    orphelines (`oublierPiecesOrphelines`) refuse d'effacer une pièce dont
    `envoyee` est vide. C'est ce qui empêche la perte sèche ; ne pas appeler ce

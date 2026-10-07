@@ -4,13 +4,13 @@
  *
  * `src/utils/pieces.js` est importé tel quel (aucun import de son côté).
  * IndexedDB n'existe pas sous Node : son usage est vérifié en vrai navigateur
- * par `verif-synchro-demarrage.mjs` (cas F et G).
+ * par `verif-synchro-demarrage.mjs` (cas F à J).
  *
  * Usage :  node scripts/verif-pieces.mjs
  */
 import { readFileSync } from 'node:fs';
 import {
-  extrairePieces, aDesDonnees, refsDe, estRef, pourUneCopie, transformerChaines, PREFIXE,
+  extrairePieces, enReferences, aDesDonnees, refsDe, estRef, pourUneCopie, transformerChaines, PREFIXE,
 } from '../src/utils/pieces.js';
 
 const src = readFileSync(new URL('../src/utils/helpers.js', import.meta.url), 'utf8');
@@ -92,11 +92,23 @@ verifier('refsDe retrouve les trois pièces', refsDe(allege).size === 3);
     JSON.stringify(copie.days[0].activities[0].screenshots) === JSON.stringify([PETITE]));
 }
 
+// ── Sortir une partie seulement (audit A-061) ──────────────────────────────
+// Un voyage que le nuage porte ne perd une donnée qu'une fois la pièce dans
+// son dossier : les autres restent en clair, jusqu'à leur dépôt.
+{
+  const photo = pieces.find(p => p.data === JPEG);
+  const partiel = enReferences(v, [photo]);
+  verifier('seule la pièce déposée cède sa place : le billet reste en clair',
+    partiel.coverPhoto === PREFIXE + photo.id && partiel.reserve[0].screenshots[0] === PREFIXE + photo.id
+    && partiel.documents[0].data === PDF && partiel.days[0].activities[0].screenshots[0] === JPEG2);
+  verifier('aucune pièce à sortir : le même objet', enReferences(v, []) === v);
+}
+
 // ── L'outil de parcours lui-même ─────────────────────────────────────────────
 {
   const o = { a: [1, 'x'], b: { c: 'y' } };
   verifier('transformerChaines sans changement rend le même objet', transformerChaines(o, s => s) === o);
 }
 
-console.log(casses ? `\n${casses} cas cassé(s)` : '\nles 18 cas passent');
+console.log(casses ? `\n${casses} cas cassé(s)` : '\nles 20 cas passent');
 process.exit(casses ? 1 : 0);

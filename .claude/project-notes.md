@@ -244,7 +244,11 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     de 2 ko ; un SVG reste dans le voyage. « Envoyer une copie » ne
     transporte plus les billets ni les PDF. Limite : une ancienne version
     installée de l'app (APK Android) affiche une image cassée à la place
-    d'une pièce rangée à part.
+    d'une pièce rangée à part. Depuis le 7 octobre (audit A-061, A-062) :
+    un voyage qui est peut-être dans le nuage ne perd une donnée qu'après
+    son dépôt dans le dossier (elle reste en clair d'ici là) ; ce qui n'a
+    pas pu être échangé est retenté seul (5 s, 15 s, 45 s, 2 min, puis
+    5 min), et tout de suite au retour du réseau ou au premier plan.
   · **Budget de 20 s** pour tout un appel d'`extract-place` et
     d'`enrich-place` (`_shared/budget.ts`, `AsyncLocalStorage`) ; la sonde
     de santé dit `budget: true` s'il fonctionne chez l'hébergeur, et le
