@@ -24,10 +24,23 @@
  *  G · un autre téléphone                      → il les rapatrie, et les garde
  *                                              sans réseau.
  *
+ * Et deux cas de l'audit du 5 octobre 2026 :
+ *  H · le nuage a le base64, le dépôt échoue   → le nuage GARDE sa copie tant
+ *      (A-061)                                   que la pièce n'est pas dans
+ *                                                son dossier ;
+ *  I · une pièce pas encore déposée par        → elle est redemandée seule,
+ *      l'autre téléphone (A-062)                 sans attendre une modification ;
+ *  J · sans compte, pas de nuage               → les pièces sortent du voyage
+ *                                                tout de suite, comme avant.
+ *
+ * Et dans TOUS les cas, à chaque écriture du voyage : une donnée que le nuage
+ * avait ne disparaît jamais du voyage avant d'être dans son dossier (A-061).
+ *
  * Demande l'aperçu lancé :  npx vite preview --port 4173
  * Usage :                   node scripts/verif-synchro-demarrage.mjs
  */
 import { chromium } from 'playwright';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync } from 'node:fs';
 import { trip as TRIP, settings as SETTINGS } from './ui-fixture.mjs';
 
@@ -56,16 +69,24 @@ const verifier = (nom, ok, detail = '') => {
 
 const nav = await chromium.launch({ executablePath: chrome });
 
+// Les données lourdes d'un voyage (celles que l'app sort dans le dossier du
+// nuage), et l'identifiant que l'app leur donne : 12 octets de SHA-256.
+const DONNEES = /"(data:(?:image\/(?:jpeg|png|webp|gif)|application\/pdf);base64,[^"]{2000,})"/g;
+const donneesDe = (o) => new Set([...JSON.stringify(o ?? null).matchAll(DONNEES)].map(m => m[1]));
+const idPiece = (data) => createHash('sha256').update(data).digest('hex').slice(0, 24);
+
 /**
  * Un téléphone, et un nuage simulé qu'on peut couper. `stockage` amorce le
  * stockage local au premier chargement SEULEMENT : les rechargements suivants
  * doivent retrouver ce que l'app y a écrit elle-même.
  */
-async function telephone({ stockage, nuage, delai = 0, pieces = new Map() }) {
+async function telephone({ stockage, nuage, delai = 0, pieces = new Map(), connecte = true }) {
   const ctx = await nav.newContext({ viewport: { width: 390, height: 844 } });
   const p = await ctx.newPage();
   p.setDefaultTimeout(8000);
-  const etat = { nuage, panne: false, ecritures: [], pieces, stockageCoupe: false };
+  // `copiesPerdues` : chaque donnée qu'une écriture a retirée du nuage alors
+  // que sa pièce n'était pas encore dans le dossier du voyage (A-061).
+  const etat = { nuage, panne: false, ecritures: [], pieces, stockageCoupe: false, lectures: 0, copiesPerdues: [] };
   await p.route('**/*', async (r) => {
     const u = r.request().url(), m = r.request().method();
     if (u.startsWith(U)) return r.fallback();
@@ -81,6 +102,7 @@ async function telephone({ stockage, nuage, delai = 0, pieces = new Map() }) {
         etat.pieces.set(cle, { corps: r.request().postDataBuffer(), type: r.request().headers()['content-type'] });
         return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ Key: `pieces/${cle}` }) });
       }
+      etat.lectures++;
       const piece = etat.pieces.get(cle);
       return piece ? r.fulfill({ status: 200, contentType: piece.type, body: piece.corps })
         : r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ statusCode: '404', error: 'not_found' }) });
@@ -99,6 +121,11 @@ async function telephone({ stockage, nuage, delai = 0, pieces = new Map() }) {
           return r.fulfill({ status: 409, contentType: 'application/json',
             body: JSON.stringify({ code: '23505', message: 'duplicate key value violates unique constraint "trips_pkey"' }) });
         }
+        const avant = etat.nuage?.id === corps.data?.id ? donneesDe(etat.nuage) : new Set();
+        const apres = donneesDe(corps.data);
+        for (const d of avant) {
+          if (!apres.has(d) && !etat.pieces.has(`${corps.data.id}/${idPiece(d)}`)) etat.copiesPerdues.push(idPiece(d));
+        }
         etat.ecritures.push(corps.data);
         etat.nuage = corps.data;
         return r.fulfill({ status: m === 'POST' ? 201 : 200, contentType: 'application/json',
@@ -112,8 +139,8 @@ async function telephone({ stockage, nuage, delai = 0, pieces = new Map() }) {
     if (sessionStorage.getItem('amorce')) return;
     sessionStorage.setItem('amorce', '1');
     for (const [k, v] of Object.entries(s)) localStorage.setItem(k, v);
-    localStorage.setItem(cle, sess);
-  }, [stockage, `sb-${REF}-auth-token`, JSON.stringify(session)]);
+    if (sess) localStorage.setItem(cle, sess);
+  }, [stockage, `sb-${REF}-auth-token`, connecte ? JSON.stringify(session) : null]);
   return { p, ctx, etat };
 }
 
@@ -246,6 +273,8 @@ console.log('F · les pièces sortent du voyage, partent au nuage, et restent af
   verifier('les deux pièces sont déposées dans le dossier du voyage', deposees.length === 2, [...dossier.keys()].join(', '));
   const src = await p.locator('.trip-card__cover-blur').first().getAttribute('src').catch(() => null);
   verifier('la photo de couverture s’affiche toujours', src === JPEG, (src || '(aucune)').slice(0, 40));
+  verifier('le nuage n’a jamais perdu une pièce avant de l’avoir dans son dossier',
+    !etat.copiesPerdues.length, `retirées avant dépôt : ${etat.copiesPerdues.join(', ')}`);
   nuageAllege = etat.nuage;
   await ctx.close();
 }
@@ -270,6 +299,74 @@ console.log('G · un autre téléphone rapatrie les pièces, et les garde sans r
   await p.locator('.trip-doc__ouvrir', { hasText: 'Billet de train' }).click(); await p.waitForTimeout(800);
   const ouverts = await p.evaluate(() => window.__ouverts);
   verifier('le billet s’ouvre sans réseau', ouverts.length === 1 && ouverts[0].startsWith('blob:'), JSON.stringify(ouverts));
+  await ctx.close();
+}
+
+// ── H et I : l'audit du 5 octobre 2026 ────────────────────────────────────────
+const attendre = async (p, condition, ms) => {
+  const fin = Date.now() + ms;
+  while (Date.now() < fin) {
+    if (await condition()) return true;
+    await p.waitForTimeout(250);
+  }
+  return condition();
+};
+
+console.log('H · le dépôt échoue : le nuage garde ses pièces en clair, puis les reçoit (A-061)');
+{
+  const { p, ctx, etat } = await telephone({ stockage: amorce(lourd), nuage: lourd, delai: 200, pieces: new Map() });
+  etat.stockageCoupe = true;
+  await p.goto(U + '/'); await p.waitForTimeout(5000);
+  const lourdes = /data:(image\/jpeg|application\/pdf);base64,/;
+  verifier('tant que le dépôt échoue, le nuage garde le billet et la photo en clair',
+    donneesDe(etat.nuage).size === 2, `${donneesDe(etat.nuage).size} donnée(s) sur 2`);
+  verifier('aucune écriture ne les lui a retirées', !etat.copiesPerdues.length, etat.copiesPerdues.join(', '));
+  const src = await p.locator('.trip-card__cover-blur').first().getAttribute('src').catch(() => null);
+  verifier('la photo s’affiche pendant ce temps', src === JPEG, (src || '(aucune)').slice(0, 40));
+  // Le réseau revient pour le dossier.
+  etat.stockageCoupe = false;
+  await p.evaluate(() => window.dispatchEvent(new Event('online')));
+  const allege = await attendre(p, () => etat.pieces.size === 2 && !lourdes.test(JSON.stringify(etat.nuage)), 8000);
+  verifier('le réseau revenu, les pièces sont déposées puis le nuage s’allège', allege,
+    `${etat.pieces.size} pièce(s) déposée(s), nuage ${lourdes.test(JSON.stringify(etat.nuage)) ? 'encore lourd' : 'allégé'}`);
+  verifier('dans cet ordre : rien n’a été retiré avant d’être déposé', !etat.copiesPerdues.length, etat.copiesPerdues.join(', '));
+  const stocke = await p.evaluate(() => localStorage.getItem('provo_trips'));
+  verifier('le téléphone aussi garde le voyage allégé', !lourdes.test(stocke) && /pj:[0-9a-f]{24}/.test(stocke),
+    `${stocke.length} caractères`);
+  await ctx.close();
+}
+
+console.log('I · la pièce arrive dans le dossier APRÈS l’ouverture : elle est redemandée seule (A-062)');
+{
+  const photo = `data:image/jpeg;base64,${octets(3000, 11).toString('base64')}`;
+  const id = idPiece(photo);
+  const voyage = { ...base, id: 'voyage-2', coverPhoto: `pj:${id}` };
+  const { p, ctx, etat } = await telephone({
+    stockage: { provo_trips: '[]', provo_settings: JSON.stringify(SETTINGS), provo_onboarded: '1' },
+    nuage: voyage, delai: 200, pieces: new Map(),
+  });
+  await p.goto(U + '/');
+  const demandee = await attendre(p, () => etat.lectures > 0, 6000);
+  verifier('la pièce absente est demandée une première fois', demandee, `${etat.lectures} lecture(s)`);
+  // L'autre téléphone finit son dépôt. Personne ne touche au voyage.
+  etat.pieces.set(`voyage-2/${id}`, { corps: octets(3000, 11), type: 'image/jpeg' });
+  const avant = etat.lectures;
+  const src = () => p.locator('.trip-card__cover-blur').first().getAttribute('src').catch(() => null);
+  const arrivee = await attendre(p, async () => (await src()) === photo, 9000);
+  verifier('elle arrive sans qu’on modifie le voyage', arrivee,
+    `${etat.lectures - avant} nouvelle(s) lecture(s), image ${((await src()) || '(aucune)').slice(0, 30)}`);
+  await ctx.close();
+}
+
+console.log('J · sans compte : les pièces sortent du voyage tout de suite');
+{
+  const { p, ctx } = await telephone({ stockage: amorce(lourd), nuage: null, connecte: false });
+  await p.goto(U + '/'); await p.waitForTimeout(3000);
+  const stocke = await p.evaluate(() => localStorage.getItem('provo_trips'));
+  verifier('le voyage gardé sur le téléphone est allégé',
+    !/data:(image\/jpeg|application\/pdf);base64,/.test(stocke) && /pj:[0-9a-f]{24}/.test(stocke), `${stocke.length} caractères`);
+  const src = await p.locator('.trip-card__cover-blur').first().getAttribute('src').catch(() => null);
+  verifier('et la photo s’affiche', src === JPEG, (src || '(aucune)').slice(0, 40));
   await ctx.close();
 }
 

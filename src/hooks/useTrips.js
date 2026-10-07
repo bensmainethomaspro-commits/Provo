@@ -136,7 +136,7 @@ export function useTrips() {
   const tripsRef = useRef(trips);
   useEffect(() => { tripsRef.current = trips; }, [trips]);
   // Les pièces jointes vivent à côté des voyages (utils/pieces.js).
-  usePiecesSync({ trips, setTrips, tripsRef, userId, remoteIdsRef, pretRef });
+  usePiecesSync({ trips, setTrips, tripsRef, userId, authLoading, remoteIdsRef, pretRef });
 
   // ── Ce qui attend un envoi ────────────────────────────────────────────────
   const persisterAttente = useCallback(() => {

@@ -90,12 +90,19 @@ export async function empreinte(texte) {
 export async function extrairePieces(voyage) {
   const donnees = [...new Set(chaines(voyage, estDonneeLourde))];
   if (!donnees.length) return { voyage, pieces: [] };
-  const ids = new Map();
-  for (const d of donnees) ids.set(d, await empreinte(d));
-  return {
-    voyage: transformerChaines(voyage, s => (ids.has(s) ? PREFIXE + ids.get(s) : s)),
-    pieces: donnees.map(d => ({ id: ids.get(d), data: d })),
-  };
+  const pieces = [];
+  for (const d of donnees) pieces.push({ id: await empreinte(d), data: d });
+  return { voyage: enReferences(voyage, pieces), pieces };
+}
+
+/**
+ * Le voyage où CES pièces-là cèdent la place à leur référence ; les autres
+ * données lourdes restent en clair. Sert à ne sortir d'un voyage que ce que
+ * le nuage a déjà dans son dossier (audit A-061).
+ */
+export function enReferences(voyage, pieces) {
+  const refs = new Map(pieces.map(p => [p.data, PREFIXE + p.id]));
+  return refs.size ? transformerChaines(voyage, s => refs.get(s) ?? s) : voyage;
 }
 
 /**
