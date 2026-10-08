@@ -199,7 +199,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     d'un montant en euros.
   · **Partage** : un seul « Partager », deux gestes, « Inviter » (le vrai
     lien d'invitation, sorti des Paramètres) et « Envoyer une copie ».
-    `shared_trips` refermé (migration `20260930_partage_securise.sql`) ; un
+    `shared_trips` refermé (migration `20260930125445_partage_securise.sql`) ; un
     lien de copie importe un voyage à soi et ne remplace plus rien.
     `profiles` a `display_name`, pas `name` : les prénoms ne se publiaient
     jamais.
@@ -238,7 +238,7 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   · **Pièces jointes à côté du voyage** (`utils/pieces.js`) : IndexedDB sur
     le téléphone, référence `pj:<empreinte SHA-256 du contenu>` dans le
     voyage, copie dans le dossier privé Supabase Storage
-    `pieces/<voyage>/<empreinte>` (migration `20260930_pieces_jointes.sql`,
+    `pieces/<voyage>/<empreinte>` (migration `20260930151113_pieces_jointes.sql`,
     appliquée ; propriétaire et membres seulement). Tout est rapatrié
     aussitôt sur chaque téléphone. Seuils : JPEG/PNG/WebP/GIF/PDF de plus
     de 2 ko ; un SVG reste dans le voyage. « Envoyer une copie » ne
@@ -249,6 +249,11 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     son dépôt dans le dossier (elle reste en clair d'ici là) ; ce qui n'a
     pas pu être échangé est retenté seul (5 s, 15 s, 45 s, 2 min, puis
     5 min), et tout de suite au retour du réseau ou au premier plan.
+  · **Migrations alignées sur la base** (8 octobre, A-075) : chaque fichier
+    de `supabase/migrations/` porte la version à 14 chiffres que la base a
+    enregistrée (`verif-migrations` le tient). Sans ça, le contrôle
+    « Supabase Preview » échoue sur `main`, et un fichier inconnu de la base
+    serait appliqué en production par l'intégration GitHub.
   · **Budget de 20 s** pour tout un appel d'`extract-place` et
     d'`enrich-place` (`_shared/budget.ts`, `AsyncLocalStorage`) ; la sonde
     de santé dit `budget: true` s'il fonctionne chez l'hébergeur, et le

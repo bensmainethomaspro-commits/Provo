@@ -282,7 +282,7 @@ Supabase que l'application sœur JobWatch, dont les tables sont préfixées
 `jobwatch_`.
 
 `push_subscriptions` est la **première table dont le SQL vit dans le dépôt**
-(`supabase/migrations/20260806_push_subscriptions.sql`). Vérifié le 2026-08-10 :
+(`supabase/migrations/20260806085824_push_subscriptions.sql`). Vérifié le 2026-08-10 :
 la table déployée porte bien les quatre politiques du fichier, la clé est
 l'`endpoint`, et `anon` comme `authenticated` ont les quatre droits — seules
 les politiques protègent. La politique UPDATE n'a pas de `WITH CHECK`, et
@@ -357,7 +357,7 @@ fusion n'y voit aucun conflit. Trois endroits à connaître avant d'y toucher :
   par le client Supabase. Depuis le 2026-10-07, ce qui n'a pas pu être
   échangé est retenté seul : 5 s, 15 s, 45 s, 2 min, puis toutes les 5 min,
   et tout de suite au retour du réseau ou au premier plan (A-062).
-- `supabase/migrations/20260930_pieces_jointes.sql` : dossier `pieces` privé,
+- `supabase/migrations/20260930151113_pieces_jointes.sql` : dossier `pieces` privé,
   `select` et `insert` pour `authenticated` filtrés par `est_du_voyage()`.
   **Ni `update` ni `delete`, volontairement** : une pièce est identifiée par
   son contenu, elle ne change jamais, et ouvrir l'effacement donnerait le
@@ -389,6 +389,26 @@ Trois propriétés que l'ordre du code garantit, et qu'il ne faut pas casser :
 Enfin : **au 2026-10-05 cette chaîne n'avait jamais tourné en production**
 (zéro objet dans `pieces`, aucune référence `pj:` dans les cinq voyages).
 Tout constat à son sujet est lu sur le code, pas observé à l'usage.
+
+## Les migrations portent la version que la base a enregistrée — depuis le 2026-10-08
+
+L'intégration GitHub de Supabase compare, à chaque commit sur `main`,
+l'historique de la base (`supabase_migrations.schema_migrations`) aux fichiers
+de `supabase/migrations/` (contrôle « Supabase Preview »). Une version de la
+base sans fichier du même numéro, et le contrôle échoue ; un fichier sans
+version dans la base, et l'intégration l'APPLIQUE en production si l'option
+« Deploy to production » est active (non vérifiable d'ici : réglage du tableau
+de bord). D'après la documentation Supabase, ce déploiement ne redéploie que
+les fonctions Edge déclarées dans `config.toml`, et le dépôt n'en a pas.
+
+Règle tenue par `scripts/verif-migrations.mjs` : un fichier par migration
+appliquée, nommé `<14 chiffres de la version enregistrée>_<nom>.sql`. Une
+migration appliquée par le MCP (`apply_migration`) reçoit une version à la
+seconde : la lire (`list_migrations`) et nommer le fichier avec. Une
+migration posée à la main (éditeur SQL) n'entre pas dans l'historique : l'y
+inscrire, comme `push_subscriptions` le 2026-10-08 (A-075). Les deux
+migrations du 2026-09-30 sont rangées avec leurs commentaires ; la base a
+exécuté le même SQL sans eux.
 
 ## Le budget de temps des fonctions Edge repose sur AsyncLocalStorage
 
@@ -501,7 +521,7 @@ dépôt n'en garde aucune trace. C'est le principal angle mort du projet.
 | `trips` | `owner_all` (ALL, `owner_id = auth.uid()`), `member_select` + `member_update` (EXISTS dans `trip_members`) |
 | `trip_members` | `owner_manage_members` (ALL, `is_trip_owner`), `join_by_invite` (INSERT, `user_id = auth.uid()`), `member_read_own` (SELECT, ses propres lignes) |
 | `profiles` | `own_profile_all`, plus deux SELECT en `USING (true)` |
-| `shared_trips` | `public_read`, `public_insert`, `public_update`, tous en `true` **(refermé le 2026-09-30, A-001 : insertion par un compte à son nom, lecture d'une copie par `lire_voyage_partage(share_id)` seulement ; voir `supabase/migrations/20260930_partage_securise.sql`)** |
+| `shared_trips` | `public_read`, `public_insert`, `public_update`, tous en `true` **(refermé le 2026-09-30, A-001 : insertion par un compte à son nom, lecture d'une copie par `lire_voyage_partage(share_id)` seulement ; voir `supabase/migrations/20260930125445_partage_securise.sql`)** |
 
 `anon` et `authenticated` ont les droits SELECT/INSERT/UPDATE/DELETE sur les
 quatre tables : seules les politiques RLS protègent quoi que ce soit.
