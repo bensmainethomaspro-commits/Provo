@@ -12,10 +12,13 @@ name: Installer les rappels
 # ne transite ni par une conversation, ni par le dépôt, ni par le résumé du job.
 #
 # À lancer une fois : Actions › Installer les rappels › Run workflow.
-# Relancer est sans danger : la table est créée « si elle n'existe pas », et une
-# nouvelle paire de clés remplace proprement l'ancienne — les abonnements déjà
-# pris devront simplement être repris (l'app le fera au prochain passage sur
-# l'interrupteur).
+# Relancer est sans danger : la base est interrogée d'abord, et la table n'est
+# créée que si elle manque (jusqu'au 8 octobre 2026, la migration était
+# rejouée à chaque fois et ses `create policy` faisaient échouer le workflow
+# dès la première étape). Une nouvelle paire de clés remplace proprement
+# l'ancienne : les abonnements déjà pris devront simplement être repris (l'app
+# le fera au prochain passage sur l'interrupteur). Décocher
+# « Regénérer les clés » laisse les clés et les abonnements tels quels.
 
 on:
   workflow_dispatch:
@@ -46,23 +49,63 @@ jobs:
             exit 1
           fi
 
-      - name: Créer la table des abonnements
+      - name: Créer la table des abonnements (si elle n'existe pas)
+        id: table
         env:
           JETON: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          MIGRATION: supabase/migrations/20260806085824_push_subscriptions.sql
         run: |
           # L'API de gestion exécute du SQL sans avoir besoin du mot de passe de
           # la base : c'est le même jeton que pour déployer les fonctions.
-          SQL=$(python3 -c "import json,sys; print(json.dumps({'query': open('supabase/migrations/20260806085824_push_subscriptions.sql').read()}))")
-          code=$(curl -s -o /tmp/sql.json -w '%{http_code}' \
-            -X POST "https://api.supabase.com/v1/projects/$PROJET/database/query" \
-            -H "Authorization: Bearer $JETON" \
-            -H "Content-Type: application/json" \
-            --max-time 90 -d "$SQL")
-          echo "HTTP $code"
-          cat /tmp/sql.json; echo
+          requete() {
+            python3 -c "import json,sys; print(json.dumps({'query': sys.stdin.read()}))" > /tmp/corps.json
+            curl -s -o /tmp/sql.json -w '%{http_code}' \
+              -X POST "https://api.supabase.com/v1/projects/$PROJET/database/query" \
+              -H "Authorization: Bearer $JETON" \
+              -H "Content-Type: application/json" \
+              --max-time 90 --data @/tmp/corps.json
+          }
+
+          # La migration ne se rejoue pas : ses `create policy` échoueraient
+          # sur une table déjà en place, et le workflow s'arrêtait là, avant
+          # même les clés. On demande d'abord à la base.
+          code=$(echo "select to_regclass('public.push_subscriptions') is not null as existe" | requete)
+          echo "HTTP $code"; cat /tmp/sql.json; echo
+          if [ "$code" -ge 300 ]; then
+            echo "::error::Impossible de lire la base."
+            exit 1
+          fi
+          if python3 -c "import json,sys; sys.exit(0 if json.load(open('/tmp/sql.json'))[0]['existe'] else 1)"; then
+            echo "La table existe déjà : rien à créer."
+            echo "etat=déjà là" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          code=$(requete < "$MIGRATION")
+          echo "HTTP $code"; cat /tmp/sql.json; echo
           if [ "$code" -ge 300 ]; then
             echo "::error::La création de la table a échoué."
             exit 1
+          fi
+          echo "etat=créée" >> "$GITHUB_OUTPUT"
+
+          # Puis l'inscrire dans l'historique des migrations, sous la version
+          # de son fichier : sans elle, l'intégration GitHub de Supabase ne
+          # retrouve pas son fichier dans la base et rejoue la migration
+          # (audit A-075, `scripts/verif-migrations.mjs`).
+          code=$(python3 - "$MIGRATION" <<'PY' | requete
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          version, nom = p.stem.split('_', 1)
+          sql = p.read_text().replace("'", "''")
+          print(f"insert into supabase_migrations.schema_migrations (version, name, statements) "
+                f"select '{version}', '{nom}', array['{sql}'] "
+                f"where not exists (select 1 from supabase_migrations.schema_migrations where version = '{version}')")
+          PY
+          )
+          echo "HTTP $code"; cat /tmp/sql.json; echo
+          if [ "$code" -ge 300 ]; then
+            echo "::warning::Table créée, mais pas inscrite dans l'historique des migrations : l'inscrire à la main (voir .audit/contexte.md)."
           fi
 
       - name: Fabriquer les clés et poser la privée dans Supabase
@@ -145,13 +188,20 @@ jobs:
             || echo "::notice::PR déjà ouverte."
 
       - name: Récapitulatif
+        env:
+          TABLE: ${{ steps.table.outputs.etat }}
+          CLES: ${{ inputs.renouveler_les_cles }}
         run: |
           {
             echo "## Rappels installés"
             echo
-            echo "- Table \`push_subscriptions\` créée (ou déjà là)."
-            echo "- Clé privée VAPID déposée dans les secrets Supabase — elle n'apparaît nulle part ailleurs."
-            echo "- Clé publique proposée en PR sur \`src/lib/vapid.js\` — \`main\` est protégée. Fusionner la PR met les rappels en service."
+            echo "- Table \`push_subscriptions\` : ${TABLE}."
+            if [ "$CLES" = "true" ]; then
+              echo "- Clé privée VAPID déposée dans les secrets Supabase : elle n'apparaît nulle part ailleurs."
+              echo "- Clé publique proposée en PR sur \`src/lib/vapid.js\` (\`main\` est protégée). Fusionner la PR met les rappels en service."
+            else
+              echo "- Clés VAPID inchangées (non demandé) : les abonnements existants restent valables."
+            fi
             echo
             echo "Il ne reste qu'à ouvrir Provo **depuis l'écran d'accueil** de l'iPhone,"
             echo "puis Mon compte → Préférences → « Rappels du voyage »."
