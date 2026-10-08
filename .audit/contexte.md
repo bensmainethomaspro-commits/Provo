@@ -390,7 +390,7 @@ Enfin : **au 2026-10-05 cette chaîne n'avait jamais tourné en production**
 (zéro objet dans `pieces`, aucune référence `pj:` dans les cinq voyages).
 Tout constat à son sujet est lu sur le code, pas observé à l'usage.
 
-## Les migrations portent la version que la base a enregistrée — depuis le 2026-10-08
+## Les migrations portent la version que la base a enregistrée (depuis le 2026-10-08)
 
 L'intégration GitHub de Supabase compare, à chaque commit sur `main`,
 l'historique de la base (`supabase_migrations.schema_migrations`) aux fichiers
