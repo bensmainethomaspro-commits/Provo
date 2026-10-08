@@ -406,7 +406,9 @@ appliquée, nommé `<14 chiffres de la version enregistrée>_<nom>.sql`. Une
 migration appliquée par le MCP (`apply_migration`) reçoit une version à la
 seconde : la lire (`list_migrations`) et nommer le fichier avec. Une
 migration posée à la main (éditeur SQL) n'entre pas dans l'historique : l'y
-inscrire, comme `push_subscriptions` le 2026-10-08 (A-075). Les deux
+inscrire, comme `push_subscriptions` le 2026-10-08 (A-075). Le workflow
+`setup-push.yml` suit la même règle : il ne crée la table que si elle
+manque, et l'inscrit alors dans l'historique (A-076). Les deux
 migrations du 2026-09-30 sont rangées avec leurs commentaires ; la base a
 exécuté le même SQL sans eux.
 
