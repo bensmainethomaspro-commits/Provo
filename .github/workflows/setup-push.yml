@@ -52,7 +52,7 @@ jobs:
         run: |
           # L'API de gestion exécute du SQL sans avoir besoin du mot de passe de
           # la base : c'est le même jeton que pour déployer les fonctions.
-          SQL=$(python3 -c "import json,sys; print(json.dumps({'query': open('supabase/migrations/20260806_push_subscriptions.sql').read()}))")
+          SQL=$(python3 -c "import json,sys; print(json.dumps({'query': open('supabase/migrations/20260806085824_push_subscriptions.sql').read()}))")
           code=$(curl -s -o /tmp/sql.json -w '%{http_code}' \
             -X POST "https://api.supabase.com/v1/projects/$PROJET/database/query" \
             -H "Authorization: Bearer $JETON" \
