@@ -22,6 +22,13 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
     () => (trip?.accommodationLat != null ? 'ok' : null)
   );
 
+  // Retirer quelqu'un du voyage est réservé au propriétaire : la base le refuse
+  // aux autres (politique `owner_manage_members`). Depuis que chacun voit toute
+  // la liste, montrer la croix à un collaborateur promettrait un geste sans
+  // effet — et celui d'avant déliait quand même le voyageur de son compte.
+  const jeSuisProprietaire = (tripMembers || [])
+    .some(m => m.userId === currentUserId && m.role === 'owner');
+
   // Simple gestionnaire d'événement, appelé quand on quitte le champ : rien à
   // mémoriser, et le mémoriser obligerait à lister tout `trip` en dépendance.
   const localiser = async (valeur) => {
@@ -107,7 +114,7 @@ export default function TripSettingsSheet({ trip, isOpen, onClose, onUpdateTrip,
                             }
                           </div>
                         </div>
-                        {!isCurrentUser && !isOwnerRole && onRemoveMember && (
+                        {!isCurrentUser && !isOwnerRole && jeSuisProprietaire && onRemoveMember && (
                           <button
                             className="member-item__remove"
                             onClick={() => onRemoveMember(member.userId)}

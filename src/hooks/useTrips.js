@@ -1132,12 +1132,20 @@ export function useTrips() {
   }, [userId]);
 
   const removeTripMember = useCallback(async (tripId, memberUserId) => {
-    const { error } = await supabase
+    // `select()` pour savoir ce qui a VRAIMENT été retiré. Une suppression que
+    // les politiques écartent ne lève aucune erreur : elle ne retire rien, et
+    // l'appelant croyait avoir réussi — puis déliait le voyageur de son compte
+    // pour un membre toujours là. Retirer quelqu'un est réservé au
+    // propriétaire (politique `owner_manage_members`).
+    const { data, error } = await supabase
       .from('trip_members')
       .delete()
       .eq('trip_id', tripId)
-      .eq('user_id', memberUserId);
-    return error ? { error: error.message } : { success: true };
+      .eq('user_id', memberUserId)
+      .select('user_id');
+    if (error) return { error: error.message };
+    if (!data?.length) return { error: 'Seul le propriétaire du voyage peut retirer quelqu\'un.' };
+    return { success: true };
   }, []);
 
   const updateProfile = useCallback(async ({ name, emoji }) => {

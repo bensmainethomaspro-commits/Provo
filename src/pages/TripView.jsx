@@ -411,7 +411,11 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   };
 
   const handleRemoveMember = async (memberUserId) => {
-    await removeTripMember(tripId, memberUserId);
+    const retire = await removeTripMember(tripId, memberUserId);
+    // Rien retiré : surtout ne pas délier le voyageur de son compte, il est
+    // toujours du voyage. La croix n'est offerte qu'au propriétaire, donc on
+    // n'arrive ici qu'en cas de refus inattendu.
+    if (retire?.error) return;
     const travelers = trip.tripTravelers || [];
     if (travelers.some(t => t.profileId === memberUserId)) {
       updateTrip(tripId, {

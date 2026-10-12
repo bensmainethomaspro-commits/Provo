@@ -596,6 +596,60 @@ Volumétrie au 2026-07-29 : `trips` 4, `profiles` 3, `shared_trips` 2,
 `trip_members` 0. La collaboration par code d'invitation n'a donc jamais servi ;
 le partage par `shared_trips` (bouton « Partager ») si.
 
+## Qui voit les membres d'un voyage (relevé le 2026-10-12)
+
+Volumétrie inchangée sur ce point : `trips` 5, `profiles` 3, `auth.users` 3,
+**`trip_members` toujours 0**. Trois mois plus tard, la collaboration par code
+d'invitation n'a toujours jamais tourné en production. Tout ce qui la concerne
+est donc du code jamais exécuté pour de vrai : le lire ne suffit pas, il faut
+l'essayer.
+
+La ligne du 2026-07-29 ci-dessus (« `member_read_own` ne laisse voir à un
+collaborateur que sa propre ligne ») **n'est plus vraie** : la migration
+`20261012192359_membres_du_voyage_visibles` ajoute `membre_lit_les_membres`
+(SELECT, `to authenticated`, `est_du_voyage(trip_id)`), et chacun voit donc les
+gens de ses propres voyages — rien d'autre (A-082).
+
+Deux pièges rencontrés en la posant, à ne pas redécouvrir :
+
+- **`anon` qui lit `trip_members` ne reçoit pas zéro ligne : il reçoit une
+  erreur.** `owner_manage_members` est `FOR ALL`, donc évaluée aussi en SELECT,
+  et elle appelle `is_trip_owner`, dont l'exécution n'est pas donnée à `anon`
+  (« permission denied for function is_trip_owner »). C'est antérieur à cette
+  migration, et sans conséquence visible : le client ne lit cette table que
+  connecté, et `fetchTripMembers` avale l'erreur. Une politique ajoutée ici se
+  limite à `to authenticated` pour ne pas en ajouter une deuxième.
+- **`drop policy` sur `trip_members` fait expirer l'outil MCP** (60 s), même
+  quand la politique n'existe pas et qu'il n'y a aucun verrou en attente
+  (`pg_stat_activity` vide). Rien n'est appliqué dans ce cas — vérifié trois
+  fois. D'où la forme de la migration : un `do $$ … if not exists … $$`, qui ne
+  supprime rien et se rejoue sans danger (PostgreSQL n'a pas
+  `create policy if not exists` — c'est aussi la leçon d'A-076).
+
+### Essayer une politique RLS sans deuxième compte, et sans rien laisser
+
+Le banc d'essai tourne déconnecté : aucun parcours ne peut exercer ces
+politiques. On les mesure donc directement sur la base, en se faisant passer
+pour chaque compte, dans un bloc qui **s'annule toujours** — le `raise
+exception` final est le rollback, et il porte le résultat :
+
+```sql
+do $$
+declare collab int;
+begin
+  insert into trip_members(trip_id, user_id, role) values (…);  -- posé pour l'essai
+  execute 'set local role authenticated';        -- `postgres` contourne RLS (rolbypassrls)
+  perform set_config('request.jwt.claims', json_build_object('sub', <uuid>)::text, true);
+  select count(*) into collab from trip_members where trip_id = …;
+  execute 'reset role';
+  raise exception 'RESULTAT %', collab;          -- annule l'insertion ET l'essai
+end $$;
+```
+
+Toujours mesurer les quatre cas : le collaborateur, le propriétaire, **un
+compte étranger au voyage** (il doit voir 0) et ce que le collaborateur voit de
+la table ENTIÈRE (il ne doit rien voir hors de ses voyages).
+
 ## Budget de temps de la fonction Edge — relevé le 2026-08-03
 
 Chaque appel externe porte son propre `withTimeout`, mais rien ne borne la
