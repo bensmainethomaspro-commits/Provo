@@ -23,7 +23,7 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, repasEnAttente, destinationUtile, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
+import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
@@ -543,7 +543,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const start = new Date(trip.startDate + 'T00:00:00');
     const end = new Date(trip.endDate + 'T00:00:00');
     if (isPast || start > now || now > end) return null;
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const todayStr = dateLocale(now);
     return trip.days.find(d => d.date === todayStr) || null;
   })();
 
@@ -565,7 +565,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const start = new Date(trip.startDate + 'T00:00:00');
     const diff = Math.round((start - now) / 86400000);
     const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
-    const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
+    const nextStr = dateLocale(nextDay);
     const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
     // Le brief de demain occupait le haut du Planning TOUTE la journée : au
     // jour 1 à 11 h, le premier bloc de l'écran qui doit répondre « qu'est-ce
@@ -978,10 +978,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
      Ces activités-là ne comptent donc NI comme dépensé (on ne sait pas ce qui
      a réellement été payé) NI comme à venir. Ce qui a vraiment été payé est
      dans l'onglet Dépenses ; c'est lui qui fait foi. */
-  const aujourdhui = (() => {
-    const n = new Date(); n.setHours(0, 0, 0, 0);
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-  })();
+  const aujourdhui = dateLocale();
   const aVenir = trip.days
     .filter(d => !d.date || d.date >= aujourdhui)
     .flatMap(d => d.activities)

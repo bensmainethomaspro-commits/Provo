@@ -1762,6 +1762,11 @@ export function formatMontantExact(valeur, devise = 'EUR') {
  *
  * Écrite une fois, ici, et importée partout : la même fonction vivait en privé
  * dans `useTrips`, hors de portée des écrans qui en avaient aussi besoin.
+ *
+ * Elle est désormais la seule : six écrans en gardaient une copie en ligne
+ * (Dashboard, TripView trois fois, TimelineView, NewTripModal), toutes justes
+ * mais aucune couverte par `scripts/verif-date-locale.mjs`, qui ne découpe que
+ * ce bloc-ci (audit A-078). Ne pas en réécrire une septième : importer.
  */
 export function dateLocale(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

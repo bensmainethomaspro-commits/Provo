@@ -4,13 +4,7 @@ import { X, ChevronDown, Camera } from 'lucide-react';
 import Icone from './Icone';
 import ImagePiece from './ImagePiece';
 import { enPiece } from '../utils/pieces';
-import { TRIP_EMOJIS, COULEURS_VOYAGE, reduireImage } from '../utils/helpers';
-
-// Local date (not UTC) — toISOString would give yesterday between midnight and ~2am in France.
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+import { TRIP_EMOJIS, COULEURS_VOYAGE, reduireImage, dateLocale } from '../utils/helpers';
 
 // « Lisbonne, Portugal » → « Lisbonne » : le nom par défaut d'un voyage.
 const nomDepuis = (destination) => (destination || '').split(',')[0].trim();
@@ -32,7 +26,7 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
     ? { name: editTrip.name, destination: editTrip.destination || '', emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#35A7DD' }
-    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
+    : { name: '', destination: '', emoji: '✈️', startDate: dateLocale(), endDate: dateLocale(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
   );
   const [error, setError] = useState('');
   const [plusOuvert, setPlusOuvert] = useState(false);
