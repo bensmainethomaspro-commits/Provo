@@ -412,6 +412,53 @@ manque, et l'inscrit alors dans l'historique (A-076). Les deux
 migrations du 2026-09-30 sont rangées avec leurs commentaires ; la base a
 exécuté le même SQL sans eux.
 
+## Comparer le dépôt à la base, sans re-délibérer (relevé le 2026-10-12)
+
+Les six fichiers de `supabase/migrations/` sont bien le SQL que la base a
+exécuté. Méthode, à rejouer telle quelle au prochain passage plutôt que de
+relire le SQL à l'œil : empreinte md5 des deux côtés, après retrait des
+commentaires `--`, écrasement des blancs et passage en minuscules.
+
+```sql
+select version,
+       md5(btrim(btrim(lower(regexp_replace(regexp_replace(
+         array_to_string(statements, ';'), '--[^\n]*', '', 'g'),
+         '\s+', ' ', 'g'))), ' ;'))
+from supabase_migrations.schema_migrations order by version;
+```
+
+Côté dépôt, la même normalisation sur chaque fichier. Au 2026-10-12 les six
+concordent. Quatre concordent même octet pour octet : elles ont été recopiées
+depuis la base le 2026-10-08. Les deux du 2026-09-30 n'ont que leurs
+commentaires français en écart.
+
+## Ce que l'intégration continue lance vraiment (relevé le 2026-10-12)
+
+`.github/workflows/verif.yml`, deux travaux : `npm run verif` (22 suites hors
+réseau, dette ESLint plafonnée comprise) et, dans un vrai navigateur,
+`npm run parcours` puis `npm run verif-demarrage`.
+
+**Hors de la CI, donc lancé par personne : `verif-ui` et `verif-carte`.**
+Pour `verif-ui`, c'est assumé et écrit dans le workflow (il rougit par
+construction sur 52 marqueurs Leaflet de 32 px). Pour `verif-carte`, non :
+il est simplement passé entre les mailles, et il échoue sur `main` depuis
+une date inconnue (A-081). Avant de croire qu'une suite garde quelque chose,
+vérifier qu'un travail de `verif.yml` la nomme.
+
+## Une seule réduction d'image, une seule date du jour, un seul modèle de repas
+
+Trois fonctions qui existaient en plusieurs exemplaires, ramenées à une et
+dont la copie est un piège connu :
+
+- `reduireImage(fichier, largeurMax, qualite)` (`helpers.js`) : la seule qui
+  REJETTE sur un fichier illisible. Les copies privées de `NewTripModal` et
+  `AddActivitySheet` ne se terminaient jamais (A-077). Ne pas en réécrire.
+- `dateLocale(d)` (`helpers.js`) : la seule que `verif-date-locale.mjs`
+  vérifie, parce qu'il découpe ce bloc par son nom (A-078, A-028).
+- `REPAS_POSES` (`helpers.js`) : le modèle des deux repas posés d'office, lu
+  par `useTrips` qui les pose ET par `repasEnAttente` qui les reconnaît pour
+  ne pas les compter comme des activités (A-079, A-070).
+
 ## Le budget de temps des fonctions Edge repose sur AsyncLocalStorage
 
 `supabase/functions/_shared/budget.ts` (PR #99) borne TOUT un appel à 20 s,

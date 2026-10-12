@@ -4,34 +4,7 @@ import { X, ChevronDown, Camera } from 'lucide-react';
 import Icone from './Icone';
 import ImagePiece from './ImagePiece';
 import { enPiece } from '../utils/pieces';
-import { TRIP_EMOJIS, COULEURS_VOYAGE } from '../utils/helpers';
-
-// Local date (not UTC) — toISOString would give yesterday between midnight and ~2am in France.
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
-
-function compressCoverPhoto(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1200;
-        let w = img.width, h = img.height;
-        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
+import { TRIP_EMOJIS, COULEURS_VOYAGE, reduireImage, dateLocale } from '../utils/helpers';
 
 // « Lisbonne, Portugal » → « Lisbonne » : le nom par défaut d'un voyage.
 const nomDepuis = (destination) => (destination || '').split(',')[0].trim();
@@ -53,7 +26,7 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
   const isEdit = !!editTrip;
   const [form, setForm] = useState(editTrip
     ? { name: editTrip.name, destination: editTrip.destination || '', emoji: editTrip.emoji || '✈️', startDate: editTrip.startDate, endDate: editTrip.endDate, initialBudget: editTrip.initialBudget || '', coverPhoto: editTrip.coverPhoto || null, travelers: editTrip.travelers || 1, color: editTrip.color || '#35A7DD' }
-    : { name: '', destination: '', emoji: '✈️', startDate: today(), endDate: today(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
+    : { name: '', destination: '', emoji: '✈️', startDate: dateLocale(), endDate: dateLocale(), initialBudget: '', coverPhoto: null, travelers: 1, color: '#35A7DD' }
   );
   const [error, setError] = useState('');
   const [plusOuvert, setPlusOuvert] = useState(false);
@@ -62,11 +35,20 @@ export default function NewTripModal({ onClose, onCreate, editTrip }) {
 
   const handleCoverPhoto = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    const compressed = await compressCoverPhoto(file);
-    // Rangée à part tout de suite (utils/pieces.js) : le voyage ne garde qu'une référence.
-    set('coverPhoto', await enPiece(compressed));
+    // Vidé tout de suite : sinon rechoisir LE MÊME fichier après un échec ne
+    // déclenche aucun changement, et le bouton paraît mort.
     e.target.value = '';
+    if (!file) return;
+    try {
+      // `reduireImage` (helpers.js) rejette sur un fichier que le navigateur ne
+      // sait pas décoder ; la réduction recopiée ici ne se terminait jamais, et
+      // « Choisir une photo » ne faisait plus rien, sans un mot (audit A-077).
+      const reduite = await reduireImage(file, 1200, 0.8);
+      // Rangée à part tout de suite (utils/pieces.js) : le voyage ne garde qu'une référence.
+      set('coverPhoto', await enPiece(reduite));
+    } catch {
+      setError("Cette photo n'a pas pu être lue. Essaie une autre image.");
+    }
   };
 
   const handleSubmit = (e) => {
