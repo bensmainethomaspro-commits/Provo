@@ -436,14 +436,21 @@ commentaires français en écart.
 
 `.github/workflows/verif.yml`, deux travaux : `npm run verif` (22 suites hors
 réseau, dette ESLint plafonnée comprise) et, dans un vrai navigateur,
-`npm run parcours` puis `npm run verif-demarrage`.
+`npm run parcours`, `npm run verif-demarrage` puis `npm run verif-carte`.
 
-**Hors de la CI, donc lancé par personne : `verif-ui` et `verif-carte`.**
-Pour `verif-ui`, c'est assumé et écrit dans le workflow (il rougit par
-construction sur 52 marqueurs Leaflet de 32 px). Pour `verif-carte`, non :
-il est simplement passé entre les mailles, et il échoue sur `main` depuis
-une date inconnue (A-081). Avant de croire qu'une suite garde quelque chose,
-vérifier qu'un travail de `verif.yml` la nomme.
+**Hors de la CI, donc lancé par personne : `verif-ui`.** C'est assumé et écrit
+dans le workflow (il rougit par construction sur 52 marqueurs Leaflet de
+32 px). `verif-carte` était dans le même cas sans que ce soit voulu, et il
+échouait — sur `main` aussi (A-081). Avant de croire qu'une suite garde
+quelque chose, vérifier qu'un travail de `verif.yml` la nomme.
+
+**Et vérifier à quelle HEURE elle a été lancée.** `verif-carte` passait en fin
+d'après-midi et échouait le reste du temps : piocher depuis la carte ouvre la
+feuille « À savoir » tant qu'il reste de la journée devant soi, et rien du tout
+une fois la journée finie. Une suite qui touche à ce qui dépend du moment
+(pioche, brief de demain, temps restant, « Aujourd'hui ») ne prouve rien d'un
+seul passage. `PROVO_HEURE=02:07 npm run verif-carte` rejoue une heure précise,
+et la CI lance cette suite deux fois pour cette raison.
 
 ## Une seule réduction d'image, une seule date du jour, un seul modèle de repas
 
