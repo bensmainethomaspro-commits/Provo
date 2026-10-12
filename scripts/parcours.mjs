@@ -826,10 +826,26 @@ const PARCOURS = [
       // référence, et il s'ouvre quand même sans réseau (ce parcours n'en a pas).
       t.verifier('le voyage ne garde que sa référence, pas le fichier',
         /^pj:[0-9a-f]{24}$/.test(String(v.documents?.[0]?.data || '')), String(v.documents?.[0]?.data || '').slice(0, 40));
-      await t.p.evaluate(() => { window.__ouverts = []; window.open = (u) => { window.__ouverts.push(String(u)); return null; }; });
+      // Le lecteur du téléphone est simulé : on veut savoir ce qu'on lui passe,
+      // et ce que l'écran dit quand il refuse d'ouvrir la fenêtre.
+      await t.p.evaluate(() => {
+        window.__ouverts = [];
+        window.__refuser = false;
+        window.open = (u) => { window.__ouverts.push(String(u)); return window.__refuser ? null : { opener: {} }; };
+      });
       await t.clic('.trip-doc__ouvrir', { texte: 'billet-train', delai: 700 });
       const ouverts = await t.p.evaluate(() => window.__ouverts);
       t.verifier('il s’ouvre sans réseau', ouverts.length === 1 && ouverts[0].startsWith('blob:'), JSON.stringify(ouverts));
+      t.verifier('et rien ne vient se plaindre par-dessus', !(await t.visible('.trip-docs__erreur')));
+      // Fenêtre refusée : le billet EST sur le téléphone, et l'écran doit le
+      // dire autrement que « il n'est pas encore arrivé ». Il ne disait rien du
+      // tout — `ouvrirPiece` rendait `true` dans les deux cas (audit A-080).
+      await t.p.evaluate(() => { window.__refuser = true; });
+      await t.clic('.trip-doc__ouvrir', { texte: 'billet-train', delai: 700 });
+      const refus = await t.texte('.trip-docs__erreur');
+      t.verifier('une fenêtre refusée le dit', /ton navigateur a refusé/i.test(refus), refus || '(rien)');
+      t.verifier('… sans prétendre que le billet manque',
+        !!refus && !/pas encore sur ce téléphone/i.test(refus), refus || '(rien)');
       await t.clic('.trip-doc__retirer', { delai: 500 });
       t.verifier('et il se retire', ((await t.voyage()).documents || []).length === 0);
     } },

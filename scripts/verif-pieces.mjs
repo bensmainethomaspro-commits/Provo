@@ -10,7 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import {
-  extrairePieces, enReferences, aDesDonnees, refsDe, estRef, pourUneCopie, transformerChaines, PREFIXE,
+  extrairePieces, enReferences, aDesDonnees, refsDe, estRef, pourUneCopie, transformerChaines, messagePiece, PREFIXE,
 } from '../src/utils/pieces.js';
 
 const src = readFileSync(new URL('../src/utils/helpers.js', import.meta.url), 'utf8');
@@ -110,5 +110,23 @@ verifier('refsDe retrouve les trois pièces', refsDe(allege).size === 3);
   verifier('transformerChaines sans changement rend le même objet', transformerChaines(o, s => s) === o);
 }
 
-console.log(casses ? `\n${casses} cas cassé(s)` : '\nles 20 cas passent');
+// ── Ce qu'on dit quand un billet ne s'ouvre pas (audit A-080) ────────────────
+// Deux échecs, deux phrases. Les confondre était le défaut : un billet bien
+// présent que le navigateur refuse d'ouvrir ne « va pas arriver avec du
+// réseau » — il est déjà là, et l'utilisateur n'a rien à attendre.
+{
+  const absente = messagePiece('absente', 'Billet.pdf');
+  const refusee = messagePiece('refusee', 'Billet.pdf');
+  verifier('la pièce absente dit qu\'elle arrive avec du réseau',
+    absente.includes('Billet.pdf') && /pas encore sur ce téléphone/.test(absente), absente);
+  verifier('sans nom de fichier, la phrase tient debout quand même',
+    messagePiece('absente') === 'Pas encore sur ce téléphone : il arrive avec du réseau.', messagePiece('absente'));
+  verifier('la fenêtre refusée dit que le billet EST là',
+    /bien là/.test(refusee) && /refusé de l'ouvrir/.test(refusee), refusee);
+  verifier('… et ne parle pas d\'attendre du réseau',
+    !/pas encore sur ce téléphone|arrive avec du réseau/.test(refusee), refusee);
+  verifier('rien à signaler : aucune phrase', messagePiece(null, 'Billet.pdf') === '' && messagePiece() === '');
+}
+
+console.log(casses ? `\n${casses} cas cassé(s)` : '\nles 25 cas passent');
 process.exit(casses ? 1 : 0);
