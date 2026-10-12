@@ -450,12 +450,12 @@ vérifier qu'un travail de `verif.yml` la nomme.
 Trois fonctions qui existaient en plusieurs exemplaires, ramenées à une et
 dont la copie est un piège connu :
 
-- `reduireImage(fichier, largeurMax, qualite)` (`helpers.js`) — la seule qui
+- `reduireImage(fichier, largeurMax, qualite)` (`helpers.js`) : la seule qui
   REJETTE sur un fichier illisible. Les copies privées de `NewTripModal` et
   `AddActivitySheet` ne se terminaient jamais (A-077). Ne pas en réécrire.
-- `dateLocale(d)` (`helpers.js`) — la seule que `verif-date-locale.mjs`
+- `dateLocale(d)` (`helpers.js`) : la seule que `verif-date-locale.mjs`
   vérifie, parce qu'il découpe ce bloc par son nom (A-078, A-028).
-- `REPAS_POSES` (`helpers.js`) — le modèle des deux repas posés d'office, lu
+- `REPAS_POSES` (`helpers.js`) : le modèle des deux repas posés d'office, lu
   par `useTrips` qui les pose ET par `repasEnAttente` qui les reconnaît pour
   ne pas les compter comme des activités (A-079, A-070).
 
