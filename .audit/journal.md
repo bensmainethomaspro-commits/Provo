@@ -144,8 +144,71 @@ Exemple de ligne, à supprimer :
 | A-062 | 2026-10-07 | Fiabilité | Clos. Ce qui n'a pas pu être échangé (pièce absente, dépôt refusé, voyage pas encore dans le nuage) est retenté seul avec un recul croissant (5 s, 15 s, 45 s, 2 min, puis toutes les 5 min tant que l'app est ouverte), qui repart de zéro dès qu'une pièce passe, au retour du réseau et au retour au premier plan. Cas I de `verif-demarrage` : la pièce arrive dans le dossier après l'ouverture, sans modification du voyage ; rouge avant, vert après | Majeur | CORRIGÉ |
 | A-075 | 2026-10-08 | Fiabilité | Le contrôle « Supabase Preview » (intégration GitHub de Supabase) échouait sur CHAQUE commit de `main` depuis au moins le 2026-09-30 : « Remote migration versions not found in local migrations directory ». L'historique de la base (`supabase_migrations.schema_migrations`) portait cinq versions à la seconde ; le dépôt rangeait ses fichiers sous une date seule (`20260930_…` deux fois, `20260806_…`), et trois migrations de juin n'y avaient jamais été versées. `push_subscriptions` avait été posée par l'éditeur SQL, sans entrée dans l'historique. Corrigé : fichiers renommés aux versions exactes (SQL identique hors commentaires, comparé au MCP), trois migrations de juin recopiées depuis la base (md5 identique), `push_subscriptions` inscrite dans l'historique sous `20260806085824` (équivalent de `migration repair`, aucune instruction rejouée : table, colonnes, quatre politiques, index et clé étrangère relevés identiques au fichier), chemin mis à jour dans `setup-push.yml`. Garde-fou : `scripts/verif-migrations.mjs` (version à 14 chiffres, unique ; workflows qui citent une migration existante), rouge sur l'état d'avant. Le contrôle sur `main` est à relire après la fusion | Mineur | CORRIGÉ |
 | A-076 | 2026-10-08 | Fiabilité | Le workflow « Installer les rappels » (`setup-push.yml`) se disait « sans danger » à relancer, mais rejouait toute la migration de `push_subscriptions` : ses quatre `create policy` (sans `if not exists`, que PostgreSQL n'offre pas pour une politique) échouaient sur la table en place, et le workflow s'arrêtait avant même les clés VAPID. Renouveler les clés était donc impossible. Corrigé : la base est interrogée d'abord (`to_regclass`), la migration n'est jouée que si la table manque, et elle est alors inscrite dans l'historique sous la version de son fichier (règle d'A-075). Le récapitulatif ne prétend plus avoir posé des clés quand on ne l'a pas demandé. Vérifié en local avec une API simulée (table présente : une seule lecture ; absente : création puis inscription, contenu restitué identique au fichier) | Mineur | CORRIGÉ |
+| A-077 | 2026-10-12 | Fiabilité | Trois lectures de fichier sans canal d'erreur, dans les deux formulaires qui remplissent la Réserve. `compressCoverPhoto` (`NewTripModal.jsx:15`) et `compressImage` (`AddActivitySheet.jsx:517`) recopiaient la réduction d'image sans `reader.onerror` ni `img.onerror` : sur un fichier que le navigateur ne sait pas décoder, la promesse ne se terminait **jamais**. « Choisir une photo » et « Ajouter une capture » ne faisaient alors plus rien, sans un mot, et comme `e.target.value = ''` venait APRÈS l'attente, rechoisir le même fichier ne déclenchait aucun `change` : bouton mort jusqu'à la fermeture de la feuille. Côté captures, le `Promise.all` perdait les trois images pour une seule illisible. `handlePdf` (`AddActivitySheet.jsx:550`) n'avait pas de `reader.onerror`. `reduireImage` (`helpers.js:1257`), qui rejette proprement, existait depuis le 2026-09-30 et servait déjà aux dépenses et aux papiers | Majeur | CORRIGÉ |
+| A-078 | 2026-10-12 | Dette technique | `dateLocale()` (`helpers.js:1766`) a été écrite le 2026-08-31 contre A-028 (date UTC : une dépense notée au petit-déjeuner à Tokyo se rangeait la veille), le journal a consigné « une seule définition pour tout le dépôt » et `verif-date-locale.mjs` fige neuf cas en découpant ce bloc-là. Six copies en ligne vivaient hors de cette garde : `Dashboard.jsx:14`, `TripView.jsx:546`, `:568`, `:983` (celle-ci ajoutée par la refonte du 1er octobre), `TimelineView.jsx:251`, `NewTripModal.jsx:10`. Les six calculaient juste : il n'y avait pas de bug, il y avait une garde qui couvrait un septième du dépôt | Mineur | CORRIGÉ |
+| A-079 | 2026-10-12 | Dette technique | Le littéral des deux repas posés d'office était recopié quatre fois (`useTrips.js:17`, `:18`, `:27`, `:28`) et `repasEnAttente` (`helpers.js:357`) répétait de son côté le titre et le prix `'20'` pour reconnaître un repas que personne n'a touché. Changer le prix par défaut dans `useTrips` aurait suffi à ce que chaque repas redevienne une « activité » : un voyage de cinq jours annoncerait de nouveau dix activités et un bilan sacrerait « Resto ×12 », exactement ce qu'A-070 a corrigé le 1er octobre, sans qu'aucune garde ne le voie | Mineur | CORRIGÉ |
+| A-080 | 2026-10-12 | Fiabilité | `ouvrirPiece` (`pieces.js:283`) ne regarde pas ce que `window.open` lui rend. Une fenêtre refusée (`null`) est donc indistinguable d'une ouverture réussie : la fonction rend `true`, et les deux appelants qui ont un message prêt ne l'affichent pas : `ActivityCard.jsx:287` (`setPdfAbsent(false)`) et `TripDocuments.jsx:114`. Cela vaut quelle que soit la cause du refus, et le `window.open` arrive après un `await` sur IndexedDB : Safari rattache son blocage à la pile synchrone du geste, ce qui est précisément le cas d'un billet touché dans une gare sur iPhone. Démontré sur le code (la valeur de retour est ignorée) ; **non reproduit sur appareil** : le bac à sable n'a que Chromium, qui autorise. Le message juste reste à choisir : « pas encore sur ce téléphone » serait faux pour une fenêtre bloquée | Majeur | PROPOSÉ |
+| A-081 | 2026-10-12 | Méthode | `verif-carte` (20 contrôles sur la carte : épingles, cadrage, zoom conservé, « le plus proche », bulles) **échoue sur `main`**, et rien ne le lance : il est exclu de `npm run verif` (il demande l'aperçu) et absent des deux travaux de `verif.yml`. Reproduit sur `main` seul, dans un arbre de travail séparé, donc antérieur à cet audit : l'étape 6 (« piocher depuis la carte ») laisse la feuille Piocher ouverte, l'étape 7 clique l'onglet Planning en avalant l'échec (`.catch(() => {})`), puis `ongletCarte()` attend 30 s et lève (« `sheet__footer` from `sheet-overlay` subtree intercepts pointer events »). L'app a raison (une feuille modale doit bloquer les onglets) ; c'est la suite qui oublie de la fermer. Perdus : le dernier contrôle (« retour sur l'onglet : cadrage refait ») et le relevé des erreurs JS, qui s'imprime après. Au passage, `verif-carte.mjs:189` écrit sa capture dans un chemin absolu de bac à sable d'une autre session (`/tmp/claude-0/…/2608866b-…/scratchpad/map-apres.png`) | Mineur | PROPOSÉ |
+| A-082 | 2026-10-19 | Méthode | Audit non déclenché : **aucun commit sur `main` depuis l'audit du 2026-10-12**. `main` est resté à `01c7101` (2026-10-08), qui est aussi la base de la PR #106 : le dépôt n'a pas bougé en onze jours. Contrôle de pertinence tranché avant toute lecture de code, aucun fichier source ouvert. La PR #106 (« Audit LÉGER 2026-10-12 ») reste ouverte, en brouillon, avec ses trois correctifs (A-077 à A-079) et deux constats en attente d'arbitrage (A-080 fenêtre `window.open` refusée, A-081 `verif-carte` rouge sur `main`). Elle atteint le seuil d'une semaine après lequel le journal déclare qu'une PR d'audit se périme (leçon du 2026-09-29) : à fusionner ou à clore, sinon le prochain passage repartira de `main` et réutilisera ses numéros | Sans objet | PASSÉ |
 
 ## Dernier audit effectif
+
+Date : 2026-10-12
+Type : LÉGER (7 jours depuis le 2026-10-05 : sécurité et fiabilité, pas d'axe
+rotatif ; 13 commits, sous le seuil de 40)
+Prochain axe rotatif : **Dette technique** (toujours pas consommé : cinq audits
+LÉGERS d'affilée l'ont repoussé ; A-078 et A-079 y touchent sans l'ouvrir)
+Référence ESLint à la date de l'audit : **40 erreurs, 4 avertissements**,
+inchangé depuis le 2026-09-30. `npm run build` vert, 22 suites `verif-*`
+vertes, 92 parcours verts, `verif-demarrage` vert, `verif-ui` sans point hors
+les 52 marqueurs Leaflet assumés. `verif-carte` rouge, sur `main` aussi (A-081).
+
+### Ce que cet audit a lu, et pourquoi
+
+Le contrôle de pertinence passe, en comptant les fichiers et non les commits
+(règle du 2026-09-28) : 55 fichiers, +2 690/−1 895 depuis le 2026-10-05, dont
+la refonte design du 1er octobre fusionnée le 6 (`index.css` réécrit,
+`tokens.css` neuf, `NewTripModal` +220, `TripView` +211). Quatre commits
+significatifs hors documentation.
+
+Lu en priorité ce qui n'avait été relu par personne, selon la règle que le
+journal répète depuis le 2026-09-28 : les correctifs d'audit écrits et
+fusionnés le jour même. `usePiecesSync` + `pieces.js` (A-061, A-062, le
+2026-10-07), `setup-push.yml` (A-075, A-076, le 2026-10-08), et la refonte.
+
+Trouvés sains, après lecture : le dépôt avant allègement et la file de
+relance (`usePiecesSync.js`, les cas F à J de `verif-demarrage` les figent),
+le garde-fou de la clé VAPID (la privée ne quitte pas le processus Node, et
+l'étape qui ouvre la PR est bien conditionnée à `renouveler_les_cles` :
+sans ce garde, un lancement sans renouvellement aurait proposé une clé
+publique vide), et le heredoc `PY` du workflow (le bloc YAML retire
+l'indentation, le délimiteur retombe en colonne 0).
+
+### Les six migrations du dépôt sont bien celles de la base
+
+Vérifié au MCP, méthode reproductible : empreinte md5 des deux côtés après
+retrait des commentaires `--` et normalisation des espaces. Les six
+concordent, A-075 tient. Quatre concordaient déjà octet pour octet (elles ont
+été recopiées depuis la base) ; `partage_securise` et `pieces_jointes`
+n'ont que des commentaires en écart (6 992 octets de fichier contre 3 669 en
+base).
+
+### Advisors Supabase : rien de neuf
+
+`auth_leaked_password_protection` est A-044, déjà ouvert. Les cinq
+`security definer` signalés (`lire_voyage_partage`, `est_du_voyage`,
+`is_trip_owner`, `join_trip_by_invite`) sont voulus et déjà arbitrés.
+
+### La branche de cet audit ne s'appelle pas `claude/audit-…`
+
+Comme le 2026-10-05 : la session a été provisionnée sur
+`claude/keen-fermat-jhrmdf` et n'a pas le droit de pousser ailleurs. Le
+préfixe `claude/`, la seule contrainte dure, est respecté. **La PR d'audit
+se cherche donc par son TITRE (« Audit … »), jamais par le nom de sa
+branche.** Aucune PR d'audit n'était ouverte ce jour : cet audit repart de
+`main`.
+
+### Audit précédent
 
 Date : 2026-10-05
 Type : LÉGER (5 jours depuis le 2026-09-30, donc sécurité et fiabilité, pas
@@ -337,3 +400,4 @@ numéros.
 | 2026-10-05 | LÉGER | Sécurité, Fiabilité | A-061 à A-065 |
 | 2026-10-07 | Correctif (session) | Fiabilité | Clôture d'A-061 et A-062 |
 | 2026-10-08 | Correctif (session) | Fiabilité | A-075 et A-076 (ouverts et clos le même jour) |
+| 2026-10-12 | LÉGER | Sécurité, Fiabilité | A-077 à A-081 |
