@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm, reduireImage } from '../utils/helpers';
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
@@ -514,33 +514,27 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   useEffect(() => { if (!isOpen) lienLanceRef.current = null; }, [isOpen]);
 
 
-  const compressImage = (file) => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 700;
-        let w = img.width, h = img.height;
-        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-
   const handleScreenshots = async (e) => {
     const existing = form.screenshots || [];
     const slots = 3 - existing.length;
-    if (slots <= 0) return;
-    const files = Array.from(e.target.files).slice(0, slots);
-    // Rangées à part tout de suite (utils/pieces.js) : le voyage ne garde que des références.
-    const results = await Promise.all(files.map(f => compressImage(f).then(enPiece)));
-    set('screenshots', [...existing, ...results].slice(0, 3));
+    const files = Array.from(e.target.files).slice(0, Math.max(0, slots));
+    // Vidé tout de suite : sinon rechoisir LA MÊME capture après un échec ne
+    // déclenche aucun changement, et le bouton paraît mort.
     e.target.value = '';
+    if (!files.length) return;
+    // `reduireImage` (helpers.js) rejette sur un fichier que le navigateur ne
+    // sait pas décoder ; la réduction recopiée ici ne se terminait jamais, et
+    // le `Promise.all` restait en attente pour toujours : aucune capture
+    // ajoutée, aucun message (audit A-077). Ce qui a été lu entre quand même.
+    const lues = await Promise.allSettled(files.map(f => reduireImage(f, 700, 0.72).then(enPiece)));
+    // Rangées à part tout de suite (utils/pieces.js) : le voyage ne garde que des références.
+    const ok = lues.filter(r => r.status === 'fulfilled').map(r => r.value);
+    if (ok.length) set('screenshots', [...existing, ...ok].slice(0, 3));
+    if (ok.length < files.length) {
+      setError(ok.length
+        ? "Une des images n'a pas pu être lue."
+        : "Cette image n'a pas pu être lue. Essaie une autre capture.");
+    }
   };
 
   const removeScreenshot = (i) => {
@@ -552,6 +546,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     if (!file) return;
     if (file.size > 3 * 1024 * 1024) { setError('PDF trop volumineux (max 3 Mo).'); return; }
     const reader = new FileReader();
+    // Sans ce canal, un fichier illisible n'ajoutait rien et ne disait rien.
+    reader.onerror = () => setError(`« ${file.name} » n'a pas pu être lu.`);
     reader.onload = async ev => {
       const data = await enPiece(ev.target.result);
       setForm(f => ({ ...f, pdfs: [...(f.pdfs || []), { name: file.name, data }] }));

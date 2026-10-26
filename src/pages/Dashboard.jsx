@@ -6,15 +6,10 @@ import TripPreviewSheet from '../components/TripPreviewSheet';
 import NewTripModal from '../components/NewTripModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AccountSheet from '../components/AccountSheet';
-import { getCategoryMeta, formatDate, getTimeSlots } from '../utils/helpers';
+import { getCategoryMeta, formatDate, getTimeSlots, dateLocale } from '../utils/helpers';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import Icone from '../components/Icone';
 import { Moon, Sun, Download, UserRound, Plus } from 'lucide-react';
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
 
 export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewTrip, onShowAuth }) {
   const { currentTrips, pastTrips, createTrip, updateTrip, deleteTrip, duplicateTrip, userId, signOut, userEmail, userProfile, updateProfile } = useTripsContext();
@@ -38,7 +33,7 @@ export default function Dashboard({ onNavigate, darkMode, onToggleDark, autoNewT
   };
 
   const deletingTrip = [...currentTrips, ...pastTrips].find(t => t.id === deletingId);
-  const today = todayStr();
+  const today = dateLocale();
   const todayDate = new Date(); todayDate.setHours(0,0,0,0);
   const activeTrip = currentTrips.find(t => {
     const s = new Date(t.startDate + 'T00:00:00');
