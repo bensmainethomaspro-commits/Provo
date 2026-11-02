@@ -330,19 +330,6 @@ export function formatPrice(amount) {
 }
 
 /**
- * Un repas posé d'office par l'app (« Repas midi », « Repas soir », 20 €) et
- * que personne n'a encore touché : ni renommé, ni situé, ni repris au prix, ni
- * coché.
- *
- * Il réserve un créneau dans la journée, pour que le temps libre se calcule
- * juste, et son prix reste dans la prévision du budget (voir ci-dessous).
- * Mais ce n'est pas une activité : il ne se compte ni dans « N activités », ni
- * dans l'avancement, ni dans les « activités préférées » du bilan. Mesuré le
- * 1er octobre 2026 : un voyage de cinq jours tout juste créé annonçait déjà
- * dix activités, et un bilan sacrait « Resto ×12 », les douze repas posés
- * d'office.
- */
-/**
  * La destination, seulement si elle apprend quelque chose de plus que le nom
  * du voyage. « Vienne » écrit sous « Vienne » occupait une ligne pour rien,
  * sur l'accueil comme dans l'en-tête du voyage.
@@ -354,11 +341,39 @@ export function destinationUtile(trip) {
   return plat(d.split(',')[0]) === plat(trip.name) ? '' : d;
 }
 
+/**
+ * Les deux repas que l'app pose d'office sur chaque journée, décrits une seule
+ * fois. Le modèle était recopié quatre fois dans `useTrips` et `repasEnAttente`
+ * répétait son titre et son prix de son côté : changer le prix par défaut
+ * aurait fait recompter tous les repas comme des activités (audit A-079, qui
+ * remet la règle d'A-070 sous une seule source).
+ *
+ * `id` est posé à la construction (`useTrips`), et `travelerIds` recopié : un
+ * tableau partagé entre toutes les journées serait un piège.
+ */
+export const REPAS_POSES = [
+  { title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] },
+  { title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] },
+];
+
+/**
+ * Un repas posé d'office par l'app (voir `REPAS_POSES`) et que personne n'a
+ * encore touché : ni renommé, ni situé, ni repris au prix, ni coché.
+ *
+ * Il réserve un créneau dans la journée, pour que le temps libre se calcule
+ * juste, et son prix reste dans la prévision du budget (voir `budgetStats`).
+ * Mais ce n'est pas une activité : il ne se compte ni dans « N activités », ni
+ * dans l'avancement, ni dans les « activités préférées » du bilan. Mesuré le
+ * 1er octobre 2026 : un voyage de cinq jours tout juste créé annonçait déjà
+ * dix activités, et un bilan sacrait « Resto ×12 », les douze repas posés
+ * d'office.
+ */
 export function repasEnAttente(a) {
   if (!a?.isMeal || a.status === 'done') return false;
+  const modele = REPAS_POSES.find(m => m.title === (a.title || '').trim());
+  if (!modele) return false;
   const prix = a.price === undefined || a.price === null ? '' : String(a.price);
-  return /^Repas (midi|soir)$/.test((a.title || '').trim())
-    && !a.address && a.lat == null && (prix === '' || prix === '20');
+  return !a.address && a.lat == null && (prix === '' || prix === modele.price);
 }
 
 /**
@@ -1762,6 +1777,11 @@ export function formatMontantExact(valeur, devise = 'EUR') {
  *
  * Écrite une fois, ici, et importée partout : la même fonction vivait en privé
  * dans `useTrips`, hors de portée des écrans qui en avaient aussi besoin.
+ *
+ * Elle est désormais la seule : six écrans en gardaient une copie en ligne
+ * (Dashboard, TripView trois fois, TimelineView, NewTripModal), toutes justes
+ * mais aucune couverte par `scripts/verif-date-locale.mjs`, qui ne découpe que
+ * ce bloc-ci (audit A-078). Ne pas en réécrire une septième : importer.
  */
 export function dateLocale(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

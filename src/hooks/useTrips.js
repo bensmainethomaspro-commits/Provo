@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
-import { fusionnerVoyages, dateLocale } from '../utils/helpers';
+import { fusionnerVoyages, dateLocale, REPAS_POSES } from '../utils/helpers';
 import { lireAttente, ecrireAttente, reconcilier } from '../utils/synchro';
 import { DELAI_FONCTION_MS } from '../utils/reseau';
 import { usePiecesSync } from './usePiecesSync';
@@ -12,11 +12,16 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+// Le modèle vit dans `helpers.js` (REPAS_POSES) : `repasEnAttente` reconnaît
+// un repas jamais touché à son titre et à son prix, et les deux doivent dire
+// la même chose.
+function poserRepas(creneau) {
+  const modele = REPAS_POSES.find(m => m.mealSlot === creneau);
+  return { id: genId(), ...modele, travelerIds: [] };
+}
+
 function buildMealActivities() {
-  return [
-    { id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] },
-    { id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] },
-  ];
+  return REPAS_POSES.map(m => poserRepas(m.mealSlot));
 }
 
 function ensureMeals(day) {
@@ -24,8 +29,8 @@ function ensureMeals(day) {
   const hasSoir = day.activities.some(a => a.isMeal && a.mealSlot === 'soir');
   if (hasMidi && hasSoir) return day;
   const extras = [];
-  if (!hasMidi) extras.push({ id: genId(), title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] });
-  if (!hasSoir) extras.push({ id: genId(), title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] });
+  if (!hasMidi) extras.push(poserRepas('midi'));
+  if (!hasSoir) extras.push(poserRepas('soir'));
   return { ...day, activities: [...day.activities, ...extras] };
 }
 
