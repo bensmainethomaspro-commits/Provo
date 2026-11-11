@@ -18,6 +18,7 @@ on:
       - 'scripts/diag-tiktok.mjs'
       - 'scripts/diag-instagram.mjs'
       - 'scripts/diag-adresses.mjs'
+      - 'scripts/diag-lien-google.mjs'
       - 'supabase/functions/extract-place/**'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
@@ -38,6 +39,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # En premier : c'est la sonde du défaut en cours, et les bancs suivants
+      # prennent plusieurs minutes. Un lien de partage Google vers un lieu qui
+      # n'est PAS à la destination du voyage — le cas que ni ce banc ni
+      # `diag-verify` ne rejouaient avant le 11 novembre 2026.
+      - name: Lien de partage Google hors de la destination du voyage
+        if: ${{ always() }}
+        run: node scripts/diag-lien-google.mjs
       # Comparaison des géocodeurs : déjà tranchée (Nominatim 89 %, Photon 93 %).
       # On ne la relance qu'à la demande.
       - name: Comparaison des géocodeurs
