@@ -52,6 +52,14 @@ const LIENS = [
   ['OpenStreetMap (marqueur seul)', 'https://www.openstreetmap.org/?mlat=41.8902&mlon=12.4922#map=17/41.8902/12.4922', null, 'Rome'],
   // Un site officiel : JSON-LD s'il en publie un, sinon le titre nettoyé.
   ['Site du Prado', 'https://www.museodelprado.es/', 'visite', 'Madrid'],
+  // Le lieu n'est PAS là où se passe le voyage : un restaurant de Rome, collé
+  // dans un voyage à Biarritz (11 novembre 2026). Tous les cas ci-dessus
+  // envoient la destination où se trouve le lieu, ou aucune : aucun ne
+  // rejouait ce que l'app envoie dans ce cas-là, et la fonction y rendait un
+  // titre nu en dix secondes. La destination départage des homonymes ; elle
+  // n'empêche plus de trouver le lieu.
+  ['share.google, hors du voyage', 'https://share.google/y4QMh42nQx6DiSBfZ', 'resto', 'Biarritz'],
+  ['Maps sans coords, hors du voyage', 'https://www.google.com/maps/search/?api=1&query=ADEVA+Cucina+Moderna', 'resto', 'Biarritz'],
 ];
 
 function ligne(nom, r) {

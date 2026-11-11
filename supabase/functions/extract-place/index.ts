@@ -21,7 +21,8 @@ import { origineAutorisee } from "../_shared/origine.ts";
 import { BUDGET_MS, budgetActif, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
 import {
-  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, titreDeSite,
+  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom,
+  titreDeSite,
 } from "../_shared/lecture-lien.ts";
 
 const CORS = {
@@ -110,7 +111,7 @@ function depuisPhoton(f: any) {
     display_name: [p.name, [p.housenumber, p.street].filter(Boolean).join(" "), p.city, p.country]
       .filter(Boolean).join(", "),
     address: {
-      house_number: p.housenumber, road: p.street,
+      house_number: p.housenumber, road: p.street, postcode: p.postcode,
       city: p.city || p.town || p.village || p.county, country: p.country,
       country_code: String(p.countrycode || "").toLowerCase(),
     },
@@ -150,7 +151,25 @@ async function nominatimSearch(query: string, limit = 5, pays = "", pres: { lat:
   return pays ? secours.filter((p) => !p.address.country_code || p.address.country_code === pays) : secours;
 }
 
+// Nominatim refuse l'hébergeur de cette fonction depuis le 28 septembre 2026
+// (403, mesuré encore le 11 novembre). Chaque recherche payait pourtant un
+// aller-retour pour se l'entendre redire — jusqu'à quatre par lien. Un refus
+// est retenu dix minutes : assez pour un appel entier, assez court pour que la
+// fonction s'en aperçoive le jour où la porte se rouvre. Seulement le 403 :
+// un 429 est une limite de débit passagère, pas une porte fermée.
+let nominatimRefuse = 0;
+const REFUS_MS = 10 * 60 * 1000;
+
+const nominatimBoude = () => {
+  if (Date.now() - nominatimRefuse >= REFUS_MS) return false;
+  // Dit une fois par appel : sans cette ligne, la trace d'un appel servi par
+  // une instance déjà chaude ne montrerait que Photon, sans dire pourquoi.
+  if (!traceGeo.includes("nominatim sauté (refus récent)")) traceGeo.push("nominatim sauté (refus récent)");
+  return true;
+};
+
 async function nominatimSeul(query: string, limit = 5, pays = ""): Promise<any[]> {
+  if (nominatimBoude()) return [];
   const { signal, clear } = withTimeout(9000);
   try {
     const r = await fetch(
@@ -161,7 +180,8 @@ async function nominatimSeul(query: string, limit = 5, pays = ""): Promise<any[]
     );
     clear();
     traceGeo.push(`nominatim ${r.status}`);
-    if (!r.ok) return [];
+    if (r.status === 403) nominatimRefuse = Date.now();
+    if (!r.ok) { await r.body?.cancel().catch(() => {}); return []; }
     const data = await r.json();
     return Array.isArray(data) ? data : [];
   } catch (e) {
@@ -202,9 +222,9 @@ async function geocode(query: string, ancre: Ancre | null = null) {
     const best = pickBest(list, { name: query });
     return best ? shapePlace(best) : null;
   }
-  // Situé : d'abord avec la ville du voyage, puis seul — toujours dans le pays,
-  // et jamais hors du rayon. Un homonyme à l'étranger ne vaut pas mieux que
-  // rien : sans coordonnées, le client refait la recherche et propose.
+  // Situé : d'abord avec la ville du voyage, puis seul — dans le pays, et dans
+  // le rayon de la destination. C'est là qu'un nom a le plus de chances de
+  // désigner ce qu'on cherche, et c'est ce qui départage deux homonymes.
   const deja = normalize(query).includes(normalize(ancre.nom));
   const essais = deja ? [query] : [`${query}, ${ancre.nom}`, query];
   for (const q of essais) {
@@ -216,7 +236,40 @@ async function geocode(query: string, ancre: Ancre | null = null) {
     });
     if (best) return shapePlace(best);
   }
-  return null;
+  return ailleurs(query);
+}
+
+/**
+ * Rien de ce nom près du voyage : le lieu est peut-être ailleurs.
+ *
+ * La recherche s'arrêtait à la frontière du voyage — « un homonyme à l'étranger
+ * ne vaut pas mieux que rien ». Vrai pour un homonyme ; faux pour LE lieu. Un
+ * lien de partage Google vers un restaurant de Rome, collé dans un voyage à
+ * Biarritz, ressortait en fiche nue, et l'app disait le lieu « pas répertorié »
+ * alors qu'on ne l'avait cherché qu'en France (11 novembre 2026). Appelée sans
+ * destination, cette même fonction le trouvait en quatre secondes.
+ *
+ * La destination départage ; elle n'exclut plus. Ce qui remplace la proximité
+ * comme garde-fou est dans `seulDeSonNom` : le nom entier, et un seul lieu à
+ * le porter. Deux homonymes → rien, et c'est le téléphone qui fait choisir.
+ */
+async function ailleurs(query: string) {
+  const liste = await nominatimSearch(query, 8);
+  const { lieux, ambigu } = seulDeSonNom(query, liste.map((p) => {
+    const a = p.address || {};
+    return {
+      brut: p,
+      noms: nomsConnus(p),
+      lat: parseFloat(p.lat), lon: parseFloat(p.lon),
+      generique: ["place", "boundary", "highway"].includes(p.class),
+      voie: a.road || a.pedestrian || a.footway || "",
+      reperes: [a.postcode, a.city, a.town, a.village, a.municipality].filter(Boolean).map(String),
+    };
+  }));
+  traceGeo.push(`ailleurs ${ambigu ? "ambigu" : lieux.length ? "unique" : "rien"}`);
+  if (!lieux.length) return null;
+  const best = pickBest(lieux.map((l) => l.brut), { name: query }) || lieux[0].brut;
+  return shapePlace(best);
 }
 
 function cityOf(p: any): string {
@@ -344,19 +397,23 @@ async function resolvePlace(
 }
 
 async function reverseGeocodeRaw(lat: number, lon: number) {
-  const { signal, clear } = withTimeout(8000);
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&extratags=1`,
-      { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
-    );
-    clear();
-    traceGeo.push(`nominatim-inverse ${r.status}`);
-    const p = r.ok ? await r.json() : null;
-    if (p?.display_name) return p;
-  } catch (e) {
-    clear();
-    traceGeo.push(`nominatim-inverse ${(e as Error)?.name || "erreur"}`);
+  if (!nominatimBoude()) {
+    const { signal, clear } = withTimeout(8000);
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1&extratags=1`,
+        { headers: { "User-Agent": UA, "Accept-Language": "fr" }, signal },
+      );
+      clear();
+      traceGeo.push(`nominatim-inverse ${r.status}`);
+      if (r.status === 403) nominatimRefuse = Date.now();
+      const p = r.ok ? await r.json() : null;
+      if (!r.ok) await r.body?.cancel().catch(() => {});
+      if (p?.display_name) return p;
+    } catch (e) {
+      clear();
+      traceGeo.push(`nominatim-inverse ${(e as Error)?.name || "erreur"}`);
+    }
   }
   // Le géocodage inverse ne sert ici qu'à connaître la VILLE du point : Photon
   // la donne aussi bien.

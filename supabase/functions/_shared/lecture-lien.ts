@@ -315,3 +315,86 @@ export function accordNom(voulu: string, noms: string[]): "fort" | "faible" | nu
   }
   return faible ? "faible" : null;
 }
+
+// ── Un lieu qui n'est pas là où se passe le voyage ──────────────────────────
+
+/** Ce qu'il faut d'un résultat de géocodeur pour juger s'il est « le » lieu. */
+export type Trouve = {
+  noms: string[];
+  lat: number;
+  lon: number;
+  /** Une commune, une frontière, une rue : ce n'est pas un établissement. */
+  generique?: boolean;
+  /** La voie du résultat, pour reconnaître une adresse. */
+  voie?: string;
+  /** Code postal et commune du résultat : ce qui situe une adresse sans ambiguïté. */
+  reperes?: string[];
+};
+
+function kmEntre(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Ce qu'on cherche ne désigne-t-il qu'UN endroit parmi ces résultats ?
+ *
+ * La destination du voyage sert à départager des homonymes. Elle servait aussi
+ * de frontière : hors du pays ou du rayon de la destination, un lieu n'était
+ * pas cherché du tout. Un lien de partage Google vers un restaurant de Rome,
+ * collé dans un voyage à Biarritz, ressortait donc en fiche nue — et l'app
+ * annonçait que ce lieu n'était « pas répertorié dans la carte ouverte », alors
+ * qu'elle ne l'avait cherché qu'en France (11 novembre 2026).
+ *
+ * Quand rien ne porte ce nom près du voyage, on regarde donc ailleurs. Mais la
+ * proximité était le garde-fou contre les homonymes ; sans elle, il en faut
+ * d'autres, et ils sont ici :
+ *   · le résultat doit porter le nom ENTIER — pas un mot en commun, et pas un
+ *     nom de sept lettres perdu dans une phrase de cinquante ;
+ *   · un nom trop court ne prouve rien ;
+ *   · et il ne doit y en avoir qu'UN : deux « Café Central » à 600 km l'un de
+ *     l'autre, c'est à la personne de dire lequel, pas à nous.
+ * Une adresse se reconnaît autrement : sa voie ET son code postal (ou sa
+ * commune) doivent être écrits dans ce qu'on cherche.
+ *
+ * Rend `lieux` : les résultats qui désignent ce lieu unique — le même commerce
+ * ressort souvent deux fois, en point et en bâtiment. Vide quand rien ne porte
+ * le nom, et vide aussi quand c'est `ambigu` ; `portent` garde alors les
+ * homonymes, pour qui peut les donner à choisir (le téléphone, pas le serveur).
+ */
+export function seulDeSonNom<T extends Trouve>(
+  voulu: string,
+  liste: T[],
+  // Un commerce rendu en point ET en bâtiment tient dans quelques dizaines de
+  // mètres. Deux adresses d'une même enseigne dans la même ville, non : à
+  // 30 km de tolérance, la première était prise sans rien demander.
+  memeLieuKm = 0.3,
+): { lieux: T[]; ambigu: boolean; portent: T[] } {
+  const w = normaliser(voulu);
+  if (w.length < 5) return { lieux: [], ambigu: false, portent: [] };
+
+  const leNomEntier = (t: Trouve) => !t.generique && t.noms.some((n) => {
+    const c = normaliser(n);
+    if (!c || !(c.includes(w) || w.includes(c))) return false;
+    // L'un contient l'autre, ET le plus court fait au moins la moitié du plus
+    // long : « Da Enzo al 29, Rome » désigne « Da Enzo al 29 », mais « Hofburg
+    // Imperial Palace - 1st District, Innere Stadt » ne désigne pas un cinéma
+    // « Palace » trouvé à l'autre bout du monde.
+    return Math.min(c.length, w.length) * 2 >= Math.max(c.length, w.length);
+  });
+  const dedans = (s: string | undefined) => {
+    const c = normaliser(s || "");
+    return c.length >= 4 && w.includes(c);
+  };
+  const uneAdresse = /\d/.test(w);
+  const sonAdresse = (t: Trouve) => uneAdresse && dedans(t.voie) && (t.reperes || []).some(dedans);
+
+  const retenus = liste.filter((t) =>
+    Number.isFinite(t.lat) && Number.isFinite(t.lon) && (leNomEntier(t) || sonAdresse(t)));
+  if (!retenus.length) return { lieux: [], ambigu: false, portent: [] };
+  const ambigu = retenus.some((t) => kmEntre(retenus[0], t) > memeLieuKm);
+  return { lieux: ambigu ? [] : retenus, ambigu, portent: retenus };
+}

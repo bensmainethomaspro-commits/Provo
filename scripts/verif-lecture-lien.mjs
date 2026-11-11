@@ -9,7 +9,7 @@
  * Usage :  node scripts/verif-lecture-lien.mjs
  */
 import {
-  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, titreDeSite,
+  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom, titreDeSite,
 } from '../supabase/functions/_shared/lecture-lien.ts';
 
 let ok = 0, ko = 0;
@@ -128,7 +128,57 @@ console.log('\n5 · Comparer des noms dans toutes les écritures');
     && accordNom('Restaurante Botín', ['Sobrino de Botín']) === 'faible');
 }
 
-console.log('\n6 · Le module reste importable par le navigateur (A-048)');
+console.log('\n6 · Un lieu qui n’est pas là où se passe le voyage');
+{
+  // Le cas du 11 novembre 2026 : un lien de partage Google vers un restaurant
+  // de Rome, collé dans un voyage à Biarritz. Rien de ce nom en France — et la
+  // recherche s'arrêtait là. Le géocodeur, interrogé sans frontière, n'en
+  // connaît pourtant qu'un.
+  const adeva = { noms: ['ADEVA Cucina Moderna'], lat: 41.9021, lon: 12.4847 };
+  const r1 = seulDeSonNom('ADEVA Cucina Moderna', [adeva]);
+  verifier('un seul lieu porte ce nom : c’est lui, où qu’il soit', r1.lieux.length === 1 && !r1.ambigu);
+  // Le même commerce ressort souvent deux fois : en point, et en bâtiment.
+  const r2 = seulDeSonNom('ADEVA Cucina Moderna', [adeva, { ...adeva, lat: 41.9022, lon: 12.4848 }]);
+  verifier('le même lieu rendu deux fois n’est pas une ambiguïté', r2.lieux.length === 2 && !r2.ambigu);
+  // Deux homonymes : ce n'est plus à nous de choisir.
+  const vienne = { noms: ['Café Central'], lat: 48.2104, lon: 16.3654 };
+  const porto = { noms: ['Café Central'], lat: 41.1496, lon: -8.6109 };
+  const r3 = seulDeSonNom('Café Central', [vienne, porto]);
+  verifier('deux homonymes à 2 000 km : ambigu, aucun n’est retenu', r3.ambigu && r3.lieux.length === 0);
+  // Un mot en commun ne suffit pas, loin du voyage.
+  const r4 = seulDeSonNom('Restaurante Botín', [{ noms: ['Sobrino de Botín'], lat: 40.4141, lon: -3.7081 }]);
+  verifier('un mot en commun ne désigne pas le lieu', r4.lieux.length === 0 && !r4.ambigu);
+  // Un nom court perdu dans une longue phrase : « Palace » n'est pas la Hofburg.
+  const r5 = seulDeSonNom('Hofburg Imperial Palace - 1st District, Innere Stadt',
+    [{ noms: ['Palace'], lat: 43.48, lon: -1.56 }, { noms: ['Imperial'], lat: 50.08, lon: 14.43 }]);
+  verifier('un nom court contenu dans une longue phrase est refusé', r5.lieux.length === 0);
+  // La ville écrite à la suite du nom ne gêne pas.
+  const r6 = seulDeSonNom('Da Enzo al 29, Rome', [{ noms: ['Da Enzo al 29'], lat: 41.8887, lon: 12.4776 }]);
+  verifier('« nom, ville » désigne le lieu qui porte ce nom', r6.lieux.length === 1);
+  // Le nom d'usage dans une autre langue : c'est une variante qui le porte.
+  const opera = { name: 'Wiener Staatsoper', namedetails: { name: 'Wiener Staatsoper', 'name:en': 'Vienna State Opera' } };
+  const r7 = seulDeSonNom('Vienna state opera', [{ noms: nomsConnus(opera), lat: 48.2029, lon: 16.3689 }]);
+  verifier('le nom anglais d’un lieu au nom allemand', r7.lieux.length === 1);
+  // Une commune qui s'appelle comme ce qu'on cherche n'est pas un établissement.
+  const r8 = seulDeSonNom('Opera', [{ noms: ['Opera'], lat: 45.38, lon: 9.21, generique: true }]);
+  verifier('une commune homonyme n’est pas un établissement', r8.lieux.length === 0);
+  verifier('un nom de moins de cinq lettres ne prouve rien',
+    seulDeSonNom('Noma', [{ noms: ['Noma'], lat: 55.68, lon: 12.61 }]).lieux.length === 0);
+  // Une adresse : la voie ET le code postal (ou la commune) doivent y être écrits.
+  const maroniti = { noms: ['29'], lat: 41.9021, lon: 12.4847, generique: true,
+    voie: 'Via dei Maroniti', reperes: ['00187', 'Rome'] };
+  verifier('une adresse complète se reconnaît à sa voie et à son code postal',
+    seulDeSonNom('Via dei Maroniti 29, 00187 Roma', [maroniti]).lieux.length === 1);
+  verifier('la même voie dans une autre commune n’est pas cette adresse',
+    seulDeSonNom('Via dei Maroniti 29, 00187 Roma',
+      [{ ...maroniti, lat: 45.46, lon: 9.19, reperes: ['20121', 'Milan'] }]).lieux.length === 0);
+  verifier('une adresse sans numéro n’est pas une adresse',
+    seulDeSonNom('Via dei Maroniti, Roma', [{ ...maroniti, reperes: ['Roma'] }]).lieux.length === 0);
+  verifier('un résultat sans coordonnées est ignoré',
+    seulDeSonNom('ADEVA Cucina Moderna', [{ ...adeva, lat: NaN }]).lieux.length === 0);
+}
+
+console.log('\n7 · Le module reste importable par le navigateur (A-048)');
 {
   // Il vit dans supabase/functions/_shared, que le lint ignore, mais l'app
   // l'importe (helpers.js, enrich.js, doublon.js). Un `Deno.env` ajouté ici
