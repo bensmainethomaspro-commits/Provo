@@ -31,6 +31,25 @@ on:
         options: [all, search, links]
 
 jobs:
+  # Un travail À PART, et ce n'est pas de la coquetterie : les journaux d'un
+  # travail ne se lisent qu'une fois TOUT le travail terminé. Rangée en tête du
+  # banc ci-dessous, cette sonde de deux minutes attendait les dix du reste.
+  #
+  # Elle rejoue le cas que ni ce banc ni `diag-verify` ne voyaient avant le
+  # 11 novembre 2026 : un lien de partage Google vers un lieu qui n'est PAS à la
+  # destination du voyage (un restaurant de Rome collé dans un voyage à
+  # Biarritz), puis les noms de lieux connus sous un autre nom que le leur.
+  sonde-lien-google:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lien de partage Google hors de la destination du voyage
+        run: node scripts/diag-lien-google.mjs
+
   mesurer:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -39,13 +58,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      # En premier : c'est la sonde du défaut en cours, et les bancs suivants
-      # prennent plusieurs minutes. Un lien de partage Google vers un lieu qui
-      # n'est PAS à la destination du voyage — le cas que ni ce banc ni
-      # `diag-verify` ne rejouaient avant le 11 novembre 2026.
-      - name: Lien de partage Google hors de la destination du voyage
-        if: ${{ always() }}
-        run: node scripts/diag-lien-google.mjs
       # Comparaison des géocodeurs : déjà tranchée (Nominatim 89 %, Photon 93 %).
       # On ne la relance qu'à la demande.
       - name: Comparaison des géocodeurs

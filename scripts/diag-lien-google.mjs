@@ -246,3 +246,48 @@ await pause(3000);
 // Le même lieu par son nom seul, collé comme une légende courte ne l'est pas :
 // c'est le lien Maps « sans coordonnées » qui porte le nom.
 await fonction({ url: `https://www.google.com/maps/search/?api=1&query=${q}`, destination: DESTINATION });
+
+// ── 7 & 8 · Le vrai code de l'app, sur les fiches restées sans point ──────────
+//
+// `lookupPlace` (src/utils/enrich.js) est ce qui complète une fiche après
+// l'ajout. Il est importé tel quel : ce qui est mesuré ici est ce que fait le
+// téléphone, à l'adresse IP près.
+titre('7 · FICHES SANS POINT d\'un voyage à l\'étranger — le code de complétion de l\'app');
+const { lookupPlace } = await import('../src/utils/enrich.js');
+/** L'ancre telle que `useTripAnchor` la calcule : premier résultat de Nominatim. */
+async function ancreClient(destination) {
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&limit=1&addressdetails=1`,
+      { headers: { 'User-Agent': UA_PROVO, 'Accept-Language': 'fr' }, signal: AbortSignal.timeout(15000) });
+    const d = r.ok ? await r.json() : null;
+    if (!d?.[0]) return null;
+    console.log(`  ancre « ${destination} » → ${court(d[0].display_name, 90)} @${Number(d[0].lat).toFixed(4)},${Number(d[0].lon).toFixed(4)} (${d[0].address?.country_code})`);
+    return { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon) };
+  } catch (e) { console.log(`  ancre « ${destination} » : ERREUR ${String(e).slice(0, 80)}`); return null; }
+}
+const fiche7 = (t, r) => console.log(`    ${r?.lat != null ? '✅' : '❌'} ${t.padEnd(54)} ${r ? `${court(r.address, 60) || '(sans adresse)'} · horaires:${r.openingHours ? 'oui' : 'non'} · @${r.lat?.toFixed?.(4)},${r.lon?.toFixed?.(4)}` : 'rien'}`);
+// Les titres EXACTS de la Réserve du voyage, relevés le 11 novembre 2026 :
+// quatre n'ont aucune coordonnée, dont trois monuments que tout le monde connaît.
+const SANS_POINT = [
+  'Vienna state opera',
+  'Palais du Belvedere',
+  'Karlskirche',
+  'Hofburg Imperial Palace - 1st District, Innere Stadt',
+];
+const AVEC_POINT = ['Schönbrunner Palais', 'Gerstner K café', 'Café bel étage, Kärntner Straße 38, 1010 Vienna Austria'];
+for (const destination of ['Vienne Autriche', 'Vienne, Autriche', 'Vienne']) {
+  console.log(`\n  ■ destination du voyage : « ${destination} »`);
+  await pause(1200);
+  const a = await ancreClient(destination);
+  for (const t of [...SANS_POINT, ...(destination === 'Vienne Autriche' ? AVEC_POINT : [])]) {
+    fiche7(t, await lookupPlace(t, destination, a || {}).catch((e) => ({ address: `ERREUR ${String(e).slice(0, 60)}` })));
+  }
+}
+
+titre('8 · COMPLÉTER UNE FICHE DÉJÀ SITUÉE loin du voyage — autour du voyage, ou autour d\'elle ?');
+await pause(1200);
+const ancreB = await ancreClient(DESTINATION);
+console.log(`\n  ■ comme aujourd'hui : « ${nom} », destination « ${DESTINATION} », point du VOYAGE`);
+fiche7(nom, await lookupPlace(nom, DESTINATION, ancreB || {}).catch(() => null));
+console.log(`\n  ■ autour du point de la FICHE (41.9021, 12.4847), sans la destination`);
+fiche7(nom, await lookupPlace(nom, '', { lat: 41.9021142, lon: 12.484738 }).catch(() => null));
