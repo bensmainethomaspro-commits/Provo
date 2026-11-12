@@ -643,7 +643,7 @@ La ligne du 2026-07-29 ci-dessus (« `member_read_own` ne laisse voir à un
 collaborateur que sa propre ligne ») **n'est plus vraie** : la migration
 `20261012192359_membres_du_voyage_visibles` ajoute `membre_lit_les_membres`
 (SELECT, `to authenticated`, `est_du_voyage(trip_id)`), et chacun voit donc les
-gens de ses propres voyages — rien d'autre (A-082).
+gens de ses propres voyages — rien d'autre (A-086).
 
 Deux pièges rencontrés en la posant, à ne pas redécouvrir :
 
