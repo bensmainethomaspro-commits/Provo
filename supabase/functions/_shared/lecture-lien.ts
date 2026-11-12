@@ -398,3 +398,108 @@ export function seulDeSonNom<T extends Trouve>(
   const ambigu = retenus.some((t) => kmEntre(retenus[0], t) > memeLieuKm);
   return { lieux: ambigu ? [] : retenus, ambigu, portent: retenus };
 }
+
+// ── Ce que Google sert aux robots de messagerie ─────────────────────────────
+//
+// Une page Google exige JavaScript : téléchargée par un serveur, elle ne porte
+// ni nom, ni adresse, ni point (mesuré le 11 novembre 2026, 93 ko de coquille).
+// Mais Google sert AUSSI une page d'aperçu aux robots qui déplient les liens
+// dans les messageries — quelques balises `og:`, faites pour être lues par une
+// machine. C'est de première main, et c'est tout ce qu'un serveur peut lire
+// d'un lien de partage sans exécuter la page.
+
+const SEPARE = /\s+[·•‧∙�]\s+/;
+const propre = (s: string) => decodeEntites(s).replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+  .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).replace(/\s+/g, " ").trim();
+
+function balise(html: string, prop: string): string {
+  const a = new RegExp(`<meta[^>]+(?:property|name|itemprop)=["']${prop}["'][^>]+content=["']([^"']*)["']`, "i");
+  const b = new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name|itemprop)=["']${prop}["']`, "i");
+  return propre((html.match(a) || html.match(b))?.[1] || "");
+}
+
+export type ApercuGoogle = {
+  nom: string;
+  /** « Rome, Metropolitan City of Rome Capital, Italie » : où Google situe le lieu. */
+  localite: string | null;
+  /** « Restaurant », « Musée d'art »… : ce que Google dit que c'est. */
+  genre: string | null;
+};
+
+/**
+ * L'aperçu d'un lien de partage Google (`share.google`) :
+ *   og:title        « ADEVA Cucina Moderna · Rome, Metropolitan City of Rome Capital, Italie »
+ *   og:description  « 4.8 ⭐ · Restaurant »
+ *
+ * Le lien dit donc lui-même OÙ est le lieu. C'est ce qui manquait : faute de
+ * le savoir, on situait la recherche sur la destination du voyage, et un
+ * restaurant de Rome collé dans un voyage à Biarritz n'était cherché qu'en
+ * France.
+ */
+export function lireApercuGoogle(html: string): ApercuGoogle | null {
+  const titre = balise(html, "og:title") || balise(html, "twitter:title");
+  if (!titre || /^google(\s+(maps|search))?$|recherche google$/i.test(titre)) return null;
+  const [nom, ...suite] = titre.split(SEPARE);
+  if (!nom || nom.length < 2) return null;
+  const morceaux = (balise(html, "og:description") || balise(html, "description")).split(SEPARE)
+    // « 4.8 ⭐ », « ★★★★★ », « (2 k) » : la note n'est pas un genre.
+    .map((m) => m.trim()).filter((m) => m && !/^[\d.,\s]*[⭐★☆]|^\(?[\d\s.,k]+\)?$/i.test(m));
+  return {
+    nom: nom.trim(),
+    localite: suite.join(", ").trim() || null,
+    genre: morceaux[morceaux.length - 1] || null,
+  };
+}
+
+/**
+ * « Rome, Metropolitan City of Rome Capital, Italie » → « Rome, Italie ».
+ * La commune et le pays suffisent à un géocodeur ; la région administrative,
+ * écrite dans une langue et la commune dans une autre, le perd.
+ */
+export function communeEtPays(localite: string | null): string {
+  const bouts = String(localite || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (bouts.length <= 2) return bouts.join(", ");
+  return `${bouts[0]}, ${bouts[bouts.length - 1]}`;
+}
+
+/**
+ * Le point qu'une page Google Maps montre à un robot de messagerie, quand la
+ * recherche désigne UN lieu.
+ *
+ * La vignette d'aperçu (`og:image`) est une carte statique. Mesuré sur dix
+ * recherches le 11 novembre 2026 :
+ *   · un lieu précis : 900×900, zoom 17, centrée sur lui, aucune épingle —
+ *     « Vienna state opera », « Palais du Belvedere Vienne », et même un
+ *     restaurant d'Athènes que la carte ouverte ne connaît pas ;
+ *   · plusieurs résultats, ou aucun : 200×200, zoom large, des épingles, et
+ *     le titre de la page redevient la recherche elle-même.
+ * On ne rend le point que dans le premier cas : le centre d'une liste de
+ * résultats n'est l'adresse de personne.
+ */
+export function lirePointMaps(html: string): Point | null {
+  const image = balise(html, "og:image");
+  if (!/staticmap/i.test(image) || /[?&]markers=/i.test(image)) return null;
+  const centre = image.match(/[?&]center=(-?\d{1,3}(?:\.\d+)?)(?:%2C|,)(-?\d{1,3}(?:\.\d+)?)/i);
+  const zoom = Number((image.match(/[?&]zoom=(\d+)/i) || [])[1]);
+  if (!centre || !(zoom >= 15)) return null;
+  return point(centre[1], centre[2]);
+}
+
+// Du plus précis au plus vague : « parc d'attractions » avant « parc ».
+const GENRES: [RegExp, string][] = [
+  [/parc d attractions|theme park|amusement|zoo|aquarium|bowling|casino|discotheque|night ?club|karaoke|escape|cinema|theatre|theater|opera|salle de concert|concert hall/, "fun"],
+  [/restaurant|pizzeria|trattoria|osteria|bistro|brasserie|cafe|coffee|\bbar\b|\bpub\b|boulangerie|bakery|patisserie|glacier|ice cream|creperie|salon de the|tea room|traiteur|sushi|burger|tapas|taverne|tavern|steak|grill|food|diner|cantine|brunch/, "resto"],
+  [/plage|beach/, "plage"],
+  [/hotel|hostel|auberge|\bspa\b|chambre d hotes|lodge|camping|resort|guest ?house|bed and breakfast/, "repos"],
+  [/salle de sport|\bgym\b|fitness|stade|stadium|piscine|swimming|escalade|climbing|surf|\bski\b|golf|tennis|sports?\b/, "sport"],
+  [/\bgare\b|aeroport|airport|station de metro|subway|parking|terminal|ferry/, "trajet"],
+  [/\bparc\b|\bpark\b|jardin|garden|foret|forest|sentier|trail|randonnee|hiking|point de vue|viewpoint|belvedere|\blac\b|\blake\b|montagne|mountain|cascade|waterfall|reserve naturelle|nature/, "balade"],
+  [/musee|museum|monument|chateau|castle|eglise|church|cathedrale|cathedral|basilique|temple|mosquee|synagogue|galerie|gallery|palais|palace|historique|historic|attraction|site touristique|landmark|memorial|ruines|ruins/, "visite"],
+];
+
+/** « Restaurant italien », « Musée d'art » → la catégorie de l'app. Null si rien ne le dit. */
+export function categorieDuGenre(genre: string | null): string | null {
+  const g = normaliser(genre || "");
+  if (!g) return null;
+  return GENRES.find(([re]) => re.test(g))?.[1] || null;
+}
