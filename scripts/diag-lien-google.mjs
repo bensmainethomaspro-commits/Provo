@@ -152,6 +152,40 @@ for (const [quoi, nom, attendu] of NOMS) {
   else bilan(!p, 'aucun point : la recherche ne désigne pas UN lieu');
 }
 
+// ── 3 · Et depuis l'hébergeur de la fonction ? ───────────────────────────────
+// Tout ce qui précède part d'un exécuteur GitHub. La fonction, elle, tourne
+// chez Supabase, et Google ne traite pas toutes les adresses IP de la même
+// façon : le 12 novembre 2026, un exécuteur a reçu le captcha dès son premier
+// appel pendant qu'un autre obtenait tout. Mesure unique, tant que la fonction
+// `enrich-place` déployée télécharge encore le lien qu'on lui donne : on lui
+// fait lire une recherche Maps, et elle rend la vignette de la page (`photo`).
+// (Une fois cette branche déployée, elle refusera ce lien — « pas_de_site » —
+// et c'est `geocodeurs`, dans la réponse d'`extract-place`, qui dira ce que
+// Google sert à l'hébergeur.)
+titre('3 · CE QUE GOOGLE SERT À L\'HÉBERGEUR DE LA FONCTION (via enrich-place en production)');
+{
+  const CLE = 'sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD';
+  for (const nom of ['ADEVA Cucina Moderna', 'Schönbrunner Palais, Vienne Autriche', 'Café Central']) {
+    let ligne;
+    try {
+      const r = await fetch('https://usztistixgzdrvjzplqx.supabase.co/functions/v1/enrich-place', {
+        method: 'POST', signal: AbortSignal.timeout(40000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CLE}`, apikey: CLE,
+          Origin: 'https://provo-tbens.vercel.app' },
+        body: JSON.stringify({ name: nom, category: 'visite',
+          website: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nom)}` }),
+      });
+      const d = await r.json().catch(() => ({}));
+      const photo = String(d.photo || '');
+      const p = lirePointMaps(`<meta property="og:image" content="${photo.replace(/&/g, '&amp;')}">`);
+      ligne = `${r.status} · ${d.raison || d.source || '—'} · ${p ? `${p.lat}, ${p.lon}` : photo ? `vignette sans point (${court(photo.replace(/^.*staticmap\?/, '').replace(/&(key|signature)=[^&]*/g, ''), 90)})` : 'aucune vignette'}`;
+    } catch (e) { ligne = `ERR ${String(e).slice(0, 80)}`; }
+    console.log(`    ${nom.padEnd(40)} ${ligne}`);
+    resume.push(`hébergeur · ${nom.padEnd(36)} ${ligne}`);
+    await pause(1500);
+  }
+}
+
 titre(`BILAN : ${ouvertes} contrôles justes, ${fermees} faux`);
 for (const l of resume) console.log(`  ${l}`);
 if (fermees) console.log('  Une porte s\'est refermée, ou Google a servi son captcha à cet exécuteur.\n  La fonction retombe alors sur la carte ouverte seule : voir `geocodeurs` dans sa réponse.');

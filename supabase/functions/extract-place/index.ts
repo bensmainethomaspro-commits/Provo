@@ -125,7 +125,20 @@ function depuisPhoton(f: any) {
   };
 }
 
+// Photon qui ne répond pas coûte huit secondes par recherche, et un lien en
+// lance jusqu'à quatre : le budget de l'appel y passait en entier, et les
+// échelons suivants (le point demandé à Google) n'étaient jamais atteints —
+// mesuré le 12 novembre 2026, 18 s pour une fiche. Un délai dépassé est retenu
+// une minute : assez pour finir l'appel en cours, pas assez pour se priver de
+// Photon une fois qu'il est revenu.
+let photonMuet = 0;
+const PHOTON_MUET_MS = 60_000;
+
 async function photonSearch(query: string, limit = 5, pres: { lat: number; lon: number } | null = null): Promise<any[]> {
+  if (Date.now() - photonMuet < PHOTON_MUET_MS) {
+    if (traceGeo[traceGeo.length - 1] !== "photon sauté (muet)") traceGeo.push("photon sauté (muet)");
+    return [];
+  }
   const { signal, clear } = withTimeout(8000);
   try {
     let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${limit}&lang=fr`;
@@ -138,6 +151,7 @@ async function photonSearch(query: string, limit = 5, pres: { lat: number; lon: 
     return (d?.features || []).map(depuisPhoton);
   } catch (e) {
     clear();
+    photonMuet = Date.now();
     traceGeo.push(`photon ${(e as Error)?.name || "erreur"}`);
     return [];
   }
@@ -666,9 +680,14 @@ const googleBoude = () => Date.now() - googleRefuse < CAPTCHA_MS;
 const captcha = (r: { finalUrl: string; statut: number }) => r.statut === 429 || /\/sorry\//.test(r.finalUrl);
 
 // Les robots auxquels Google sert l'aperçu, dans l'ordre où on les essaie.
+// Mesuré le 12 novembre 2026 sur le même lien, six agents d'affilée : Facebook
+// et Twitter reçoivent l'aperçu (5 ko) ; WhatsApp et Discord, quinze octets ;
+// un téléphone, la coquille JavaScript. Et le QUATRIÈME appel a reçu le
+// captcha : deux essais, pas un de plus. (Le matin même, Facebook seul avait
+// reçu quinze octets — d'où le second.)
 const ROBOTS_APERCU: [string, string][] = [
   ["facebook", UA_ROBOT_SOCIAL],
-  ["whatsapp", "WhatsApp/2.23.20.0"],
+  ["twitter", "Twitterbot/1.0"],
 ];
 
 function lienDePartageGoogle(brut: string): boolean {
