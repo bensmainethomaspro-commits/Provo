@@ -156,33 +156,35 @@ for (const [quoi, nom, attendu] of NOMS) {
 // Tout ce qui précède part d'un exécuteur GitHub. La fonction, elle, tourne
 // chez Supabase, et Google ne traite pas toutes les adresses IP de la même
 // façon : le 12 novembre 2026, un exécuteur a reçu le captcha dès son premier
-// appel pendant qu'un autre obtenait tout. Mesure unique, tant que la fonction
-// `enrich-place` déployée télécharge encore le lien qu'on lui donne : on lui
-// fait lire une recherche Maps, et elle rend la vignette de la page (`photo`).
-// (Une fois cette branche déployée, elle refusera ce lien — « pas_de_site » —
-// et c'est `geocodeurs`, dans la réponse d'`extract-place`, qui dira ce que
-// Google sert à l'hébergeur.)
-titre('3 · CE QUE GOOGLE SERT À L\'HÉBERGEUR DE LA FONCTION (via enrich-place en production)');
+// appel pendant qu'un autre obtenait tout. On demande donc à la fonction
+// DÉPLOYÉE ce qu'elle a obtenu : `geocodeurs` le dit, échelon par échelon.
+// (Mesuré une fois avant le déploiement, par `enrich-place` qui téléchargeait
+// encore le lien qu'on lui donnait : Google répond 200 à l'hébergeur, sans
+// captcha. Une fonction d'avant cette branche ne connaît pas ces échelons.)
+titre('3 · CE QUE LA FONCTION DÉPLOYÉE OBTIENT DE GOOGLE, depuis son hébergeur');
 {
   const CLE = 'sb_publishable_yaO8Y2s2j2WspT4gYsRmlw_SO7m92nD';
-  for (const nom of ['ADEVA Cucina Moderna', 'Schönbrunner Palais, Vienne Autriche', 'Café Central']) {
+  const CAS = [
+    ['lien de partage, lieu hors du voyage', LIEN, 'Biarritz'],
+    ['nom que la carte ouverte ne porte pas', 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner+Palais', 'Vienne Autriche'],
+  ];
+  for (const [quoi, url, destination] of CAS) {
     let ligne;
     try {
-      const r = await fetch('https://usztistixgzdrvjzplqx.supabase.co/functions/v1/enrich-place', {
-        method: 'POST', signal: AbortSignal.timeout(40000),
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CLE}`, apikey: CLE,
-          Origin: 'https://provo-tbens.vercel.app' },
-        body: JSON.stringify({ name: nom, category: 'visite',
-          website: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nom)}` }),
+      const r = await fetch('https://usztistixgzdrvjzplqx.supabase.co/functions/v1/extract-place', {
+        method: 'POST', signal: AbortSignal.timeout(45000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CLE}`, apikey: CLE },
+        body: JSON.stringify({ url, destination }),
       });
       const d = await r.json().catch(() => ({}));
-      const photo = String(d.photo || '');
-      const p = lirePointMaps(`<meta property="og:image" content="${photo.replace(/&/g, '&amp;')}">`);
-      ligne = `${r.status} · ${d.raison || d.source || '—'} · ${p ? `${p.lat}, ${p.lon}` : photo ? `vignette sans point (${court(photo.replace(/^.*staticmap\?/, '').replace(/&(key|signature)=[^&]*/g, ''), 90)})` : 'aucune vignette'}`;
+      const f = d.result || {};
+      ligne = `${r.status} · ${Number.isFinite(f.lat) ? `${Number(f.lat).toFixed(4)}, ${Number(f.lon).toFixed(4)}` : 'SANS POINT'}`
+        + ` · ${f.address || 'sans adresse'} · ${f.category || '—'}${f.aConfirmer ? ' · à confirmer' : ''}`
+        + `\n      ${(d.geocodeurs || []).join(', ') || '(aucune trace)'}`;
     } catch (e) { ligne = `ERR ${String(e).slice(0, 80)}`; }
-    console.log(`    ${nom.padEnd(40)} ${ligne}`);
-    resume.push(`hébergeur · ${nom.padEnd(36)} ${ligne}`);
-    await pause(1500);
+    console.log(`    ${quoi}\n      ${ligne}`);
+    resume.push(`hébergeur · ${quoi.padEnd(38)} ${ligne}`);
+    await pause(4000);
   }
 }
 

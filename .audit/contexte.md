@@ -296,6 +296,41 @@ raison et sa condition de réfutation sont dans le fichier de migration.
 `with_check: null` sur une politique `UPDATE` ne prouve rien à lui seul, il faut
 lire l'expression `USING`.
 
+## Les échelons Google d'`extract-place` ne sont pas des API (relevé le 2026-11-12)
+
+Un lien de partage Google ne porte que le nom du lieu, et la page Google exige
+JavaScript. La fonction lit donc deux choses que Google sert aux robots de
+messagerie : l'aperçu du lien (`apercuDuPartage` — nom, ville, genre) et la
+vignette d'une recherche Maps, centrée sur le lieu (`pointGoogle`). Lecteurs
+purs et testés dans `_shared/lecture-lien.ts` (`lireApercuGoogle`,
+`lirePointMaps`, `categorieDuGenre`) ; mesures dans `.claude/project-notes.md`.
+
+À tenir pour acquis, et à ne pas remonter comme constat :
+
+- **Ce sont des portes, pas des contrats.** Capricieuses (même agent, même
+  lien : plein à 13 h 39, vide à 8 h 47), et Google sert son captcha à
+  certaines adresses de centre de données. Chaque échelon écrit ce qu'il a reçu
+  dans `geocodeurs`, et la fonction continue sur la carte ouverte quand il se
+  tait. C'est voulu : l'utilisateur a demandé « ce qu'il y a de meilleur en
+  gratuit », et Google Places a été écarté.
+- **Le point de Google ne se croit jamais sur parole** : la page ne dit pas le
+  nom de ce qu'elle a trouvé, et pour un nom inexistant elle a rendu un lieu
+  au hasard près du serveur. D'où `auPoint` (un voisin ne prête que sa rue) et
+  `aConfirmer` (loin du voyage et non confirmé → proposé, jamais écrit).
+- **Deux essais au plus par lien** pour l'aperçu : le quatrième appel d'affilée
+  déclenche le captcha.
+
+Ce qui reste à surveiller : `scripts/diag-lien-google.mjs` (à chaque poussée
+qui touche la fonction) et le canari quotidien, qui passe au rouge si le lien
+du signalement ressort sans point.
+
+**Vérifier le typage d'une fonction Edge sans attendre l'intégration continue :**
+Deno s'installe dans le bac à sable par npm (`npm i deno` dans un dossier à
+part), puis `DENO_CERT=/root/.ccr/ca-bundle.crt deno check
+--node-modules-dir=auto supabase/functions/<nom>/index.ts`. Supprimer le
+`deno.lock` qu'il laisse à la racine. Le réseau du bac à sable ne joint ni
+Google ni Supabase : exécuter la fonction reste l'affaire du banc.
+
 ## Le code partagé entre le client et les fonctions Edge
 
 Depuis le 2026-09-29, **du code de `supabase/functions/_shared/` est importé par

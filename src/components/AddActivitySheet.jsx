@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm, reduireImage } from '../utils/helpers';
+import { CATEGORIES, formatDate, getDayLabel, deduceTitle, searchPlaces, getCategoryMeta, extractViaEdge, extractPlaceClient, nomDeLieu, lireReservation, ressembleAUneReservation, lireLegende, ressembleAUneLegende, haversineKm, reduireImage, situerParLeServeur } from '../utils/helpers';
 import { legendeTikTokNative, lectureNativePossible } from '../utils/tiktokNatif';
 import { usePlaceSuggestions } from '../hooks/usePlaceSuggestions';
 import { poiAtCoords } from '../utils/enrich';
+import { aProposer, fortAilleurs, fortPresDuVoyage, loinDuVoyage, villeEtPays } from '../utils/situer';
+import { formatKm, signaturePlace } from '../utils/verifyPlaces';
 import { lienPartage, lireGeo, premierLien } from '../utils/lienColle';
 import Icone from './Icone';
 import { ChevronDown, X, Search } from 'lucide-react';
@@ -72,6 +74,8 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // En modification, on vient précisément pour changer un champ : le pli
   // s'ouvre. En création, la recherche suffit presque toujours.
   const [detailsOuverts, setDetailsOuverts] = useState(false);
+  // Le point d'un lieu dont l'écran vient de dire qu'il est loin du voyage.
+  const loinAnnonce = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -82,6 +86,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setImportUrl(lienInitial || '');
       setCandidates([]);
       setImportMsg('');
+      loinAnnonce.current = null;
       setPoiHint(null);
       setAutresLieux([]);
       setLieuxRetenus(new Set());
@@ -162,6 +167,74 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg('');
   };
 
+  const ancreVoyage = Number.isFinite(tripLat) && Number.isFinite(tripLon)
+    ? { lat: tripLat, lon: tripLon } : null;
+
+  // « C'est loin » se dit au moment où la fiche se remplit, sous le champ qui
+  // vient de la remplir — pas trois écrans plus tard dans un contrôle. Un lieu
+  // hors du voyage n'est pas une erreur : c'est une information (principe
+  // produit : l'app signale ce qui compte, elle ne bloque rien).
+  const direOu = (lieu, titre) => {
+    const km = loinDuVoyage(lieu, ancreVoyage);
+    if (km == null || !tripDestination) return '';
+    // Retenu pour l'enregistrement : ce qui vient d'être dit ici n'a pas à
+    // être redit par le contrôle des lieux (voir `handleSubmit`).
+    loinAnnonce.current = { lat: lieu.lat, lon: lieu.lon };
+    const ou = villeEtPays(lieu.address);
+    return `« ${titre || lieu.title} » est ${ou ? `à ${ou} — ` : ''}à ${formatKm(km)} de ${tripDestination}.`;
+  };
+  const messageHomonymes = `plusieurs lieux portent ce nom${
+    tripDestination ? `, aucun près de ${tripDestination}` : ''} : lequel ?`;
+
+  /**
+   * Un lien ou une légende a donné un NOM, sans point sur la carte.
+   *
+   * On cherchait « nom, destination » autour du voyage, et on s'arrêtait là :
+   * un restaurant de Rome collé dans un voyage à Biarritz était déclaré « pas
+   * répertorié dans la carte ouverte » sans que personne soit allé voir à Rome
+   * (11 novembre 2026). L'ordre, et ses raisons, sont dans `utils/situer.js` :
+   * le nom entier près du voyage, puis le nom entier ailleurs s'il est seul à
+   * le porter, et sinon on PROPOSE — rien ne s'écrit d'office.
+   *
+   * @returns {Promise<{etat: 'pose'|'choix'|'ressemble'|'rien', lieu?: object, ailleurs?: boolean}>}
+   */
+  const situerLeNom = async (titre, raw, plus = {}, { localite = '', serveur = false } = {}) => {
+    // Le lien a dit où est le lieu (« … · Rome, Italie ») : c'est là qu'on
+    // cherche, et la distance au voyage ne filtre plus rien.
+    const q = localite ? `${titre}, ${localite}` : tripDestination ? `${titre}, ${tripDestination}` : titre;
+    const pres = await searchPlaces(q, localite ? {} : { lat: tripLat, lon: tripLon }).catch(() => []);
+    let d = fortPresDuVoyage(titre, pres, localite ? null : ancreVoyage);
+    let ailleurs = false;
+    if (!d.lieu && !d.candidats.length) {
+      // Sans destination ni ancre, la première recherche était déjà « partout ».
+      const partout = (tripDestination || ancreVoyage)
+        ? await searchPlaces(titre).catch(() => []) : pres;
+      d = fortAilleurs(titre, partout);
+      ailleurs = true;
+    }
+    if (d.lieu) {
+      // Le nom du lien fait foi : il vient de la fiche d'origine.
+      applyResult({ ...d.lieu, title: titre, ...plus }, raw);
+      return { etat: 'pose', lieu: d.lieu };
+    }
+    if (d.candidats.length) { setCandidates(d.candidats); return { etat: 'choix', ailleurs }; }
+    // La carte ouverte ne porte ce nom nulle part. Pour un nom lu dans une
+    // légende, le serveur n'a pas encore demandé son point à Google Maps (pour
+    // un lien, si — inutile d'y retourner). Dans le voyage, il s'écrit ; plus
+    // loin, il se propose : une légende peut nommer n'importe quoi.
+    if (serveur) {
+      const s = await situerParLeServeur(titre, tripDestination).catch(() => null);
+      if (s && !s.aConfirmer && loinDuVoyage(s, ancreVoyage) == null) {
+        applyResult({ ...s, title: titre, ...plus }, raw);
+        return { etat: 'pose', lieu: s };
+      }
+      if (s) { setCandidates([{ ...s, title: titre }]); return { etat: 'choix', ailleurs: true, unSeul: true }; }
+    }
+    const voisins = aProposer(titre, pres, ancreVoyage);
+    if (voisins.length) { setCandidates(voisins); return { etat: 'ressemble' }; }
+    return { etat: 'rien' };
+  };
+
   // Le traitement d'une légende, d'où qu'elle vienne : lue sur le téléphone
   // pour un lien TikTok, ou collée à la main. Un seul chemin, donc un seul
   // comportement à vérifier.
@@ -173,18 +246,22 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setLieuxRetenus(new Set(lu.autresLieux.map((_, i) => i)));
     }
     applyResult({ ...lu, ...(lien ? { link: lien } : {}) }, raw);
-    // Une légende donne un nom, presque jamais des coordonnées : on situe le
-    // lieu sur la destination, comme pour un lien partagé.
+    // Une légende donne un nom, presque jamais des coordonnées : on le situe
+    // comme celui d'un lien partagé — près du voyage d'abord, ailleurs ensuite.
     if (lu.lat == null) {
-      const q = tripDestination ? `${lu.title}, ${tripDestination}` : lu.title;
-      const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
-      if (found.length === 1) {
-        applyResult({ ...found[0], title: lu.title, ...(lien ? { link: lien } : {}) }, raw);
-      } else if (found.length > 1) {
-        setCandidates(found);
-        setImportMsg(`« ${lu.title} » lu dans la légende — précise lequel c'est.`);
+      const s = await situerLeNom(lu.title, raw, lien ? { link: lien } : {}, { serveur: true });
+      if (s.etat === 'choix' || s.etat === 'ressemble') {
+        setImportMsg(`« ${lu.title} » lu dans la légende — ${
+          s.etat === 'ressemble' ? 'aucun lieu de ce nom sur la carte ouverte. Est-ce l’un de ceux-ci ?'
+            : s.unSeul ? `rien de ce nom près de ${tripDestination || 'ton voyage'}. Est-ce celui-ci ?`
+              : s.ailleurs ? messageHomonymes : 'précise lequel c’est.'}`);
         return true;
       }
+      const ou = s.etat === 'pose' ? direOu(s.lieu, lu.title) : '';
+      if (ou) { setImportMsg(`Lu dans la légende ✓ — ${ou}`); return true; }
+    } else {
+      const ou = direOu(lu, lu.title);
+      if (ou) { setImportMsg(`Lu dans la légende ✓ — ${ou}`); return true; }
     }
     // Dire d'où vient le nom : que la légende ait été lue sur le téléphone ou
     // collée à la main, la personne doit savoir ce qui a rempli sa fiche.
@@ -198,6 +275,26 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     if (!place || place.openingHours || place.lat == null) return;
     const poi = await poiAtCoords(place.lat, place.lon).catch(() => null);
     if (poi?.title) setPoiHint(poi);
+  };
+
+  // Un lieu que rien ne confirme : son point vient de Google Maps, la carte
+  // ouverte ne porte pas ce nom à cet endroit, et il n'est pas là où se passe
+  // le voyage. C'est peut-être lui ; pour un nom qui n'existe pas, Google rend
+  // parfois un lieu au hasard (mesuré le 12 novembre 2026). Il se PROPOSE —
+  // un tap pour l'accepter — et ne s'écrit jamais tout seul.
+  const proposerUnLieu = (lieu, titre) => {
+    setCandidates([{ ...lieu, id: lieu.id || `p${lieu.lat},${lieu.lon}`, title: titre || lieu.title }]);
+    setImportMsg(`« ${titre || lieu.title} » — rien de ce nom ${
+      tripDestination ? `près de ${tripDestination}` : 'sur la carte ouverte'}. Est-ce celui-ci ?`);
+  };
+
+  // Un lieu choisi dans la liste, ou seul résultat d'une recherche : la fiche
+  // se remplit, et s'il n'est pas là où se passe le voyage, l'écran le dit.
+  const choisir = (lieu, raw) => {
+    applyResult(lieu, raw);
+    offerPoiAt(lieu);
+    const ou = direOu(lieu, lieu.title);
+    if (ou) setImportMsg(ou);
   };
 
   const usePoiHint = () => {
@@ -305,6 +402,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           result = { ...(result || {}), title: indice, category: result?.category || 'visite' };
         }
 
+        if (result?.aConfirmer && result.lat != null) {
+          // Le lien reste dans la fiche quoi qu'on réponde : c'est lui qu'on
+          // a collé, et il mène au bon endroit même si la proposition est fausse.
+          set('link', normalized);
+          proposerUnLieu({ ...result, link: result.link || normalized }, result.title);
+          return;
+        }
         if (result && (result.title || result.lat != null)) {
           // Retenus par défaut : ils viennent d'être trouvés, et décocher est
           // plus rapide que cocher six fois.
@@ -313,6 +417,9 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             setLieuxRetenus(new Set(result.autresLieux.map((_, i) => i)));
           }
           applyResult({ ...result, link: result.link || normalized }, raw);
+          // Ce qui situe la fiche au bout du compte : le résultat du serveur,
+          // ou l'établissement retrouvé autour de son point (plus bas).
+          let pose = result;
           // Un point `geo:` sans nom : ce qui se trouve à cet endroit précis
           // est proposé, comme pour une adresse tapée.
           if (geo && !result.title && result.lat != null) offerPoiAt(result);
@@ -336,34 +443,36 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             if (meme) {
               applyResult({ ...meme, title: result.title, link: result.link || normalized,
                 photoUrl: result.photoUrl || meme.photoUrl }, raw);
+              pose = meme;
             }
           }
 
           // Un lien partagé donne presque toujours le NOM du lieu, rarement son
-          // adresse : une recherche du nom seul ne donne rien (« Agapii Mou »
-          // n'existe pas pour un géocodeur sans ville). On relance donc la
-          // recherche en la situant sur la destination du voyage.
+          // adresse. Le serveur l'a déjà cherché, près du voyage puis ailleurs ;
+          // s'il revient sans point, c'est qu'il n'a rien trouvé de sûr — ou
+          // plusieurs homonymes, et lui ne peut pas demander lequel. Le
+          // téléphone, si.
           if (result.lat == null && result.title) {
-            const q = tripDestination ? `${result.title}, ${tripDestination}` : result.title;
-            const found = await searchPlaces(q, { lat: tripLat, lon: tripLon });
-            if (found.length === 1) {
-              // Le nom du lien fait foi : il vient de la fiche Google.
-              applyResult({ ...found[0], title: result.title, link: result.link || normalized }, raw);
-            } else if (found.length > 1) {
-              const net = (found[0]._score ?? 0) - (found[1]._score ?? 0) >= 5;
-              if (net) {
-                applyResult({ ...found[0], title: result.title, link: result.link || normalized }, raw);
-              } else {
-                setCandidates(found);
-                setImportMsg(`« ${result.title} » importé — précise lequel c'est.`);
-              }
+            const s = await situerLeNom(result.title, raw, { link: result.link || normalized },
+              { localite: result.localite || '' });
+            if (s.etat === 'pose') {
+              const ou = direOu(s.lieu, result.title);
+              if (ou) setImportMsg(ou);
+            } else if (s.etat === 'choix') {
+              setImportMsg(`« ${result.title} » importé — ${s.ailleurs ? messageHomonymes : 'précise lequel c’est.'}`);
+            } else if (s.etat === 'ressemble') {
+              // Rien ne porte ce nom : ce qui ressemble se propose, et ne
+              // s'écrit jamais tout seul — un voisin n'est pas le lieu.
+              setImportMsg(`« ${result.title} » importé — aucun lieu de ce nom sur la carte ouverte. `
+                + 'Est-ce l’un de ceux-ci ?');
             } else {
-              // Le lieu existe chez Google mais pas dans les données
-              // cartographiques ouvertes sur lesquelles l'app s'appuie. Le dire
-              // franchement vaut mieux que laisser croire à une panne.
-              setImportMsg(`« ${result.title} » importé ✓ — mais ce lieu n'est pas `
-                + `répertorié dans la carte ouverte, l'adresse et les horaires `
-                + `restent à compléter à la main.`);
+              // Cherché près du voyage ET ailleurs : là seulement on peut dire
+              // que la carte ouverte ne le connaît pas. Ce message s'affichait
+              // après une recherche limitée au voyage — il était faux pour tout
+              // lieu situé ailleurs.
+              setImportMsg(`« ${result.title} » importé ✓ — introuvable sur la carte ouverte`
+                + `${tripDestination ? `, ni près de ${tripDestination} ni ailleurs` : ''} : `
+                + 'l’adresse et les horaires restent à compléter à la main.');
             }
             return;
           }
@@ -381,6 +490,12 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               : "Vidéo enregistrée ✓ — ce post ne dit pas où il a été pris. "
                 + "Écris le nom du lieu ici : je trouve l'adresse, les horaires "
                 + "et le reste.");
+          }
+          // Un lien désigne UN endroit, où qu'il soit : la fiche est remplie.
+          // S'il n'est pas là où se passe le voyage, on le dit — sans bloquer.
+          if (result.lat != null) {
+            const ou = direOu(pose, result.title);
+            if (ou) setImportMsg(ou);
           }
           return;
         }
@@ -462,13 +577,25 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       if (!found.length && tripDestination && !raw.includes(',')) {
         found = await searchPlaces(`${raw}, ${tripDestination}`, { lat: tripLat, lon: tripLon });
       }
-      if (found.length === 1) { applyResult(found[0], raw); offerPoiAt(found[0]); return; }
+      // Un nom que la carte ouverte ne situe pas près du voyage — dit dans une
+      // autre langue (« Palais du Belvedere » ne ramenait que Varsovie et le
+      // Vatican), ou d'un lieu qu'elle ne connaît pas : avant de proposer des
+      // homonymes lointains ou de dire « aucun lieu », le serveur demande son
+      // point à Google Maps. S'il est SEUL au monde à porter ce nom, la carte
+      // ouverte suffit, et c'est immédiat.
+      const tousLoin = found.every(c => loinDuVoyage(c, ancreVoyage) != null);
+      if (tousLoin && !fortAilleurs(raw, found).lieu) {
+        const s = await situerParLeServeur(raw, tripDestination).catch(() => null);
+        if (s?.aConfirmer) { proposerUnLieu(s, s.title || raw); return; }
+        if (s) { choisir({ ...s, title: s.title || raw }, raw); return; }
+      }
+      if (found.length === 1) { choisir(found[0], raw); return; }
       if (found.length > 1) {
         // Les candidats sont classés. Quand le premier détache nettement les
         // autres, faire choisir n'apporte rien : on remplit, l'utilisateur
         // corrige s'il le faut. On ne fait choisir que sur une vraie ambiguïté.
         const net = (found[0]._score ?? 0) - (found[1]._score ?? 0) >= 5;
-        if (net) { applyResult(found[0], raw); offerPoiAt(found[0]); return; }
+        if (net) { choisir(found[0], raw); return; }
         setCandidates(found);
         return;
       }
@@ -611,6 +738,14 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       mustDo: form.mustDo || false,
       travelerIds: form.travelerIds || [],
     };
+    // Un lieu loin du voyage, dont l'écran vient de dire où il est, et que la
+    // personne enregistre quand même : c'est voulu. Sans cette empreinte, le
+    // contrôle des lieux le signalerait comme « mal situé » dès l'écran
+    // suivant, et proposerait de le « corriger » vers le voyage.
+    const dit = loinAnnonce.current;
+    if (!isEdit && dit && dit.lat === lat && dit.lon === lon) {
+      activity.placeCheckSig = signaturePlace(activity);
+    }
     if (isEdit) {
       onEditSave(activity);
     } else if (dest === 'reserve') {
@@ -775,7 +910,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               <div className="place-results">
                 {candidates.length > 0 && (
                   <div className="place-results__title">
-                    {candidates.length} lieux trouvés — lequel ?
+                    {candidates.length > 1 ? `${candidates.length} lieux trouvés — lequel ?` : 'Un lieu trouvé — est-ce lui ?'}
                   </div>
                 )}
                 {resultats.map(c => (
@@ -783,7 +918,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                     key={c.id}
                     type="button"
                     className="place-result"
-                    onClick={() => { applyResult(c, c.title); offerPoiAt(c); }}
+                    onClick={() => choisir(c, c.title)}
                   >
                     <span className="place-result__emoji">{getCategoryMeta(c.category).emoji}</span>
                     <span className="place-result__text">
@@ -873,8 +1008,21 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
             onClick={() => setDetailsOuverts(o => !o)}
             aria-expanded={detailsOuverts}
           >
-            <span><Icone de={ChevronDown} taille={16} className={`details-pli__chevron${detailsOuverts ? ' details-pli__chevron--ouvert' : ''}`} /> Détails</span>
-            <small>titre, catégorie, durée, horaires, prix, notes</small>
+            {/* Fermé, le pli ne disait rien de ce que l'app venait de trouver :
+                un lien collé, la roue qui tourne, puis le même écran qu'avant —
+                champ vidé, « Détails » muet. La fiche était remplie derrière,
+                et rien ne le montrait : vu de l'écran, « ça ne marche pas »
+                (12 novembre 2026). Le pli porte maintenant le nom et l'adresse
+                du lieu trouvé ; aucun élément de plus. */}
+            <span className="details-pli__titre">
+              <Icone de={ChevronDown} taille={16} className={`details-pli__chevron${detailsOuverts ? ' details-pli__chevron--ouvert' : ''}`} />
+              {' '}{form.title.trim() ? `${getCategoryMeta(form.category).emoji} ${form.title.trim()}` : 'Détails'}
+            </span>
+            <small>
+              {form.title.trim()
+                ? `${form.address ? `${form.address} · ` : ''}détails`
+                : 'titre, catégorie, durée, horaires, prix, notes'}
+            </small>
           </button>
           {detailsOuverts && (<>
           <div className="form-group">

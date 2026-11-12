@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
+import { nomsConnus, normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
 import { avecDelai, DELAI_FETCH_MS, DELAI_FONCTION_MS } from './reseau';
 
 // Server-side extractor (Supabase Edge Function "extract-place").
@@ -30,6 +30,44 @@ export async function extractViaEdge(url, destination = '') {
   } catch {
     return null;
   }
+}
+
+// Un nom que le serveur n'a pas su situer ne se redemande pas à chaque
+// complétion automatique de la fiche : chaque demande lui coûte jusqu'à deux
+// appels à Google. Trente minutes — et seulement pour la complétion : quand
+// c'est la personne qui relance la recherche, on y retourne.
+const nomsNonSitues = new Map();
+const NON_SITUE_MS = 30 * 60 * 1000;
+
+/**
+ * Dernier recours pour un NOM que la carte ouverte ne sait pas situer.
+ *
+ * « Vienna state opera », « Schönbrunner Palais », un restaurant ouvert l'an
+ * dernier : la carte ouverte ne les porte pas sous ce nom, ou pas du tout, et
+ * la fiche restait sans point — quatre sur douze dans un voyage à Vienne
+ * (11 novembre 2026). Le serveur sait demander le point d'un lieu à Google
+ * Maps par son nom ; on lui passe le nom sous la forme d'un lien de recherche
+ * Maps, celle qu'il lit déjà, sans rien lui ajouter.
+ *
+ * Rend la fiche trouvée (point, adresse, parfois horaires), ou null. Le lien
+ * de recherche fabriqué ici n'est PAS le lien du lieu : il ne ressort pas.
+ */
+export async function situerParLeServeur(nom, destination = '', { memoire = false } = {}) {
+  const n = String(nom || '').trim();
+  if (n.length < 3 || /^https?:/i.test(n)) return null;
+  const cle = `${n}|${destination}`.toLowerCase();
+  const rate = nomsNonSitues.get(cle);
+  if (memoire && rate && Date.now() - rate < NON_SITUE_MS) return null;
+  const r = await extractViaEdge(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(n)}`, destination);
+  if (!r || !Number.isFinite(r.lat) || !Number.isFinite(r.lon)) {
+    nomsNonSitues.set(cle, Date.now());
+    return null;
+  }
+  nomsNonSitues.delete(cle);
+  // eslint-disable-next-line no-unused-vars
+  const { link, source, autresLieux, ...fiche } = r;
+  return { ...fiche, id: `s${r.lat},${r.lon}` };
 }
 
 /**
@@ -877,6 +915,9 @@ function _shapeNominatim(p) {
   return {
     id: `n${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
     title: _placeTitle(p),
+    // Toutes les variantes du nom (`name:en`, `alt_name`…) : à Vienne,
+    // « Vienna State Opera » n'est écrit que là, et c'est ce qu'on a tapé.
+    noms: nomsConnus(p),
     address: _placeAddress(p),
     displayName: String(p.display_name || ''),
     category: _placeCategory(p),

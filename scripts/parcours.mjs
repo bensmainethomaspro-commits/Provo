@@ -1822,6 +1822,93 @@ const PARCOURS = [
       t.verifier("l'adresse est remplie tout seule", rempli.adresse.length > 5, rempli.adresse || '(vide)');
     } },
 
+  { groupe: 'Réseau', nom: 'Un lien vers un lieu loin du voyage : la fiche se remplit, et l’écran dit où il est', depart: 'voyage',
+    reseau: { extractPlace: 'loin', nominatim: 'ok' },
+    intention: "Coller le lien d'un restaurant de Rome dans un voyage à Vienne : il doit être trouvé, pas déclaré « non répertorié ».",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://share.google/y4QMh42nQx6DiSBfZ');
+      await t.clic('.import-row button', { delai: 2600, obligatoire: false });
+      const message = await t.p.evaluate(() => document.querySelector('.import-msg')?.innerText?.trim() || '');
+      // Le 11 novembre 2026, ce lien donnait « ce lieu n'est pas répertorié
+      // dans la carte ouverte » : on ne l'avait cherché qu'autour du voyage.
+      t.verifier('l’écran ne dit plus que le lieu est introuvable', !/répertorié|introuvable/i.test(message), message || '(rien)');
+      t.verifier('il dit OÙ est le lieu', /Rome, Italie/.test(message), message || '(rien)');
+      t.verifier('et à quelle distance du voyage', /à\s[\d\s\u202f.,]+km de Vienne/.test(message), message || '(rien)');
+      await t.ouvrirDetails();
+      const rempli = await t.p.evaluate(() => {
+        const q = (sel) => document.querySelector(sel)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'), adresse: q('input[placeholder="Lieu"]') };
+      });
+      t.verifier('le nom du lien est dans la fiche', rempli.titre === 'ADEVA Cucina Moderna', rempli.titre || '(vide)');
+      t.verifier('son adresse aussi', /Maroniti/.test(rempli.adresse), rempli.adresse || '(vide)');
+      // Rien n'est bloqué : loin du voyage n'est pas une erreur.
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      const fiche = (await t.voyage()).reserve.find(a => a?.title === 'ADEVA Cucina Moderna');
+      t.verifier('la fiche rejoint la Réserve, à Rome', Math.abs((fiche?.lat ?? 0) - 41.9021) < 0.01, JSON.stringify(fiche?.lat));
+      t.verifier('elle garde le lien d’origine', fiche?.link === 'https://share.google/y4QMh42nQx6DiSBfZ', fiche?.link || '(vide)');
+      // Ce que l'écran vient de dire n'a pas à être redit par le contrôle des
+      // lieux, qui proposerait de « corriger » la fiche vers le voyage.
+      t.verifier('le contrôle des lieux ne la signalera pas comme mal située', Boolean(fiche?.placeCheckSig), String(fiche?.placeCheckSig));
+    } },
+
+  { groupe: 'Réseau', nom: 'Un nom que la carte ouverte ne situe pas est demandé au serveur', depart: 'voyage',
+    reseau: { nominatim: 'aucun', extractPlace: 'parLeNom' },
+    intention: "Taper « Schönbrunner Palais » : la carte ouverte ne connaît pas ce nom, la fiche ne doit pas rester sans point.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'Schönbrunner Palais');
+      await t.clic('.import-row button', { delai: 2800, obligatoire: false });
+      t.verifier('le serveur a été interrogé', (t.appels().extractPlace || 0) > 0, JSON.stringify(t.appels()));
+      const message = await t.p.evaluate(() => document.querySelector('.import-msg')?.innerText?.trim() || '');
+      t.verifier('l’écran ne dit pas « aucun lieu trouvé »', !/aucun lieu/i.test(message), message || '(rien)');
+      await t.ouvrirDetails();
+      const rempli = await t.p.evaluate(() => {
+        const q = (sel) => document.querySelector(sel)?.value || '';
+        return { titre: q('input[placeholder*="Déjeuner au marché"]'), adresse: q('input[placeholder="Lieu"]') };
+      });
+      t.verifier('le nom tapé est dans la fiche', /Schönbrunner Palais/.test(rempli.titre), rempli.titre || '(vide)');
+      t.verifier('l’adresse est remplie', /Vienne/.test(rempli.adresse), rempli.adresse || '(vide)');
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      const fiche = (await t.voyage()).reserve.find(a => /Schönbrunner/.test(a?.title || ''));
+      t.verifier('la fiche a son point', Math.abs((fiche?.lat ?? 0) - 48.1858) < 0.01, JSON.stringify(fiche?.lat));
+      // Le lien de recherche fabriqué pour interroger le serveur n'est pas le
+      // lien du lieu : il ne doit pas finir dans la fiche.
+      t.verifier('le lien de recherche fabriqué n’est pas gardé', !/google\.com\/maps\/search/.test(fiche?.link || ''), fiche?.link || '(vide)');
+    } },
+
+  { groupe: 'Réseau', nom: 'Un lieu que rien ne confirme se propose, il ne s’écrit pas', depart: 'voyage',
+    reseau: { nominatim: 'aucun', extractPlace: 'aConfirmer' },
+    intention: "Taper un nom qui n'existe pas : Google rend parfois un lieu au hasard, loin du voyage. Il ne doit pas remplir la fiche d'office.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'Trattoria Zzqxj');
+      await t.clic('.import-row button', { delai: 2800, obligatoire: false });
+      const etat = await t.p.evaluate(() => ({
+        message: document.querySelector('.import-msg')?.innerText?.trim() || '',
+        propositions: [...document.querySelectorAll('.place-result')].map(b => b.innerText.replace(/\s+/g, ' ').trim()),
+        pli: document.querySelector('.details-pli')?.innerText?.replace(/\s+/g, ' ').trim() || '',
+      }));
+      t.verifier('l’écran demande, il n’affirme pas', /Est-ce celui-ci \?/.test(etat.message), etat.message || '(rien)');
+      t.verifier('le lieu est proposé, avec son adresse', etat.propositions.length === 1 && /Front Royal/.test(etat.propositions[0]),
+        etat.propositions.join(' | ') || '(aucune)');
+      t.verifier('la fiche n’est PAS remplie', !/Zzqxj|Front Royal/.test(etat.pli), etat.pli);
+      // Un tap l'accepte — et l'écran dit alors où il est.
+      await t.clic('.place-result', { delai: 900 });
+      const apres = await t.p.evaluate(() => ({
+        message: document.querySelector('.import-msg')?.innerText?.trim() || '',
+        pli: document.querySelector('.details-pli')?.innerText?.replace(/\s+/g, ' ').trim() || '',
+      }));
+      t.verifier('accepté d’un tap, il remplit la fiche', /Trattoria Zzqxj/.test(apres.pli), apres.pli);
+      t.verifier('et l’écran dit qu’il est loin', /km de Vienne/.test(apres.message) || !/Est-ce/.test(apres.message), apres.message || '(rien)');
+    } },
+
   { groupe: 'Réseau', nom: "Un lien qui échoue le dit et ne perd rien", depart: 'voyage',
     reseau: { extractPlace: 'err500' },
     intention: "Le service tombe : l'app doit le dire et laisser saisir à la main.",

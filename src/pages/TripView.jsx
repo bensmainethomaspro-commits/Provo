@@ -23,7 +23,8 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
+import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit, situerParLeServeur } from '../utils/helpers';
+import { loinDuVoyage } from '../utils/situer';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
@@ -879,9 +880,18 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       // cherché « à Biarritz », et restait sans adresse ni horaires alors que
       // la carte ouverte le connaît, là où il est (11 novembre 2026).
       const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
-      const found = situee
+      let found = situee
         ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon }, { rayonKm: RAYON_FICHE_KM })
         : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
+      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
+      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
+      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
+      // voyage — un point lointain, c'est à la personne de le confirmer, et
+      // l'écran d'ajout le lui montre.
+      if (!found?.lat && !situee && anchor) {
+        const s = await situerParLeServeur(activity.title, trip.destination, { memoire: true });
+        if (s && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
+      }
       const patch = missingFieldsFrom(activity, found);
       if (patch) {
         updateActivity(tripId, location, activityId, patch);

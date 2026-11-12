@@ -138,6 +138,35 @@ export const VARIANTES = {
       ],
     },
     aucun: { ok: false },
+    // Un lien de partage Google vers un restaurant de ROME, collé dans un
+    // voyage ailleurs : le cas du 11 novembre 2026, tel que la fonction le rend
+    // depuis qu'elle cherche là où le lien dit que le lieu se trouve.
+    loin: {
+      ok: true,
+      result: { title: 'ADEVA Cucina Moderna', address: '29 Via dei Maroniti, Rome, Italie',
+        lat: 41.9021228, lon: 12.4847452, category: 'resto',
+        link: 'https://share.google/y4QMh42nQx6DiSBfZ', source: 'google_maps' },
+      geocodeurs: ['apercu-google facebook lu', 'photon 200'],
+    },
+    // Un NOM envoyé par l'app sous la forme d'un lien de recherche Maps : la
+    // carte ouverte ne le porte pas, le serveur a demandé son point à Google.
+    parLeNom: {
+      ok: true,
+      result: { title: 'Schönbrunner Palais', address: 'Schönbrunner Schloßstraße, Vienne, Autriche',
+        lat: 48.1858124, lon: 16.312764, category: 'visite',
+        link: 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner%20Palais', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'ailleurs rien', 'point-google unique', 'photon-inverse 200'],
+    },
+    // Un nom qui n'existe pas : Google a quand même rendu UN lieu, à côté du
+    // serveur qui posait la question (mesuré le 12 novembre 2026, en Virginie).
+    // Rien ne le confirme et il est loin du voyage : la fonction le marque.
+    aConfirmer: {
+      ok: true,
+      result: { title: 'Trattoria Zzqxj', address: 'Main Street, Front Royal, États-Unis',
+        lat: 38.6572722, lon: -78.2267183, category: 'resto', aConfirmer: true,
+        link: 'https://www.google.com/maps/search/?api=1&query=Trattoria%20Zzqxj', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'ailleurs rien', 'point-google unique', 'photon-inverse 200', 'point-google à confirmer'],
+    },
   },
   // Le modèle a lu le texte, mais n'y a trouvé aucun lieu nommé.
   legende: { aucun: { ok: false } },

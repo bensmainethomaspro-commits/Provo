@@ -671,23 +671,21 @@ function extractGoogleSearchName(finalUrl: string, html: string): string | null 
 // reçu, la sonde `diag-lien-google` les relit à chaque poussée, et quand l'un
 // se tait la fonction continue sur la carte ouverte, comme avant.
 
-// Google a servi son captcha : insister ne fait que l'allonger. Retenu trois
-// minutes, comme le refus de Nominatim — et pour la même raison, chaque essai
-// perdu se paie sur le budget de l'appel.
-let googleRefuse = 0;
-const CAPTCHA_MS = 3 * 60_000;
-const googleBoude = () => Date.now() - googleRefuse < CAPTCHA_MS;
 const captcha = (r: { finalUrl: string; statut: number }) => r.statut === 429 || /\/sorry\//.test(r.finalUrl);
 
 // Les robots auxquels Google sert l'aperçu, dans l'ordre où on les essaie.
-// Mesuré le 12 novembre 2026 sur le même lien, six agents d'affilée : Facebook
-// et Twitter reçoivent l'aperçu (5 ko) ; WhatsApp et Discord, quinze octets ;
-// un téléphone, la coquille JavaScript. Et le QUATRIÈME appel a reçu le
-// captcha : deux essais, pas un de plus. (Le matin même, Facebook seul avait
-// reçu quinze octets — d'où le second.)
+// Mesuré quatre fois le 12 novembre 2026, six agents d'affilée sur le même
+// lien : Twitter a reçu l'aperçu (5 ko) à chaque fois ; Facebook trois fois sur
+// quatre, et un captcha la dernière ; WhatsApp, Telegram et Discord, quinze
+// octets ou un captcha ; un téléphone, la coquille JavaScript.
+//
+// Un captcha servi à UN agent ne dit rien des autres : à 19 h 07 Facebook
+// était refusé et Twitter servi dans la même seconde. La première version
+// retenait le captcha trois minutes et sautait tout ce qui touchait à Google —
+// elle a privé un banc entier du point par le nom, qui marchait.
 const ROBOTS_APERCU: [string, string][] = [
-  ["facebook", UA_ROBOT_SOCIAL],
   ["twitter", "Twitterbot/1.0"],
+  ["facebook", UA_ROBOT_SOCIAL],
 ];
 
 function lienDePartageGoogle(brut: string): boolean {
@@ -702,23 +700,20 @@ function lienDePartageGoogle(brut: string): boolean {
 
 /** Le nom du lieu, où il est et ce que c'est, tels que le lien les annonce. */
 async function apercuDuPartage(rawUrl: string): Promise<{ apercu: ApercuGoogle; finalUrl: string } | null> {
-  if (googleBoude()) {
-    traceGeo.push("apercu-google sauté (captcha récent)");
-    return null;
-  }
   for (const [qui, agent] of ROBOTS_APERCU) {
     const r = await fetchOnce(rawUrl, agent, 6000);
-    if (captcha(r)) {
-      googleRefuse = Date.now();
-      traceGeo.push(`apercu-google ${qui} captcha`);
-      return null;
-    }
-    const apercu = lireApercuGoogle(r.html);
-    traceGeo.push(`apercu-google ${qui} ${apercu ? "lu" : `muet (${r.statut}, ${r.html.length} o)`}`);
+    const refuse = captcha(r);
+    const apercu = refuse ? null : lireApercuGoogle(r.html);
+    traceGeo.push(`apercu-google ${qui} ${apercu ? "lu" : refuse ? "captcha" : `muet (${r.statut}, ${r.html.length} o)`}`);
     if (apercu) return { apercu, finalUrl: r.finalUrl };
   }
   return null;
 }
+
+// Le point par le nom, lui, n'a qu'une porte : refusé, on ne la refrappe pas
+// pendant une minute — chaque essai perdu se paie sur le budget de l'appel.
+let pointRefuse = 0;
+const POINT_REFUS_MS = 60_000;
 
 /**
  * Le point d'un lieu, demandé à Google Maps par son nom.
@@ -731,12 +726,17 @@ async function apercuDuPartage(rawUrl: string): Promise<{ apercu: ApercuGoogle; 
  *
  * Mesuré le 12 novembre 2026 : donné avec la MAUVAISE ville, un nom distinctif
  * ramène quand même le bon lieu (Rome pour « ADEVA Cucina Moderna, Biarritz »),
- * un nom qui n'existe pas ne ramène rien, et la ville seule sort à l'échelle
- * d'une ville, que `lirePointMaps` écarte. La page ne dit PAS le nom de ce
- * qu'elle a trouvé : le point se recoupe ensuite avec la carte ouverte.
+ * et la ville seule sort à l'échelle d'une ville, que `lirePointMaps` écarte.
+ *
+ * NE PAS LE CROIRE SUR PAROLE. La page ne dit pas le nom de ce qu'elle a
+ * trouvé, et pour un nom qui n'existe pas (« zzqxj plouf trattoria
+ * inexistante ») Google a rendu, une fois sur quatre, UN lieu précis à côté du
+ * serveur qui posait la question. L'appelant recoupe donc toujours : la carte
+ * ouverte porte ce nom à cet endroit, ou le point tombe là où on l'attend —
+ * sinon il n'est que proposé (`aConfirmer`).
  */
 async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon: number } | null> {
-  if (googleBoude()) {
+  if (Date.now() - pointRefuse < POINT_REFUS_MS) {
     traceGeo.push("point-google sauté (captcha récent)");
     return null;
   }
@@ -746,7 +746,7 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000,
     );
     if (captcha(r)) {
-      googleRefuse = Date.now();
+      pointRefuse = Date.now();
       traceGeo.push("point-google captcha");
       return null;
     }
@@ -795,6 +795,8 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
   const ou = communeEtPays(apercu?.localite ?? null);
 
   let place: (ReturnType<typeof shapePlace> & { voisin?: boolean }) | null = null;
+  // Le point vient-il de Google, sans que le lien l'ait porté ?
+  let pointDemande = false;
   if (!coords && name) {
     // 3 · Un nom, pas de point. La ville annoncée par le lien passe avant la
     //     destination du voyage : un restaurant de Rome collé dans un voyage à
@@ -809,6 +811,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
         && distanceKm(repere.lat, repere.lon, p.lat, p.lon) > Math.max(150, repere.rayonKm ?? 0);
       if (horsDuLien) traceGeo.push(`point-google écarté (loin de ${ou})`);
       else coords = p;
+      pointDemande = Boolean(coords);
       if (coords) place = await resolvePlace(name, coords);
     }
   } else {
@@ -822,6 +825,15 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
     || categorieDuGenre(clean)
     || place?.category || "visite";
 
+  // Un point demandé à Google, que la carte ouverte ne confirme pas (rien n'y
+  // porte ce nom), et qui ne tombe ni dans la ville annoncée par le lien ni
+  // dans le voyage : c'est peut-être le lieu, c'est peut-être n'importe quoi.
+  // Il part marqué, et le téléphone le PROPOSE au lieu de l'écrire.
+  const loinDuVoyage = !ancre
+    || distanceKm(ancre.lat, ancre.lon, coords?.lat ?? ancre.lat, coords?.lon ?? ancre.lon) > Math.max(150, ancre.rayonKm ?? 0);
+  const aConfirmer = pointDemande && Boolean(place?.voisin || !place) && !ou && loinDuVoyage;
+  if (aConfirmer) traceGeo.push("point-google à confirmer");
+
   if (place) {
     const { voisin, ...fiche } = place;
     // Quand la fiche trouvée est bien celle du lien, ses coordonnées sont plus
@@ -834,6 +846,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
       category: categorie,
       lat: laSienne ? fiche.lat : (coords?.lat ?? fiche.lat),
       lon: laSienne ? fiche.lon : (coords?.lon ?? fiche.lon),
+      ...(aConfirmer ? { aConfirmer: true } : {}),
       link: rawUrl,
       source: "google_maps",
     };
@@ -846,6 +859,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
       title: clean || "Lieu",
       category: categorie,
       ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
+      ...(aConfirmer ? { aConfirmer: true } : {}),
       ...(ou ? { localite: ou } : {}),
       link: rawUrl,
       source: "google_maps",
