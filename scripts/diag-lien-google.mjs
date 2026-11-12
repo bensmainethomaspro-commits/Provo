@@ -43,12 +43,12 @@ const entetes = (u) => ({
 });
 
 /** Suit les redirections à la main, comme `joindre`, et décode comme `lireCorps`. */
-async function commeUnRobot(url, max = 8) {
+async function commeUnRobot(url, max = 8, ua = UA_ROBOT) {
   const sauts = [];
   let courant = url;
   try {
     for (let i = 0; i < max; i++) {
-      const r = await fetch(courant, { redirect: 'manual', headers: entetes(new URL(courant)), signal: AbortSignal.timeout(20000) });
+      const r = await fetch(courant, { redirect: 'manual', headers: { ...entetes(new URL(courant)), 'User-Agent': ua }, signal: AbortSignal.timeout(20000) });
       const loc = r.headers.get('location');
       sauts.push(r.status);
       if (r.status >= 300 && r.status < 400 && loc) {
@@ -72,23 +72,36 @@ const bilan = (ok, quoi) => { if (ok) ouvertes++; else fermees++; console.log(` 
 
 // ── 1 · L'aperçu du lien de partage ──────────────────────────────────────────
 titre(`1 · L'APERÇU DU LIEN DE PARTAGE  ${LIEN}`);
-{
-  const c = await commeUnRobot(LIEN);
-  console.log(`    ${c.sauts.join(' → ')} · ${c.html.length} o · ${c.jeu || '—'} · ${court(c.finalUrl, 90)}${c.erreur ? ` · ${c.erreur}` : ''}`);
-  if (refuse(c)) console.log('    Google a répondu par son captcha (429) à cette adresse IP.');
+// Le 11 novembre, 5 ko et le nom du lieu ; le 12, quinze octets. Quel robot
+// reçoit quoi, aujourd'hui ?
+const ROBOTS = {
+  facebook: UA_ROBOT,
+  whatsapp: 'WhatsApp/2.23.20.0',
+  twitter: 'Twitterbot/1.0',
+  telegram: 'TelegramBot (like TwitterBot)',
+  discord: 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
+  safari: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+};
+let unApercu = false;
+for (const [qui, ua] of Object.entries(ROBOTS)) {
+  const c = await commeUnRobot(LIEN, 8, ua);
   const a = lireApercuGoogle(c.html);
+  console.log(`\n  ■ ${qui.padEnd(9)} ${c.sauts.join(' → ')} · ${c.html.length} o · ${c.jeu || '—'}${refuse(c) ? ' · CAPTCHA' : ''}${c.erreur ? ` · ${c.erreur}` : ''}`);
+  console.log(`    arrivée : ${court(c.finalUrl.replace(/([?&])(sca_esv|ved|ei|sxsrf|usg|opi)=[^&]*/g, '$1'), 260)}`);
+  if (c.html.length < 400) console.log(`    corps   : ${JSON.stringify(c.html)}`);
   console.log(`    lu : ${a ? JSON.stringify(a) : 'rien'}`);
-  if (a) console.log(`    → cherché autour de « ${communeEtPays(a.localite) || '—'} », catégorie « ${categorieDuGenre(a.genre) || '—'} »`);
-  bilan(Boolean(a?.nom && a?.localite), 'le lien dit le nom du lieu et où il est');
+  if (a) { unApercu = true; console.log(`    → cherché autour de « ${communeEtPays(a.localite) || '—'} », catégorie « ${categorieDuGenre(a.genre) || '—'} »`); }
+  await pause(2000);
 }
-await pause(2500);
+bilan(unApercu, 'un robot au moins reçoit le nom du lieu et où il est');
 
 // ── 2 · Le point d'un lieu, par son nom ──────────────────────────────────────
 titre('2 · LE POINT D\'UN LIEU PAR SON NOM (vignette Google Maps servie aux robots)');
 // [ce qu'on attend, la recherche, le point attendu à 1 km près | null = aucun point ne doit sortir]
 const NOMS = [
   ['un restaurant, nom seul', 'ADEVA Cucina Moderna', [41.9021, 12.4847]],
-  ['un restaurant, avec sa ville', 'ADEVA Cucina Moderna, Rome, Italie', [41.9021, 12.4847]],
+  ['un restaurant, avec sa ville', 'ADEVA Cucina Moderna, Rome, Italie', 'voir'],
+  ['un restaurant, ville collée', 'ADEVA Cucina Moderna Rome', 'voir'],
   ['dit en anglais', 'Vienna state opera', [48.2034, 16.3692]],
   ['dit en français, avec le voyage', 'Palais du Belvedere, Vienne Autriche', [48.1915, 16.3809]],
   ['germanisé à la main', 'Schönbrunner Palais, Vienne Autriche', [48.1858, 16.3128]],
@@ -103,6 +116,8 @@ const NOMS = [
   ['MAUVAISE ville (Athènes → Biarritz)', 'Agapii Mou, Biarritz', 'voir'],
   ['MAUVAISE ville (Vienne → Biarritz)', 'Vienna state opera, Biarritz', 'voir'],
   ['un mot en commun, sur place', 'Cucina Moderna, Biarritz', 'voir'],
+  ['la ville seule', 'Biarritz', 'voir'],
+  ['nom seul, peu distinctif', 'Agapii Mou', 'voir'],
 ];
 const km = (a, b) => {
   const rad = (d) => (d * Math.PI) / 180;
@@ -123,6 +138,25 @@ for (const [quoi, nom, attendu] of NOMS) {
   console.log(`    og:title « ${court(meta(c.html, 'og:title'), 90)} » · og:description « ${court(meta(c.html, 'og:description'), 90)} »`);
   console.log(`    vignette : ${court(image.replace(/^.*staticmap\?/, '').replace(/&(key|signature|client)=[^&]*/g, ''), 170) || '—'}`);
   console.log(`    lu : ${p ? `${p.lat}, ${p.lon}` : 'aucun point'}`);
+  // Le NOM de ce que Google a trouvé est-il écrit quelque part dans la page ?
+  // Sans lui, rien ne dit que le point est bien celui du lieu demandé.
+  if (p) {
+    const corps = c.html.replace(/<meta[^>]*>/g, '');
+    for (const cle of [String(p.lat), String(p.lon), String(p.lat).slice(0, 7)]) {
+      let i = corps.indexOf(cle), n = 0;
+      while (i !== -1 && n < 2) {
+        console.log(`    autour de ${cle} : …${court(corps.slice(Math.max(0, i - 260), i + 200), 460)}…`);
+        i = corps.indexOf(cle, i + cle.length); n++;
+      }
+      if (n) break;
+    }
+    const liens = [...new Set(corps.match(/\/maps\/(?:place|preview\/place|search)[^"'\\ <]{4,220}/g) || [])].slice(0, 4);
+    console.log(`    liens   : ${liens.map((l) => court(l, 200)).join('  |  ') || '—'}`);
+    console.log(`    <title> : ${court((c.html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1], 120) || '—'}`);
+    const itemprop = [...c.html.matchAll(/<meta[^>]+itemprop=["']([^"']+)["'][^>]*content=["']([^"']{0,160})["']|<meta[^>]+content=["']([^"']{0,160})["'][^>]*itemprop=["']([^"']+)["']/g)]
+      .map((m) => `${m[1] || m[4]}=${court(m[2] || m[3], 110)}`).slice(0, 6);
+    console.log(`    itemprop: ${itemprop.join('  |  ') || '—'}`);
+  }
   await pause(1800);
   if (attendu === 'voir') continue;
   if (attendu) bilan(Boolean(p) && km([p.lat, p.lon], attendu) < 1, `le point du lieu, à ${p ? Math.round(km([p.lat, p.lon], attendu) * 1000) : '—'} m de celui attendu`);
