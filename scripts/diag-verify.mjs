@@ -60,6 +60,14 @@ const LIENS = [
   // n'empêche plus de trouver le lieu.
   ['share.google, hors du voyage', 'https://share.google/y4QMh42nQx6DiSBfZ', 'resto', 'Biarritz'],
   ['Maps sans coords, hors du voyage', 'https://www.google.com/maps/search/?api=1&query=ADEVA+Cucina+Moderna', 'resto', 'Biarritz'],
+  // Des noms que la carte ouverte ne porte pas tels quels : dits dans une autre
+  // langue, germanisés à la main, ou d'un lieu qu'elle ne connaît pas. C'est ce
+  // que l'app envoie quand un nom tapé à la main ne se laisse pas situer (les
+  // fiches restées sans point dans un voyage à Vienne, 11 novembre 2026).
+  ['Nom dit en anglais', 'https://www.google.com/maps/search/?api=1&query=Vienna+state+opera', 'fun', 'Vienne Autriche'],
+  ['Nom dit en français', 'https://www.google.com/maps/search/?api=1&query=Palais+du+Belvedere', 'visite', 'Vienne Autriche'],
+  ['Nom germanisé à la main', 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner+Palais', 'visite', 'Vienne Autriche'],
+  ['Absent de la carte ouverte', 'https://www.google.com/maps/search/?api=1&query=Agapii+Mou', null, 'Biarritz'],
 ];
 
 function ligne(nom, r) {
@@ -68,7 +76,7 @@ function ligne(nom, r) {
   const champs = [
     p.title ? 'titre' : null,
     p.address ? 'adresse' : null,
-    p.lat != null ? 'coords' : null,
+    p.lat != null ? `coords ${Number(p.lat).toFixed(4)},${Number(p.lon).toFixed(4)}` : null,
     p.openingHours ? 'horaires' : null,
     p.category ? `cat:${p.category}` : null,
   ].filter(Boolean);

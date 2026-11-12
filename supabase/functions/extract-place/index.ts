@@ -21,8 +21,8 @@ import { origineAutorisee } from "../_shared/origine.ts";
 import { BUDGET_MS, budgetActif, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
 import {
-  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom,
-  titreDeSite,
+  accordNom, type ApercuGoogle, categorieDuGenre, communeEtPays, lienCarte, lireApercuGoogle, lireJsonLd,
+  lirePointMaps, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom, titreDeSite,
 } from "../_shared/lecture-lien.ts";
 
 const CORS = {
@@ -216,7 +216,7 @@ async function ancreDe(destination: string): Promise<Ancre | null> {
   return { lat, lon, nom, pays: String(p.address?.country_code || "").toLowerCase(), rayonKm };
 }
 
-async function geocode(query: string, ancre: Ancre | null = null) {
+async function geocode(query: string, ancre: Ancre | null = null, { partout = true } = {}) {
   if (!ancre) {
     const list = await nominatimSearch(query, 5);
     const best = pickBest(list, { name: query });
@@ -236,7 +236,9 @@ async function geocode(query: string, ancre: Ancre | null = null) {
     });
     if (best) return shapePlace(best);
   }
-  return ailleurs(query);
+  // `partout: false` : l'ancre vient du lien lui-même (« … · Rome, Italie »).
+  // Le lieu EST là ; le seul homonyme connu ailleurs n'est pas lui.
+  return partout ? ailleurs(query) : null;
 }
 
 /**
@@ -393,7 +395,40 @@ async function resolvePlace(
   }
 
   // Aucun nom exploitable, ou introuvable : le point reste la seule information.
-  return reverse ? shapePlace(reverse) : null;
+  return reverse ? auPoint(reverse, name) : null;
+}
+
+/**
+ * Ce que le géocodage inverse trouve AU point, quand rien n'y porte le nom.
+ *
+ * Il rend l'objet le plus proche : le lieu lui-même s'il est sur la carte
+ * ouverte sous un autre nom, sinon son VOISIN — l'immeuble, la boutique d'à
+ * côté. La fiche du voisin partait telle quelle : ses horaires, son tarif, sa
+ * catégorie et son numéro dans la rue devenaient ceux du lieu. Un restaurant
+ * absent de la carte héritait des heures d'ouverture de la pharmacie mitoyenne,
+ * et l'app s'en servait ensuite pour dire « fermé aujourd'hui ».
+ *
+ * Du voisin on ne garde que ce qu'il partage vraiment avec le lieu : la rue,
+ * la ville, le pays. `voisin` le dit à l'appelant, qui garde alors le point du
+ * lien plutôt que celui de cet objet.
+ */
+function auPoint(reverse: any, nom: string | null) {
+  const fiche = shapePlace(reverse);
+  // Pas de nom à vérifier (un lien fait d'un seul point), ou le même lieu sous
+  // une variante de son nom : la fiche au point est la sienne.
+  if (!nom || accordNom(nom, nomsConnus(reverse))) return fiche;
+  const a = reverse.address || {};
+  const rue = a.road || a.pedestrian || a.footway || a.suburb || a.neighbourhood;
+  const ville = a.city || a.town || a.village || a.municipality;
+  const { price: _tarifDuVoisin, ...reste } = fiche as Record<string, unknown>;
+  return {
+    ...reste,
+    address: [rue, ville, a.country].filter(Boolean).join(", ") || fiche.address,
+    category: "visite",
+    openingHours: "",
+    osmClass: "",
+    voisin: true,
+  } as ReturnType<typeof shapePlace> & { voisin?: boolean };
 }
 
 async function reverseGeocodeRaw(lat: number, lon: number) {
@@ -461,21 +496,22 @@ function shapePlace(p: any) {
 }
 
 // ── Redirect resolution ───────────────────────────────────────────────────
-async function fetchOnce(url: string): Promise<{ finalUrl: string; html: string }> {
-  const { signal, clear } = withTimeout(10000);
+async function fetchOnce(
+  url: string, agent = UA_NAVIGATEUR, delai = 10000,
+): Promise<{ finalUrl: string; html: string; statut: number }> {
+  const { signal, clear } = withTimeout(delai);
   try {
     // Chaque saut repasse par `urlSure` : une URL publique qui redirige vers
     // le réseau interne de l'hébergeur s'arrête avant d'y entrer (A-035).
     const suivi = await joindre(url, signal, (u) => ({
-      "User-Agent":
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+      "User-Agent": agent,
       "Accept-Language": "fr,en;q=0.8",
       // Court-circuite l'interstitiel de consentement Google (UE) qui remplace
       // la page Maps et vide l'extraction pour goo.gl / share.google. Décidé
       // à chaque saut : le lien court n'est pas chez google.com, l'arrivée si.
       ...(/google\.|goo\.gl/i.test(u.hostname) ? { "Cookie": "CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg" } : {}),
     }));
-    if (!suivi) return { finalUrl: url, html: "" };
+    if (!suivi) return { finalUrl: url, html: "", statut: 0 };
     const finalUrl = suivi.urlFinale.toString();
     const r = suivi.reponse;
     let html = "";
@@ -486,9 +522,9 @@ async function fetchOnce(url: string): Promise<{ finalUrl: string; html: string 
     } else {
       await r?.body?.cancel().catch(() => {});
     }
-    return { finalUrl, html };
+    return { finalUrl, html, statut: r?.status ?? 0 };
   } catch {
-    return { finalUrl: url, html: "" };
+    return { finalUrl: url, html: "", statut: 0 };
   } finally {
     clear();
   }
@@ -609,11 +645,119 @@ function extractGoogleSearchName(finalUrl: string, html: string): string | null 
   return null;
 }
 
+// ── Ce que Google sert aux robots de messagerie ─────────────────────────────
+//
+// Une page Google exige JavaScript : téléchargée d'ici, c'est une coquille de
+// 93 ko sans nom, sans adresse et sans point (mesuré le 11 novembre 2026). Deux
+// choses, en revanche, sont servies telles quelles aux robots qui déplient les
+// liens dans les messageries : l'aperçu d'un lien de partage, et la vignette
+// d'une recherche Maps, centrée sur le lieu quand la recherche en désigne un.
+//
+// Ce ne sont pas des API. Chaque échelon dit dans `geocodeurs` ce qu'il a
+// reçu, la sonde `diag-lien-google` les relit à chaque poussée, et quand l'un
+// se tait la fonction continue sur la carte ouverte, comme avant.
+
+// Google a servi son captcha : insister ne fait que l'allonger. Retenu trois
+// minutes, comme le refus de Nominatim — et pour la même raison, chaque essai
+// perdu se paie sur le budget de l'appel.
+let googleRefuse = 0;
+const CAPTCHA_MS = 3 * 60_000;
+const googleBoude = () => Date.now() - googleRefuse < CAPTCHA_MS;
+const captcha = (r: { finalUrl: string; statut: number }) => r.statut === 429 || /\/sorry\//.test(r.finalUrl);
+
+// Les robots auxquels Google sert l'aperçu, dans l'ordre où on les essaie.
+const ROBOTS_APERCU: [string, string][] = [
+  ["facebook", UA_ROBOT_SOCIAL],
+  ["whatsapp", "WhatsApp/2.23.20.0"],
+];
+
+function lienDePartageGoogle(brut: string): boolean {
+  try {
+    const u = new URL(brut);
+    const hote = u.hostname.toLowerCase();
+    return /(^|\.)share\.google$/.test(hote) || (hote === "g.co" && /^\/kgs\//.test(u.pathname));
+  } catch {
+    return false;
+  }
+}
+
+/** Le nom du lieu, où il est et ce que c'est, tels que le lien les annonce. */
+async function apercuDuPartage(rawUrl: string): Promise<{ apercu: ApercuGoogle; finalUrl: string } | null> {
+  if (googleBoude()) {
+    traceGeo.push("apercu-google sauté (captcha récent)");
+    return null;
+  }
+  for (const [qui, agent] of ROBOTS_APERCU) {
+    const r = await fetchOnce(rawUrl, agent, 6000);
+    if (captcha(r)) {
+      googleRefuse = Date.now();
+      traceGeo.push(`apercu-google ${qui} captcha`);
+      return null;
+    }
+    const apercu = lireApercuGoogle(r.html);
+    traceGeo.push(`apercu-google ${qui} ${apercu ? "lu" : `muet (${r.statut}, ${r.html.length} o)`}`);
+    if (apercu) return { apercu, finalUrl: r.finalUrl };
+  }
+  return null;
+}
+
+/**
+ * Le point d'un lieu, demandé à Google Maps par son nom.
+ *
+ * C'est ce qui situe un lieu que la carte ouverte ne connaît pas, ou connaît
+ * sous un autre nom : « Vienna state opera », « Schönbrunner Palais », un
+ * restaurant ouvert l'an dernier. D'abord avec la ville (« Café Central »
+ * seul désigne quarante cafés ; « Café Central, Vienne » en désigne un), puis
+ * seul (« ADEVA Cucina Moderna, Rome » en montre deux, le nom seul un).
+ *
+ * Mesuré le 12 novembre 2026 : donné avec la MAUVAISE ville, un nom distinctif
+ * ramène quand même le bon lieu (Rome pour « ADEVA Cucina Moderna, Biarritz »),
+ * un nom qui n'existe pas ne ramène rien, et la ville seule sort à l'échelle
+ * d'une ville, que `lirePointMaps` écarte. La page ne dit PAS le nom de ce
+ * qu'elle a trouvé : le point se recoupe ensuite avec la carte ouverte.
+ */
+async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon: number } | null> {
+  if (googleBoude()) {
+    traceGeo.push("point-google sauté (captcha récent)");
+    return null;
+  }
+  const avecVille = ou && !normalize(nom).includes(normalize(ou));
+  for (const q of avecVille ? [`${nom}, ${ou}`, nom] : [nom]) {
+    const r = await fetchOnce(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000,
+    );
+    if (captcha(r)) {
+      googleRefuse = Date.now();
+      traceGeo.push("point-google captcha");
+      return null;
+    }
+    const p = lirePointMaps(r.html);
+    traceGeo.push(`point-google ${p ? "unique" : r.html ? "aucun" : `muet (${r.statut})`}`);
+    if (p) return p;
+  }
+  return null;
+}
+
+// Un établissement, pas une rue ni un contour : sa catégorie vaut d'être lue.
+const classeParlante = (c: unknown) => Boolean(c) && !["place", "highway", "boundary", "building", "landuse"].includes(String(c));
+
 async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
-  const { finalUrl, html } = await resolve(rawUrl);
+  // 1 · Un lien de partage : ce que Google en dit aux robots, d'abord. C'est
+  //     le seul endroit où le lien annonce OÙ est le lieu.
+  const partage = lienDePartageGoogle(rawUrl) ? await apercuDuPartage(rawUrl) : null;
+  const apercu = partage?.apercu || null;
+
+  // 2 · Sinon la page, lue comme un téléphone. Un lien Maps complet porte déjà
+  //     son nom — et son point, ou la recherche à faire : le télécharger
+  //     n'apprend rien de plus, et chaque appel inutile rapproche du captcha.
+  const direct = !partage && extractMapsName(rawUrl)
+    && (extractMapsCoords(rawUrl) || /\/maps\/search\/?$/i.test(new URL(rawUrl).pathname));
+  const { finalUrl, html } = partage
+    ? { finalUrl: partage.finalUrl, html: "" }
+    : direct ? { finalUrl: rawUrl, html: "" } : await resolve(rawUrl);
   const haystack = finalUrl + "\n" + html.slice(0, 200_000);
 
-  let name = extractMapsName(finalUrl);
+  let name = apercu?.nom || extractMapsName(finalUrl);
   if (!name) {
     const ogTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
     if (ogTitle && !/^google( maps)?$/i.test(ogTitle)) {
@@ -627,31 +771,63 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
   // Dernier recours : page de recherche Google plutôt que page Maps.
   if (!name) name = extractGoogleSearchName(finalUrl, html);
 
-  const coords = extractMapsCoords(haystack);
+  let coords = extractMapsCoords(haystack);
   const clean = cleanTitle(name);
+  const ou = communeEtPays(apercu?.localite ?? null);
 
-  const place = await resolvePlace(name, coords, ancre);
+  let place: (ReturnType<typeof shapePlace> & { voisin?: boolean }) | null = null;
+  if (!coords && name) {
+    // 3 · Un nom, pas de point. La ville annoncée par le lien passe avant la
+    //     destination du voyage : un restaurant de Rome collé dans un voyage à
+    //     Biarritz n'était cherché qu'en France (11 novembre 2026).
+    const repere = ou ? await ancreDe(ou).catch(() => null) : null;
+    place = await geocode(name, repere || ancre, { partout: !repere });
+    if (!place) {
+      // 4 · La carte ouverte ne le connaît pas sous ce nom : Google dit où il
+      //     est, et la carte ouverte dit ce qu'il y a là.
+      const p = await pointGoogle(name, ou || ancre?.nom || "");
+      const horsDuLien = p && repere
+        && distanceKm(repere.lat, repere.lon, p.lat, p.lon) > Math.max(150, repere.rayonKm ?? 0);
+      if (horsDuLien) traceGeo.push(`point-google écarté (loin de ${ou})`);
+      else coords = p;
+      if (coords) place = await resolvePlace(name, coords);
+    }
+  } else {
+    place = await resolvePlace(name, coords, ancre);
+  }
+
+  // Ce que c'est : Google le dit dans l'aperçu (« Restaurant ») ; sinon la
+  // fiche de la carte ouverte, si c'est bien la sienne ; sinon le nom.
+  const categorie = categorieDuGenre(apercu?.genre ?? null)
+    || (place && !place.voisin && classeParlante(place.osmClass) ? place.category : null)
+    || categorieDuGenre(clean)
+    || place?.category || "visite";
+
   if (place) {
+    const { voisin, ...fiche } = place;
     // Quand la fiche trouvée est bien celle du lien, ses coordonnées sont plus
     // précises que le centrage de la carte : on garde les siennes. Sinon on
     // retombe sur le point du lien.
-    const named = Boolean(place.title) && place.title !== "Lieu";
+    const laSienne = Boolean(fiche.title) && fiche.title !== "Lieu" && !voisin;
     return {
-      ...place,
-      title: clean || place.title,
-      lat: named ? place.lat : (coords?.lat ?? place.lat),
-      lon: named ? place.lon : (coords?.lon ?? place.lon),
+      ...fiche,
+      title: clean || fiche.title,
+      category: categorie,
+      lat: laSienne ? fiche.lat : (coords?.lat ?? fiche.lat),
+      lon: laSienne ? fiche.lon : (coords?.lon ?? fiche.lon),
       link: rawUrl,
       source: "google_maps",
     };
   }
 
-  // Ni fiche ni point : le nom seul vaut mieux que rien.
+  // Ni fiche ni point : le nom seul vaut mieux que rien — avec la ville que le
+  // lien annonce, pour que le téléphone cherche au bon endroit.
   if (clean || coords) {
     return {
       title: clean || "Lieu",
-      category: "visite",
+      category: categorie,
       ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
+      ...(ou ? { localite: ou } : {}),
       link: rawUrl,
       source: "google_maps",
     };
@@ -1377,6 +1553,8 @@ function aiguillage(cible: URL): "tiktok" | "maps" | "generique" {
   if (
     /(^|\.)goo\.gl$/.test(hote)
     || /(^|\.)share\.google$/.test(hote)
+    // L'ancienne forme des liens de partage de la recherche Google.
+    || (hote === "g.co" && /^\/kgs\//.test(cible.pathname))
     || /(^|\.)maps\.google\.[a-z.]+$/.test(hote)
     // Un google.* ordinaire n'est une carte que si son chemin le dit.
     || (/(^|\.)google\.[a-z.]+$/.test(hote) && /\/maps/i.test(cible.pathname))

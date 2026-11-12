@@ -493,8 +493,8 @@ const GENRES: [RegExp, string][] = [
   [/hotel|hostel|auberge|\bspa\b|chambre d hotes|lodge|camping|resort|guest ?house|bed and breakfast/, "repos"],
   [/salle de sport|\bgym\b|fitness|stade|stadium|piscine|swimming|escalade|climbing|surf|\bski\b|golf|tennis|sports?\b/, "sport"],
   [/\bgare\b|aeroport|airport|station de metro|subway|parking|terminal|ferry/, "trajet"],
-  [/\bparc\b|\bpark\b|jardin|garden|foret|forest|sentier|trail|randonnee|hiking|point de vue|viewpoint|belvedere|\blac\b|\blake\b|montagne|mountain|cascade|waterfall|reserve naturelle|nature/, "balade"],
-  [/musee|museum|monument|chateau|castle|eglise|church|cathedrale|cathedral|basilique|temple|mosquee|synagogue|galerie|gallery|palais|palace|historique|historic|attraction|site touristique|landmark|memorial|ruines|ruins/, "visite"],
+  [/\bparc\b|\bpark\b|jardin|garden|foret|forest|sentier|trail|randonnee|hiking|point de vue|viewpoint|\blac\b|\blake\b|montagne|mountain|cascade|waterfall|reserve naturelle|nature/, "balade"],
+  [/musee|museum|museo|monument|chateau|castle|eglise|church|cathedrale|cathedral|basilique|temple|mosquee|synagogue|galerie|gallery|palais|palace|historique|historic|attraction|site touristique|landmark|memorial|ruines|ruins/, "visite"],
 ];
 
 /** « Restaurant italien », « Musée d'art » → la catégorie de l'app. Null si rien ne le dit. */
@@ -502,4 +502,31 @@ export function categorieDuGenre(genre: string | null): string | null {
   const g = normaliser(genre || "");
   if (!g) return null;
   return GENRES.find(([re]) => re.test(g))?.[1] || null;
+}
+
+// Les adresses par lesquelles on TROUVE un lieu, et qui ne sont pas son site.
+const DE_PASSAGE = [
+  /(^|\.)google\.[a-z.]+$/, /(^|\.)goo\.gl$/, /(^|\.)share\.google$/, /^g\.co$/,
+  /(^|\.)maps\.apple\.com$/, /(^|\.)waze\.com$/, /(^|\.)openstreetmap\.org$/, /(^|\.)osm\.org$/,
+  /(^|\.)tiktok\.com$/, /(^|\.)instagram\.com$/, /(^|\.)facebook\.com$/, /(^|\.)fb\.(com|me|watch)$/,
+  /(^|\.)youtube\.com$/, /^youtu\.be$/, /(^|\.)twitter\.com$/, /^x\.com$/, /^t\.co$/,
+  /(^|\.)pinterest\.[a-z.]+$/, /^pin\.it$/, /(^|\.)snapchat\.com$/, /(^|\.)threads\.(net|com)$/,
+];
+
+/**
+ * Ce lien est-il la façon dont on a trouvé le lieu, plutôt que son site ?
+ *
+ * Une fiche importée garde son lien d'origine — un partage Google, une vidéo
+ * TikTok. La recherche du site officiel le recevait comme « le site du lieu »
+ * et s'arrêtait là : elle téléchargeait une page Google au lieu d'aller lire
+ * le vrai site, que la carte ouverte connaît (11 novembre 2026).
+ */
+export function lienDePassage(brut: string): boolean {
+  let hote = "";
+  try {
+    hote = new URL(brut).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return DE_PASSAGE.some((re) => re.test(hote));
 }

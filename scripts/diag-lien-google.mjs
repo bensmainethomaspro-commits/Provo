@@ -68,6 +68,9 @@ async function commeUnRobot(url, max = 8, ua = UA_ROBOT) {
 const refuse = (c) => c.status === 429 || /\/sorry\//.test(c.finalUrl);
 
 let ouvertes = 0, fermees = 0;
+// Le journal d'un travail ne se lit bien que par la fin : tout ce qui compte y
+// est redit, une ligne par mesure.
+const resume = [];
 const bilan = (ok, quoi) => { if (ok) ouvertes++; else fermees++; console.log(`    ${ok ? '✅' : '❌'} ${quoi}`); };
 
 // ── 1 · L'aperçu du lien de partage ──────────────────────────────────────────
@@ -91,6 +94,7 @@ for (const [qui, ua] of Object.entries(ROBOTS)) {
   if (c.html.length < 400) console.log(`    corps   : ${JSON.stringify(c.html)}`);
   console.log(`    lu : ${a ? JSON.stringify(a) : 'rien'}`);
   if (a) { unApercu = true; console.log(`    → cherché autour de « ${communeEtPays(a.localite) || '—'} », catégorie « ${categorieDuGenre(a.genre) || '—'} »`); }
+  resume.push(`aperçu · ${qui.padEnd(9)} ${String(c.html.length).padStart(6)} o · ${refuse(c) ? 'CAPTCHA' : a ? `« ${a.nom} » · ${communeEtPays(a.localite) || '—'} · ${categorieDuGenre(a.genre) || '—'}` : 'rien'}`);
   await pause(2000);
 }
 bilan(unApercu, 'un robot au moins reçoit le nom du lieu et où il est');
@@ -138,25 +142,10 @@ for (const [quoi, nom, attendu] of NOMS) {
   console.log(`    og:title « ${court(meta(c.html, 'og:title'), 90)} » · og:description « ${court(meta(c.html, 'og:description'), 90)} »`);
   console.log(`    vignette : ${court(image.replace(/^.*staticmap\?/, '').replace(/&(key|signature|client)=[^&]*/g, ''), 170) || '—'}`);
   console.log(`    lu : ${p ? `${p.lat}, ${p.lon}` : 'aucun point'}`);
-  // Le NOM de ce que Google a trouvé est-il écrit quelque part dans la page ?
-  // Sans lui, rien ne dit que le point est bien celui du lieu demandé.
-  if (p) {
-    const corps = c.html.replace(/<meta[^>]*>/g, '');
-    for (const cle of [String(p.lat), String(p.lon), String(p.lat).slice(0, 7)]) {
-      let i = corps.indexOf(cle), n = 0;
-      while (i !== -1 && n < 2) {
-        console.log(`    autour de ${cle} : …${court(corps.slice(Math.max(0, i - 260), i + 200), 460)}…`);
-        i = corps.indexOf(cle, i + cle.length); n++;
-      }
-      if (n) break;
-    }
-    const liens = [...new Set(corps.match(/\/maps\/(?:place|preview\/place|search)[^"'\\ <]{4,220}/g) || [])].slice(0, 4);
-    console.log(`    liens   : ${liens.map((l) => court(l, 200)).join('  |  ') || '—'}`);
-    console.log(`    <title> : ${court((c.html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1], 120) || '—'}`);
-    const itemprop = [...c.html.matchAll(/<meta[^>]+itemprop=["']([^"']+)["'][^>]*content=["']([^"']{0,160})["']|<meta[^>]+content=["']([^"']{0,160})["'][^>]*itemprop=["']([^"']+)["']/g)]
-      .map((m) => `${m[1] || m[4]}=${court(m[2] || m[3], 110)}`).slice(0, 6);
-    console.log(`    itemprop: ${itemprop.join('  |  ') || '—'}`);
-  }
+  // (Mesuré le 12 novembre 2026 : la page ne porte PAS le nom de ce que Google
+  // a trouvé, seulement la recherche qu'on lui a faite. Le point ne se vérifie
+  // donc que par recoupement : la carte ouverte, ou la distance au voyage.)
+  resume.push(`point  · ${nom.padEnd(40)} ${p ? `${p.lat}, ${p.lon}` : refuse(c) ? 'CAPTCHA' : 'aucun point'}`);
   await pause(1800);
   if (attendu === 'voir') continue;
   if (attendu) bilan(Boolean(p) && km([p.lat, p.lon], attendu) < 1, `le point du lieu, à ${p ? Math.round(km([p.lat, p.lon], attendu) * 1000) : '—'} m de celui attendu`);
@@ -164,4 +153,5 @@ for (const [quoi, nom, attendu] of NOMS) {
 }
 
 titre(`BILAN : ${ouvertes} contrôles justes, ${fermees} faux`);
+for (const l of resume) console.log(`  ${l}`);
 if (fermees) console.log('  Une porte s\'est refermée, ou Google a servi son captcha à cet exécuteur.\n  La fonction retombe alors sur la carte ouverte seule : voir `geocodeurs` dans sa réponse.');

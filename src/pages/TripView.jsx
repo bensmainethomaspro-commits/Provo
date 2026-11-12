@@ -25,7 +25,7 @@ import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
 import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
-import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
+import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -874,8 +874,14 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const complete = activity.address && activity.openingHours && activity.lat;
     let aJour = activity;
     if (!complete) {
-      const found = await lookupPlace(activity.title, trip.destination,
-        { lat: anchor?.lat, lon: anchor?.lon });
+      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
+      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
+      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
+      // la carte ouverte le connaît, là où il est (11 novembre 2026).
+      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
+      const found = situee
+        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon }, { rayonKm: RAYON_FICHE_KM })
+        : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
       const patch = missingFieldsFrom(activity, found);
       if (patch) {
         updateActivity(tripId, location, activityId, patch);

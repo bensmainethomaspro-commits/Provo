@@ -101,5 +101,43 @@ const r2 = await lookupPlace('Lieu Introuvable Xyz', 'Vienne', VIENNE);
 v('rien trouvé la première fois', r === null);
 v('la seconde demande ne rappelle aucun service', r2 === null && appels.length === avant, `${appels.length - avant} appel(s)`);
 
+console.log('\n8 · Une fiche qui a son point se complète autour D’ELLE');
+// Le restaurant de Rome gardé dans un voyage à Biarritz (11 novembre 2026) :
+// cherché « à Biarritz », il restait sans adresse. `TripView.autoEnrich`
+// appelle maintenant `lookupPlace(titre, '', son point, { rayonKm: 2 })`.
+{
+  const { RAYON_FICHE_KM } = await import('../src/utils/enrich.js');
+  const ROME = { lat: 41.9021, lon: 12.4847 };
+  appels.length = 0;
+  reponses = {
+    nominatim: [nomi('ADEVA Cucina Moderna', 41.90213, 12.48474, {
+      type: 'restaurant', address: { house_number: '29', road: 'Via dei Maroniti', city: 'Roma', country: 'Italia' },
+      extratags: { opening_hours: 'Mo-Su 17:30-24:00' },
+    })],
+  };
+  r = await lookupPlace('ADEVA Cucina Moderna', '', ROME, { rayonKm: RAYON_FICHE_KM });
+  v('trouvé là où il est, avec son adresse et ses horaires',
+    /Maroniti/.test(r?.address || '') && r?.openingHours === 'Mo-Su 17:30-24:00', J(r));
+  const u = decodeURIComponent(appels.find(a => a.includes('nominatim')) || '');
+  v('la recherche ne dit plus « Biarritz » : le nom, et le cadre autour de la fiche',
+    /q=ADEVA Cucina Moderna&/.test(u) && /viewbox=/.test(u) && /bounded=1/.test(u), u);
+  const [o, n, e, sud] = (u.match(/viewbox=([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)/) || []).slice(1).map(Number);
+  v('le cadre fait deux kilomètres de part et d’autre, pas une région',
+    o < ROME.lon && e > ROME.lon && sud < ROME.lat && n > ROME.lat && (n - sud) * 111 < 5, J([o, n, e, sud]));
+
+  // L'homonyme de la ville d'à côté : dans les 150 km du voyage, il passait.
+  reponses = {
+    nominatim: [nomi('Trattoria Roma', 41.80, 12.60)],
+    photon: { features: [{ geometry: { coordinates: [12.60, 41.80] }, properties: { name: 'Trattoria Roma', osm_key: 'amenity' } }] },
+    overpass: (url) => (/around:2000,/.test(decodeURIComponent(url)) ? { elements: [] }
+      : { elements: [{ lat: 41.80, lon: 12.60, tags: { name: 'Trattoria Roma', opening_hours: 'Mo 10:00-12:00' } }] }),
+  };
+  r = await lookupPlace('Trattoria Roma', '', ROME, { rayonKm: RAYON_FICHE_KM });
+  v('un homonyme à 15 km de la fiche ne lui donne pas ses horaires', r === null, J(r));
+  // Sans ce rayon, la règle du voyage reste celle d'avant : 150 km.
+  r = await lookupPlace('Trattoria Roma', 'Rome', ROME);
+  v('autour du VOYAGE, la règle reste 150 km', r?.lat === 41.80, J(r));
+}
+
 console.log(`\n${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);
