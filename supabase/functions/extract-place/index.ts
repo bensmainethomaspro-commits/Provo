@@ -139,7 +139,8 @@ async function photonSearch(query: string, limit = 5, pres: { lat: number; lon: 
     if (traceGeo[traceGeo.length - 1] !== "photon sauté (muet)") traceGeo.push("photon sauté (muet)");
     return [];
   }
-  const { signal, clear } = withTimeout(8000);
+  // Photon répond en moins d'une seconde quand il répond : cinq suffisent.
+  const { signal, clear } = withTimeout(5000);
   try {
     let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=${limit}&lang=fr`;
     if (pres) url += `&lat=${pres.lat}&lon=${pres.lon}`;
@@ -466,7 +467,11 @@ async function reverseGeocodeRaw(lat: number, lon: number) {
   }
   // Le géocodage inverse ne sert ici qu'à connaître la VILLE du point : Photon
   // la donne aussi bien.
-  const { signal: s2, clear: c2 } = withTimeout(8000);
+  if (Date.now() - photonMuet < PHOTON_MUET_MS) {
+    traceGeo.push("photon-inverse sauté (muet)");
+    return null;
+  }
+  const { signal: s2, clear: c2 } = withTimeout(5000);
   try {
     const r = await fetch(`https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&lang=fr`,
       { headers: { "User-Agent": UA }, signal: s2 });
@@ -475,8 +480,10 @@ async function reverseGeocodeRaw(lat: number, lon: number) {
     if (!r.ok) return null;
     const f = (await r.json())?.features?.[0];
     return f ? depuisPhoton(f) : null;
-  } catch {
+  } catch (e) {
     c2();
+    photonMuet = Date.now();
+    traceGeo.push(`photon-inverse ${(e as Error)?.name || "erreur"}`);
     return null;
   }
 }
@@ -760,7 +767,7 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
 // Un établissement, pas une rue ni un contour : sa catégorie vaut d'être lue.
 const classeParlante = (c: unknown) => Boolean(c) && !["place", "highway", "boundary", "building", "landuse"].includes(String(c));
 
-async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
+async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, destination = "") {
   // 1 · Un lien de partage : ce que Google en dit aux robots, d'abord. C'est
   //     le seul endroit où le lien annonce OÙ est le lieu.
   const partage = lienDePartageGoogle(rawUrl) ? await apercuDuPartage(rawUrl) : null;
@@ -806,7 +813,11 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null) {
     if (!place) {
       // 4 · La carte ouverte ne le connaît pas sous ce nom : Google dit où il
       //     est, et la carte ouverte dit ce qu'il y a là.
-      const p = await pointGoogle(name, ou || ancre?.nom || "");
+      //     La destination s'écrit telle que l'app l'envoie, même quand aucun
+      //     géocodeur n'a su la situer : le soir du 12 novembre 2026, Nominatim
+      //     refusait l'hébergeur et Photon ne répondait plus — `ancre` était
+      //     nulle, et la recherche partait sans la ville.
+      const p = await pointGoogle(name, ou || ancre?.nom || destination);
       const horsDuLien = p && repere
         && distanceKm(repere.lat, repere.lon, p.lat, p.lon) > Math.max(150, repere.rayonKm ?? 0);
       if (horsDuLien) traceGeo.push(`point-google écarté (loin de ${ou})`);
@@ -1687,7 +1698,7 @@ async function traiter(req: Request): Promise<Response> {
     if (voie === "tiktok") {
       result = await handleTikTok(url, ancre);
     } else if (voie === "maps") {
-      result = await handleGoogleMaps(url, ancre);
+      result = await handleGoogleMaps(url, ancre, destination);
     } else {
       result = await handleGeneric(url, ancre);
     }

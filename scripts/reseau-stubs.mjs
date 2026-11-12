@@ -157,6 +157,16 @@ export const VARIANTES = {
         link: 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner%20Palais', source: 'google_maps' },
       geocodeurs: ['photon 200', 'ailleurs rien', 'point-google unique', 'photon-inverse 200'],
     },
+    // Les géocodeurs ne répondaient plus à la fonction (le soir du 12 novembre
+    // 2026) : elle n'a pu recouper le point avec rien, et l'a marqué. Mais il
+    // tombe DANS le voyage — et le téléphone, lui, sait où est le voyage.
+    nonRecoupeDansLeVoyage: {
+      ok: true,
+      result: { title: 'Schönbrunner Palais', lat: 48.1858124, lon: 16.312764, category: 'visite',
+        aConfirmer: true, link: 'https://share.google/abcDEF', source: 'google_maps' },
+      geocodeurs: ['nominatim sauté (refus récent)', 'photon AbortError', 'point-google unique',
+        'photon-inverse sauté (muet)', 'point-google à confirmer'],
+    },
     // Un nom qui n'existe pas : Google a quand même rendu UN lieu, à côté du
     // serveur qui posait la question (mesuré le 12 novembre 2026, en Virginie).
     // Rien ne le confirme et il est loin du voyage : la fonction le marque.

@@ -71,6 +71,7 @@ Bancs dans `scripts/diag-*.mjs`, lancés par
 | Ajouter la ville aide-t-il Google ? | **Ça dépend** : « Café Central » seul → quarante cafés, avec « Vienne » → un. Mais « ADEVA Cucina Moderna, Rome » → deux épingles, le nom seul → une. D'où l'ordre : avec la ville, puis sans. Donné avec la MAUVAISE ville, un nom distinctif ramène quand même le bon lieu |
 | Google sert-il ces pages à un centre de données ? | **Pas toujours.** Sur deux exécuteurs GitHub le même jour : l'un a tout obtenu, l'autre a reçu le captcha (429 `/sorry/`) dès son premier appel. Le QUATRIÈME appel d'affilée sur un même lien le déclenche aussi. La fonction retient un captcha trois minutes et continue sur la carte ouverte |
 | Un lecteur tiers (r.jina.ai) pour le panneau Google ? | **Écarté** — panneau entier à 16 h 27, captcha de Google à 21 h 16 le même jour |
+| Les géocodeurs répondent-ils à la fonction, là où elle tourne ? | **Pas toujours, et parfois aucun.** Nominatim refuse l'hébergeur (403) depuis le 28 sept. 2026 ; Photon était donc le SEUL, et le 12 nov. au soir il ne répondait plus (`photon AbortError`) : la fonction en ligne rendait un titre nu pour tout lien sans coordonnées. D'où trois choses tenues dans le code : un refus et un délai dépassé sont retenus (10 min, 1 min) au lieu d'être repayés à chaque recherche ; le point demandé à Google ne dépend d'aucun des deux ; et la fiche se complète ensuite depuis le TÉLÉPHONE, auquel Nominatim répond |
 | TikTok depuis un serveur ? | **Captcha** sur le HTML ; seul l'oEmbed répond |
 | Instagram depuis un serveur ? | **Fermé** — page sans balises `og:`, oEmbed 404/400 sans jeton Facebook, proxys 403/521. Abandonné sciemment |
 
@@ -171,6 +172,10 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     moment où la fiche se remplit : « … est à Rome, Italie — à 1 100 km de
     Biarritz », sans rien bloquer ; ce qui vient d'être dit n'est pas redit par
     le contrôle des lieux (`placeCheckSig`).
+  · **Le serveur muet ne fait pas confirmer pour rien.** Quand aucun géocodeur
+    ne lui répond, la fonction ne peut rien recouper et marque tout point
+    `aConfirmer`. Le téléphone, lui, sait où est le voyage : un point qui tombe
+    dedans s'écrit sans question (`aProposerSeulement`).
   · **Ce qui n'est pas acquis, à ne pas présenter comme tel.** Les deux portes
     Google ne sont pas des API : rien ne garantit qu'elles durent, et Google
     sert son captcha à certaines adresses de centre de données. Mesuré une fois

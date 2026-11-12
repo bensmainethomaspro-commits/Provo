@@ -224,7 +224,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     // loin, il se propose : une légende peut nommer n'importe quoi.
     if (serveur) {
       const s = await situerParLeServeur(titre, tripDestination).catch(() => null);
-      if (s && !s.aConfirmer && loinDuVoyage(s, ancreVoyage) == null) {
+      if (s && !aProposerSeulement(s) && loinDuVoyage(s, ancreVoyage) == null) {
         applyResult({ ...s, title: titre, ...plus }, raw);
         return { etat: 'pose', lieu: s };
       }
@@ -282,6 +282,12 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // le voyage. C'est peut-être lui ; pour un nom qui n'existe pas, Google rend
   // parfois un lieu au hasard (mesuré le 12 novembre 2026). Il se PROPOSE —
   // un tap pour l'accepter — et ne s'écrit jamais tout seul.
+  // La fonction marque « à confirmer » un point qu'elle n'a pas pu recouper —
+  // et elle ne le peut pas quand ses géocodeurs ne lui répondent plus (le soir
+  // du 12 novembre 2026, aucun ne répondait). Le téléphone, lui, sait où est
+  // le voyage : un point qui tombe dedans est là où on l'attendait.
+  const aProposerSeulement = (lieu) => Boolean(lieu?.aConfirmer)
+    && (!ancreVoyage || loinDuVoyage(lieu, ancreVoyage) != null);
   const proposerUnLieu = (lieu, titre) => {
     setCandidates([{ ...lieu, id: lieu.id || `p${lieu.lat},${lieu.lon}`, title: titre || lieu.title }]);
     setImportMsg(`« ${titre || lieu.title} » — rien de ce nom ${
@@ -402,7 +408,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           result = { ...(result || {}), title: indice, category: result?.category || 'visite' };
         }
 
-        if (result?.aConfirmer && result.lat != null) {
+        if (aProposerSeulement(result) && result.lat != null) {
           // Le lien reste dans la fiche quoi qu'on réponde : c'est lui qu'on
           // a collé, et il mène au bon endroit même si la proposition est fausse.
           set('link', normalized);
@@ -586,7 +592,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const tousLoin = found.every(c => loinDuVoyage(c, ancreVoyage) != null);
       if (tousLoin && !fortAilleurs(raw, found).lieu) {
         const s = await situerParLeServeur(raw, tripDestination).catch(() => null);
-        if (s?.aConfirmer) { proposerUnLieu(s, s.title || raw); return; }
+        if (aProposerSeulement(s)) { proposerUnLieu(s, s.title || raw); return; }
         if (s) { choisir({ ...s, title: s.title || raw }, raw); return; }
       }
       if (found.length === 1) { choisir(found[0], raw); return; }

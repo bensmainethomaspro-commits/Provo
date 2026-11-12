@@ -1909,6 +1909,28 @@ const PARCOURS = [
       t.verifier('et l’écran dit qu’il est loin', /km de Vienne/.test(apres.message) || !/Est-ce/.test(apres.message), apres.message || '(rien)');
     } },
 
+  { groupe: 'Réseau', nom: 'Un point que le serveur n’a pas pu recouper, mais qui tombe dans le voyage, s’écrit', depart: 'voyage',
+    reseau: { nominatim: 'ok', extractPlace: 'nonRecoupeDansLeVoyage' },
+    intention: "Les géocodeurs du serveur sont muets : il rend un point « à confirmer ». S'il est dans le voyage, on ne fait pas confirmer pour rien.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://share.google/abcDEF');
+      await t.clic('.import-row button', { delai: 2800, obligatoire: false });
+      const etat = await t.p.evaluate(() => ({
+        message: document.querySelector('.import-msg')?.innerText?.trim() || '',
+        propositions: document.querySelectorAll('.place-result').length,
+        pli: document.querySelector('.details-pli')?.innerText?.replace(/\s+/g, ' ').trim() || '',
+      }));
+      t.verifier('aucune question posée', !/Est-ce celui-ci/.test(etat.message) && etat.propositions === 0,
+        `${etat.message || '(pas de message)'} · ${etat.propositions} proposition(s)`);
+      t.verifier('la fiche est remplie', /Schönbrunner Palais/.test(etat.pli), etat.pli);
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      const fiche = (await t.voyage()).reserve.find(a => /Schönbrunner/.test(a?.title || ''));
+      t.verifier('elle a son point, dans le voyage', Math.abs((fiche?.lat ?? 0) - 48.1858) < 0.01, JSON.stringify(fiche?.lat));
+    } },
+
   { groupe: 'Réseau', nom: "Un lien qui échoue le dit et ne perd rien", depart: 'voyage',
     reseau: { extractPlace: 'err500' },
     intention: "Le service tombe : l'app doit le dire et laisser saisir à la main.",
