@@ -53,6 +53,9 @@ trace de ce qu'on a sciemment écarté.
 | B5 / E7 · Une seule déclaration | `src/styles/tokens.css` ; `verif-jetons` refuse un jeton racine hors de ce fichier et plafonne couleurs, ombres, dégradés, `!important` |
 | B6 · L'émoji est du contenu, l'icône est du chrome | `components/Icone.jsx` (Lucide, licence ISC) : barre d'onglets, en-têtes, menus, fermetures |
 | E6 · Écrans visités | `verif-ui` : Accueil vide, Nouveau voyage (tout déplié), Réserve vide, Dépenses vide |
+| D5 · Montrer ce que l'action a produit | Feuille d'ajout : le pli « Détails » porte le nom et l'adresse du lieu trouvé ; écran « Ajout (lieu trouvé) » dans `verif-ui` ; les parcours d'import lisent le pli FERMÉ |
+| E10 · La même demande, le même moteur | `diagnose-link` envoie la destination, comme l'app ; `diag-deno-google.ts` mesure sous Deno, comme la fonction |
+| F5 · Rempli n'est pas juste | `diag-verify` compte les fiches posées à moins d'1 km du point attendu |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -1318,6 +1321,16 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 - Qualité réelle de la complétion automatique sur les petits commerces
   (couverture OpenStreetMap) — à valider à l'usage.
+- **Le canari ne sonne pas quand la fonction n'a plus qu'un géocodeur** (F5,
+  « sonner à l'orange »). Nominatim refuse l'hébergeur depuis le 28 sept. 2026,
+  Photon est donc le seul, et son silence du 12 nov. au soir n'a prévenu
+  personne. Le canari ne passe au rouge que si le lien témoin ressort sans
+  point ; l'état « un seul échelon répond » n'a pas d'alarme. À faire : lire
+  `geocodeurs` dans la réponse du témoin et alerter à l'orange quand un seul
+  géocodeur a répondu.
+- **Les chemins légende, TikTok et site générique d'`extract-place`** écrivent
+  encore un lieu retenu sur un seul mot en commun près du voyage (corrigé pour
+  les liens Google et les noms tapés seulement, journal A-092).
 - Vercel Deployment Protection à passer sur « Only Preview Deployments » pour
   que la preview soit accessible sans compte (F2).
 
