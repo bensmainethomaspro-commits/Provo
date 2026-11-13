@@ -448,9 +448,12 @@ async function resolvePlace(
  */
 function auPoint(reverse: any, nom: string | null) {
   const fiche = shapePlace(reverse);
-  // Pas de nom à vérifier (un lien fait d'un seul point), ou le même lieu sous
-  // une variante de son nom : la fiche au point est la sienne.
-  if (!nom || accordNom(nom, nomsConnus(reverse))) return fiche;
+  // Pas de nom à vérifier (un lien fait d'un seul point), ou le lieu lui-même
+  // sous son nom entier : la fiche au point est la sienne. Un mot en commun ne
+  // suffit pas ici non plus — au point que Google donne pour « Schönbrunner
+  // Palais », l'objet le plus proche est le « Schönbrunner Schlosstheater »,
+  // et le château sortait classé comme un théâtre (banc du 13 novembre 2026).
+  if (!nom || accordNom(nom, nomsConnus(reverse)) === "fort") return fiche;
   const a = reverse.address || {};
   const rue = a.road || a.pedestrian || a.footway || a.suburb || a.neighbourhood;
   const ville = a.city || a.town || a.village || a.municipality;
