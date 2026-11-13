@@ -231,11 +231,19 @@ async function ancreDe(destination: string): Promise<Ancre | null> {
   return { lat, lon, nom, pays: String(p.address?.country_code || "").toLowerCase(), rayonKm };
 }
 
-async function geocode(query: string, ancre: Ancre | null = null, { partout = true } = {}) {
+type Situe = ReturnType<typeof shapePlace> & { accord?: "fort" | "faible" | null };
+
+async function geocode(
+  query: string, ancre: Ancre | null = null, { partout = true } = {},
+): Promise<Situe | null> {
+  // `accord` dit à quel point le résultat porte le nom : « fort » (le nom
+  // entier), « faible » (un mot en commun), ou null (retenu par sa voie, pour
+  // une adresse). L'appelant qui a mieux à tenter qu'un mot en commun s'en sert.
+  const avecAccord = (best: any) => ({ ...shapePlace(best), accord: accordNom(query, nomsConnus(best)) });
   if (!ancre) {
     const list = await nominatimSearch(query, 5);
     const best = pickBest(list, { name: query });
-    return best ? shapePlace(best) : null;
+    return best ? avecAccord(best) : null;
   }
   // Situé : d'abord avec la ville du voyage, puis seul — dans le pays, et dans
   // le rayon de la destination. C'est là qu'un nom a le plus de chances de
@@ -249,7 +257,7 @@ async function geocode(query: string, ancre: Ancre | null = null, { partout = tr
       maxKm: ancre.rayonKm ?? 25,
       exigerNom: true,
     });
-    if (best) return shapePlace(best);
+    if (best) return avecAccord(best);
   }
   // `partout: false` : l'ancre vient du lien lui-même (« … · Rome, Italie »).
   // Le lieu EST là ; le seul homonyme connu ailleurs n'est pas lui.
@@ -270,7 +278,7 @@ async function geocode(query: string, ancre: Ancre | null = null, { partout = tr
  * comme garde-fou est dans `seulDeSonNom` : le nom entier, et un seul lieu à
  * le porter. Deux homonymes → rien, et c'est le téléphone qui fait choisir.
  */
-async function ailleurs(query: string) {
+async function ailleurs(query: string): Promise<Situe | null> {
   const liste = await nominatimSearch(query, 8);
   const { lieux, ambigu } = seulDeSonNom(query, liste.map((p) => {
     const a = p.address || {};
@@ -286,7 +294,8 @@ async function ailleurs(query: string) {
   traceGeo.push(`ailleurs ${ambigu ? "ambigu" : lieux.length ? "unique" : "rien"}`);
   if (!lieux.length) return null;
   const best = pickBest(lieux.map((l) => l.brut), { name: query }) || lieux[0].brut;
-  return shapePlace(best);
+  // Seul de son nom : l'accord est fort par construction (`seulDeSonNom`).
+  return { ...shapePlace(best), accord: "fort" };
 }
 
 function cityOf(p: any): string {
@@ -801,7 +810,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
   const clean = cleanTitle(name);
   const ou = communeEtPays(apercu?.localite ?? null);
 
-  let place: (ReturnType<typeof shapePlace> & { voisin?: boolean }) | null = null;
+  let place: (ReturnType<typeof shapePlace> & { voisin?: boolean; accord?: string | null }) | null = null;
   // Le point vient-il de Google, sans que le lien l'ait porté ?
   let pointDemande = false;
   if (!coords && name) {
@@ -809,8 +818,15 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
     //     destination du voyage : un restaurant de Rome collé dans un voyage à
     //     Biarritz n'était cherché qu'en France (11 novembre 2026).
     const repere = ou ? await ancreDe(ou).catch(() => null) : null;
-    place = await geocode(name, repere || ancre, { partout: !repere });
-    if (!place) {
+    const proche = await geocode(name, repere || ancre, { partout: !repere });
+    // Un mot en commun n'est pas le lieu. Le banc du 13 novembre 2026 a situé
+    // « Palais du Belvedere » sur un AUTRE palais de Vienne, à 1,7 km : la
+    // carte ouverte avait rendu quelque chose, donc personne n'avait demandé à
+    // Google — qui donnait le bon point. Un accord faible ne ferme plus la
+    // porte : il reste en réserve, pour le cas où Google se tait.
+    if (proche && proche.accord !== "faible") {
+      place = proche;
+    } else {
       // 4 · La carte ouverte ne le connaît pas sous ce nom : Google dit où il
       //     est, et la carte ouverte dit ce qu'il y a là.
       //     La destination s'écrit telle que l'app l'envoie, même quand aucun
@@ -824,6 +840,8 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
       else coords = p;
       pointDemande = Boolean(coords);
       if (coords) place = await resolvePlace(name, coords);
+      // Google muet : ce qui ressemble, là où on l'attend, vaut mieux que rien.
+      else if (proche) place = proche;
     }
   } else {
     place = await resolvePlace(name, coords, ancre);
@@ -846,7 +864,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
   if (aConfirmer) traceGeo.push("point-google à confirmer");
 
   if (place) {
-    const { voisin, ...fiche } = place;
+    const { voisin, accord: _accord, ...fiche } = place;
     // Quand la fiche trouvée est bien celle du lien, ses coordonnées sont plus
     // précises que le centrage de la carte : on garde les siennes. Sinon on
     // retombe sur le point du lien.
