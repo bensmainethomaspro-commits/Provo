@@ -528,6 +528,7 @@ function shapePlace(p: any) {
 // ── Redirect resolution ───────────────────────────────────────────────────
 async function fetchOnce(
   url: string, agent = UA_NAVIGATEUR, delai = 10000, plafond = 600_000,
+  plus: Record<string, unknown> = {},
 ): Promise<{ finalUrl: string; html: string; statut: number }> {
   const { signal, clear } = withTimeout(delai);
   try {
@@ -540,7 +541,7 @@ async function fetchOnce(
       // la page Maps et vide l'extraction pour goo.gl / share.google. Décidé
       // à chaque saut : le lien court n'est pas chez google.com, l'arrivée si.
       ...(/google\.|goo\.gl/i.test(u.hostname) ? { "Cookie": "CONSENT=YES+cb.20240101-00-p0.fr+FX+000; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMDEtMF9SQzIaAmZyIAEaBgiA0K2tBg" } : {}),
-    }));
+    }), plus);
     if (!suivi) return { finalUrl: url, html: "", statut: 0 };
     const finalUrl = suivi.urlFinale.toString();
     const r = suivi.reponse;
@@ -689,6 +690,27 @@ function extractGoogleSearchName(finalUrl: string, html: string): string | null 
 
 const captcha = (r: { finalUrl: string; statut: number }) => r.statut === 429 || /\/sorry\//.test(r.finalUrl);
 
+// Google Maps refuse le client HTTP/2 de Deno. Mesuré le 13 novembre 2026,
+// même adresse, mêmes en-têtes, sept fois de suite : 403 après neuf secondes
+// d'attente en HTTP/2 (quel que soit l'agent, avec ou sans témoin de
+// consentement), 200 en 0,4 s en HTTP/1.1. Sous Node, qui parle HTTP/1.1, la
+// sonde obtenait tout — et la fonction, rien : deux bancs de suite, aucun
+// point. Les demandes faites « comme un robot » passent donc par un client
+// HTTP/1.1. Là où l'hébergeur n'en fournit pas, on garde le client ordinaire.
+// deno-lint-ignore no-explicit-any
+let clientHttp1: any;
+function commeUnRobot(): Record<string, unknown> {
+  if (clientHttp1 === undefined) {
+    try {
+      // deno-lint-ignore no-explicit-any
+      clientHttp1 = (Deno as any).createHttpClient({ http2: false });
+    } catch {
+      clientHttp1 = null;
+    }
+  }
+  return clientHttp1 ? { client: clientHttp1 } : {};
+}
+
 // Les robots auxquels Google sert l'aperçu, dans l'ordre où on les essaie.
 // Mesuré quatre fois le 12 novembre 2026, six agents d'affilée sur le même
 // lien : Twitter a reçu l'aperçu (5 ko) à chaque fois ; Facebook trois fois sur
@@ -717,7 +739,7 @@ function lienDePartageGoogle(brut: string): boolean {
 /** Le nom du lieu, où il est et ce que c'est, tels que le lien les annonce. */
 async function apercuDuPartage(rawUrl: string): Promise<{ apercu: ApercuGoogle; finalUrl: string } | null> {
   for (const [qui, agent] of ROBOTS_APERCU) {
-    const r = await fetchOnce(rawUrl, agent, 6000);
+    const r = await fetchOnce(rawUrl, agent, 6000, 600_000, commeUnRobot());
     const refuse = captcha(r);
     const apercu = refuse ? null : lireApercuGoogle(r.html);
     traceGeo.push(`apercu-google ${qui} ${apercu ? "lu" : refuse ? "captcha" : `muet (${r.statut}, ${r.html.length} o)`}`);
@@ -758,14 +780,15 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
   }
   const avecVille = ou && !normalize(nom).includes(normalize(ou));
   for (const q of avecVille ? [`${nom}, ${ou}`, nom] : [nom]) {
-    // La page pèse 220 ko, la vignette est dans son en-tête : on s'arrête à
-    // 150 ko plutôt que d'attendre la fin d'un script qu'on ne lit pas. Et la
+    // La page pèse 220 ko et la vignette est à son 1 854e octet : on s'arrête
+    // à 60 ko plutôt que d'attendre la fin d'un script qu'on ne lit pas. Et la
     // trace dit le temps passé — le 13 novembre 2026, deux demandes sur trois
     // sont revenues « muettes » sans qu'on sache si c'était un refus immédiat
     // ou six secondes d'attente.
     const debut = Date.now();
     const r = await fetchOnce(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000, 150_000,
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000, 60_000,
+      commeUnRobot(),
     );
     if (captcha(r)) {
       pointRefuse = Date.now();
@@ -773,7 +796,7 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
       return null;
     }
     const p = lirePointMaps(r.html);
-    traceGeo.push(`point-google ${p ? "unique" : r.html ? "aucun" : `muet (${r.statut}, ${Date.now() - debut} ms)`}`);
+    traceGeo.push(`point-google ${p ? "unique" : r.html && r.statut === 200 ? "aucun" : `muet (${r.statut}, ${Date.now() - debut} ms)`}`);
     if (p) return p;
   }
   return null;

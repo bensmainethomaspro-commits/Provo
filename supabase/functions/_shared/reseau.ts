@@ -55,6 +55,9 @@ export async function joindre(
   depart: string,
   signal: AbortSignal,
   entetes: (u: URL) => Record<string, string>,
+  // Options de `fetch` propres à l'hébergeur (un client HTTP/1.1 sous Deno).
+  // Jamais `redirect` ni `signal` : ceux-là sont la raison d'être de `joindre`.
+  plus: Record<string, unknown> = {},
 ): Promise<{ reponse: Response | null; urlFinale: URL } | null> {
   let courante = urlSure(depart);
   if (!courante) return null;
@@ -62,7 +65,7 @@ export async function joindre(
     let r: Response;
     try {
       r = await fetch(courante.toString(), {
-        signal, redirect: "manual", headers: entetes(courante),
+        ...plus, signal, redirect: "manual", headers: entetes(courante),
       });
     } catch {
       // Réseau coupé ou délai dépassé : l'URL atteinte sert encore (un lien

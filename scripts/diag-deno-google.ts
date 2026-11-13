@@ -3,8 +3,9 @@
 // Le 13 novembre 2026, deux bancs de suite : depuis `extract-place` (Deno), la
 // page Google Maps d'une recherche expire au bout de six secondes ; depuis
 // `diag-lien-google.mjs` (Node), la même adresse, les mêmes en-têtes, répond en
-// moins d'une seconde. Ce script refait la demande sous Deno, variante par
-// variante, et dit où passe le temps : avant les en-têtes, ou dans le corps.
+// moins d'une seconde. Ce script refait la demande sous Deno et dit où passe le
+// temps : avant les en-têtes, ou dans le corps. Réponse : Google Maps refuse le
+// client HTTP/2 de Deno, et sert son client HTTP/1.1.
 //
 // Usage :  deno run --allow-net scripts/diag-deno-google.ts
 const ROBOT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
@@ -48,16 +49,16 @@ async function essai(quoi: string, url: string, entetes: Record<string, string>,
 
 console.log(`Deno ${Deno.version.deno} — « ${NOM} »`);
 const fonction = { "User-Agent": ROBOT, "Accept-Language": "fr,en;q=0.8", "Cookie": TEMOIN };
-await essai("comme la fonction", BASE + encodeURIComponent(NOM), fonction);
-await essai("espaces en « + » (comme la sonde)", BASE + encodeURIComponent(NOM).replace(/%20/g, "+"), fonction);
-await essai("sans compression", BASE + encodeURIComponent(NOM), { ...fonction, "Accept-Encoding": "identity" });
-await essai("sans témoin de consentement", BASE + encodeURIComponent(NOM), { "User-Agent": ROBOT, "Accept-Language": "fr,en;q=0.8" });
-await essai("robot Twitter", BASE + encodeURIComponent(NOM), { ...fonction, "User-Agent": "Twitterbot/1.0" });
+// Mesuré le 13 novembre 2026, sept variantes : en HTTP/2 (le client ordinaire
+// de Deno), 403 après neuf secondes, quels que soient l'agent, le témoin de
+// consentement, la compression ou l'écriture des espaces ; en HTTP/1.1, 200 en
+// 0,4 s, la vignette au 1 854e octet. Il n'en reste que les deux qui comptent :
+// ce que la fonction fait, et ce qu'elle ferait sans son client HTTP/1.1.
 try {
   // deno-lint-ignore no-explicit-any
   const client = (Deno as any).createHttpClient({ http2: false });
-  await essai("HTTP/1.1 forcé", BASE + encodeURIComponent(NOM), fonction, { client });
+  await essai("HTTP/1.1 (ce que fait la fonction)", BASE + encodeURIComponent(NOM), fonction, { client });
 } catch (e) {
-  console.log(`  HTTP/1.1 forcé : indisponible (${(e as Error).message.slice(0, 60)})`);
+  console.log(`  HTTP/1.1 : client indisponible sur cet hébergeur (${(e as Error).message.slice(0, 60)})`);
 }
-await essai("comme la fonction, une 2e fois", BASE + encodeURIComponent(NOM), fonction);
+await essai("HTTP/2 (le client ordinaire)", BASE + encodeURIComponent(NOM), fonction);
