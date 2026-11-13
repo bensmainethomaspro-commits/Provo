@@ -199,6 +199,15 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     qu'à la fusion). Le prix (« 30–80 € ») et les horaires du panneau Google ne
     se lisent par aucune voie gratuite : ils viennent de la carte ouverte quand
     elle connaît le lieu, sinon restent à compléter.
+  · **Mesure finale (13 nov. 2026, banc de la branche, fonction lancée sous
+    Deno dans un exécuteur GitHub)** : 20 fiches renseignées sur 21 (la
+    fonction en ligne : 13 sur 17 le 11 nov.), 7 sur 7 posées à moins d'un
+    kilomètre du point attendu, catégorie juste 16 sur 18, horaires 12 sur 21.
+    Le seul échec est « Site du Prado », un site générique hors de ce
+    signalement. Côté app : 23 suites, 97 parcours, `verif-ui` à zéro hors
+    épingles de carte dans les deux thèmes. **Rien de tout cela n'a tourné
+    chez l'hébergeur réel** : la fonction ne se déploie qu'à la fusion sur
+    `main`, et c'est le canari du lendemain qui dira ce que Google lui sert.
   · **Garde-fous.** `diag-lien-google.mjs` relit Google avec les lecteurs de la
     fonction à chaque poussée ; `diag-verify` porte six cas de plus (lieu hors
     du voyage, noms étrangers) ; `diagnose-link` envoie enfin la destination et
