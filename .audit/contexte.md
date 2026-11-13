@@ -326,9 +326,12 @@ du signalement ressort sans point.
 
 **Vérifier le typage d'une fonction Edge sans attendre l'intégration continue :**
 Deno s'installe dans le bac à sable par npm (`npm i deno` dans un dossier à
-part), puis `DENO_CERT=/root/.ccr/ca-bundle.crt deno check
---node-modules-dir=auto supabase/functions/<nom>/index.ts`. Supprimer le
-`deno.lock` qu'il laisse à la racine. Le réseau du bac à sable ne joint ni
+part), puis `DENO_NO_PACKAGE_JSON=1 DENO_CERT=/root/.ccr/ca-bundle.crt deno
+check --node-modules-dir=auto supabase/functions/<nom>/index.ts`. Supprimer le
+`deno.lock` qu'il laisse à la racine. `DENO_NO_PACKAGE_JSON` n'est pas un
+détail : sans elle Deno résout aussi le `package.json` de l'app, et refuse tout
+paquet publié depuis moins de 24 h — le banc de la branche est tombé pour ça le
+2026-11-12 (`@babel/parser`), sans avoir lu une ligne de la fonction. Le réseau du bac à sable ne joint ni
 Google ni Supabase : exécuter la fonction reste l'affaire du banc.
 
 ## Le code partagé entre le client et les fonctions Edge
