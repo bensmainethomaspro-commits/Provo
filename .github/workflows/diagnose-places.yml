@@ -19,6 +19,7 @@ on:
       - 'scripts/diag-instagram.mjs'
       - 'scripts/diag-adresses.mjs'
       - 'scripts/diag-lien-google.mjs'
+      - 'scripts/diag-deno-google.ts'
       - 'supabase/functions/extract-place/**'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
@@ -49,6 +50,17 @@ jobs:
           node-version: '22'
       - name: Lien de partage Google hors de la destination du voyage
         run: node scripts/diag-lien-google.mjs
+      # La fonction tourne sous Deno, la sonde sous Node : même adresse, mêmes
+      # en-têtes, et pas la même réponse (13 novembre 2026).
+      - uses: denoland/setup-deno@v2
+        if: ${{ always() }}
+        with:
+          deno-version: v2.x
+      - name: La même demande, sous Deno comme la fonction
+        if: ${{ always() }}
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
+        run: deno run --allow-net scripts/diag-deno-google.ts
 
   mesurer:
     runs-on: ubuntu-latest
