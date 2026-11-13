@@ -105,8 +105,11 @@ export function distKm(aLat, aLon, bLat, bLon) {
 // fabriquait l'erreur que ce contrôle doit ensuite rattraper.
 const RAYON_KM = 150;
 
-function candidatValable(noms, cLat, cLon, { nom, lat, lon, rayonKm = RAYON_KM }) {
-  if (nom && !accordNom(nom, noms)) return null;
+function candidatValable(noms, cLat, cLon, { nom, lat, lon, rayonKm = RAYON_KM, nomEntier = false }) {
+  const accord = nom ? accordNom(nom, noms) : 'fort';
+  // Autour d'une fiche déjà située, un mot en commun désigne le voisin : le
+  // « Schlosstheater » n'a pas à prêter ses horaires au château d'à côté.
+  if (!accord || (nomEntier && accord !== 'fort')) return null;
   if (lat != null && lon != null) {
     const d = distKm(lat, lon, cLat, cLon);
     if (d > rayonKm) return null;
@@ -133,7 +136,7 @@ function cadre(lat, lon, rayonKm) {
   return `&viewbox=${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}&bounded=1`;
 }
 
-async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm = RAYON_KM) {
+async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm = RAYON_KM, nomEntier = false) {
   try {
     const url = `${NOMINATIM}?q=${encodeURIComponent(query)}`
       + '&format=json&addressdetails=1&extratags=1&namedetails=1&limit=5'
@@ -147,7 +150,7 @@ async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm 
     for (const c of data) {
       const cLat = parseFloat(c.lat), cLon = parseFloat(c.lon);
       if (!Number.isFinite(cLat)) continue;
-      const d = candidatValable(nomsConnus(c), cLat, cLon, { nom, lat, lon, rayonKm });
+      const d = candidatValable(nomsConnus(c), cLat, cLon, { nom, lat, lon, rayonKm, nomEntier });
       if (d == null) continue;
       const ex = c.extratags || {};
       let s = 0;
@@ -182,7 +185,7 @@ async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm 
 // enchaîne les recherches. Mesuré le 28/09/2026 sur 23 adresses à l'étranger :
 // Photon 20, Nominatim 17. Il ne porte ni horaires ni tarifs ; Overpass, juste
 // après, les complète.
-async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = RAYON_KM) {
+async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = RAYON_KM, nomEntier = false) {
   try {
     let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=fr`;
     if (lat != null && lon != null) url += `&lat=${lat}&lon=${lon}`;
@@ -194,7 +197,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = R
       const [cLon, cLat] = f.geometry?.coordinates || [];
       if (!Number.isFinite(cLat)) continue;
       const q = f.properties || {};
-      const d = candidatValable([q.name].filter(Boolean), cLat, cLon, { nom, lat, lon, rayonKm });
+      const d = candidatValable([q.name].filter(Boolean), cLat, cLon, { nom, lat, lon, rayonKm, nomEntier });
       if (d == null) continue;
       let s = q.name ? 3 : 0;
       if (!GENERIC_CLASSES.includes(q.osm_key)) s += 4;
@@ -221,7 +224,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = R
 // ── Overpass : bien meilleur sur les commerces (restaurants, bars, cafés), que
 // la recherche par nom de Nominatim rate souvent. On cherche l'objet OSM dont
 // le nom correspond, autour de la destination.
-async function searchOverpass(name, lat, lon, rayonKm = 25) {
+async function searchOverpass(name, lat, lon, rayonKm = 25, nomEntier = false) {
   if (!lat || !lon) return null;
   const safe = name.replace(/["\\]/g, ' ').replace(/[.*+?^${}()|[\]]/g, '.');
   const metres = Math.round(Math.min(25, rayonKm) * 1000);
@@ -238,7 +241,7 @@ async function searchOverpass(name, lat, lon, rayonKm = 25) {
       const eLat = e.lat ?? e.center?.lat, eLon = e.lon ?? e.center?.lon;
       if (!Number.isFinite(eLat)) continue;
       const accord = accordNom(name, nomsConnus({ name: t.name, namedetails: t }));
-      if (!accord) continue;
+      if (!accord || (nomEntier && accord !== 'fort')) continue;
       let s = accord === 'fort' ? 5 : 2;
       if (t.opening_hours) s += 2;
       if (t['addr:street']) s += 1;
@@ -358,12 +361,12 @@ export function nomSansPrecision(titre) {
  * @param {object} coords {lat, lon} du voyage, pour la recherche de proximité
  * @returns {Promise<object|null>} champs trouvés, ou null si rien de fiable
  */
-export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM } = {}) {
+export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM, nomEntier = false } = {}) {
   const name = (title || '').trim();
   if (name.length < 3) return null;
 
   const query = near ? `${name}, ${near}` : name;
-  const key = `${query}|${coords.lat ?? ''}|${coords.lon ?? ''}|${rayonKm}`.toLowerCase();
+  const key = `${query}|${coords.lat ?? ''}|${coords.lon ?? ''}|${rayonKm}|${nomEntier}`.toLowerCase();
   if (cache.has(key)) return cache.get(key);
   // Un lieu absent d'OpenStreetMap coûte jusqu'à sept appels et plus de trois
   // secondes de pauses, dans une file partagée avec le contrôle des lieux. On
@@ -385,20 +388,20 @@ export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM
     };
     let found = null;
     for (const n of [...new Set([name, court])]) {
-      found = await nominatim(near ? `${n}, ${near}` : n, coords.lat, coords.lon, n, rayonKm);
+      found = await nominatim(near ? `${n}, ${near}` : n, coords.lat, coords.lon, n, rayonKm, nomEntier);
       // Le nom seul, sans la ville, ramène des homonymes à l'autre bout du
       // monde (« Da Enzo al 29 » → une rue au Brésil). On ne l'essaie qu'en
       // dernier, et seulement si le voyage donne un point d'ancrage.
       if (!found && near && coords.lat != null) {
-        found = await nominatim(n, coords.lat, coords.lon, n, rayonKm);
+        found = await nominatim(n, coords.lat, coords.lon, n, rayonKm, nomEntier);
       }
-      if (!found) found = await searchPhoton(n, coords.lat, coords.lon, n, rayonKm);
+      if (!found) found = await searchPhoton(n, coords.lat, coords.lon, n, rayonKm, nomEntier);
       if (found) break;
     }
     // Complète (ou remplace) via Overpass si des informations clés manquent —
     // typiquement le cas des restaurants et cafés.
     if (!found || !found.openingHours || !found.address) {
-      const viaOsm = await searchOverpass(court, coords.lat, coords.lon, rayonKm);
+      const viaOsm = await searchOverpass(court, coords.lat, coords.lon, rayonKm, nomEntier);
       found = merge(found, viaOsm);
     }
     if (found) cache.set(key, found);

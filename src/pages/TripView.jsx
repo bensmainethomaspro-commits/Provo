@@ -881,7 +881,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       // la carte ouverte le connaît, là où il est (11 novembre 2026).
       const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
       let found = situee
-        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon }, { rayonKm: RAYON_FICHE_KM })
+        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
+          { rayonKm: RAYON_FICHE_KM, nomEntier: true })
         : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
       // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
       // lieu qu'elle ne connaît pas) : le serveur demande son point à Google

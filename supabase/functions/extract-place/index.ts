@@ -320,7 +320,11 @@ const normalize = normaliser;
 // basilique.
 function pickBest(
   list: any[],
-  { name = "", coords = null as { lat: number; lon: number } | null, maxKm = 25, exigerNom = false } = {},
+  {
+    name = "", coords = null as { lat: number; lon: number } | null, maxKm = 25, exigerNom = false,
+    // Le nom ENTIER, pas un mot en commun : voir `resolvePlace`.
+    nomEntier = false,
+  } = {},
 ): any | null {
   if (!list?.length) return null;
   const wanted = normalize(name);
@@ -350,7 +354,7 @@ function pickBest(
     if (wanted) {
       const accord = accordNom(name, nomsConnus(p));
       if (accord === "fort") { s += 5; nameHit = true; }
-      else if (accord === "faible") { s += 2; nameHit = true; }
+      else if (accord === "faible" && !nomEntier) { s += 2; nameHit = true; }
     }
 
     // Une adresse ne porte pas de nom : c'est la voie qui doit correspondre.
@@ -413,7 +417,13 @@ async function resolvePlace(
       // donne un point : sans cette exigence, le voisin le mieux renseigné à
       // moins de 25 km fournissait adresse et horaires (A-047). C'est la règle
       // que le client applique déjà (`candidatValable`, enrich.js).
-      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords, exigerNom: true });
+      // … et le nom ENTIER. Autour d'un point, un mot en commun désigne le
+      // voisin : le banc du 13 novembre 2026 a vu Google donner le bon point
+      // pour « Palais du Belvedere », puis la fiche prendre l'adresse du
+      // « Palais Dumba », à 1,7 km — et ses coordonnées avec. Le lieu qui
+      // porte un autre nom que celui du lien se retrouve plus bas, par ce qui
+      // se trouve AU point (`auPoint`), pas par ce qui lui ressemble autour.
+      const best = pickBest(await nominatimSearch(q, 5, "", coords), { name, coords, exigerNom: true, nomEntier: true });
       if (best) return shapePlace(best);
     }
   }

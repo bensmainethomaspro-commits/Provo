@@ -137,6 +137,22 @@ console.log('\n8 · Une fiche qui a son point se complète autour D’ELLE');
   // Sans ce rayon, la règle du voyage reste celle d'avant : 150 km.
   r = await lookupPlace('Trattoria Roma', 'Rome', ROME);
   v('autour du VOYAGE, la règle reste 150 km', r?.lat === 41.80, J(r));
+  // Le voisin qui partage un mot : à 110 m du château, le théâtre du château.
+  // Le banc du 13 novembre 2026 lui a vu prêter sa catégorie au palais.
+  const SCHONBRUNN = { lat: 48.1858, lon: 16.3128 };
+  reponses = {
+    nominatim: [nomi('Schönbrunner Schlosstheater', 48.1867, 16.3121, { extratags: { opening_hours: 'Fr-Su 19:00-22:00' } })],
+    photon: { features: [{ geometry: { coordinates: [16.3121, 48.1867] }, properties: { name: 'Schönbrunner Schlosstheater', osm_key: 'amenity' } }] },
+    overpass: { elements: [{ lat: 48.1867, lon: 16.3121, tags: { name: 'Schönbrunner Schlosstheater', opening_hours: 'Fr-Su 19:00-22:00' } }] },
+  };
+  r = await lookupPlace('Schönbrunner Palais', '', SCHONBRUNN, { rayonKm: RAYON_FICHE_KM, nomEntier: true });
+  v('un voisin qui ne partage qu’un mot ne prête pas ses horaires', r === null, J(r));
+  // Le lieu lui-même, sous son nom entier, est toujours trouvé.
+  // (Un échec est retenu dix minutes pour la même fiche : celle-ci est posée
+  // un mètre plus loin, sinon la demande ne rappellerait aucun service.)
+  reponses = { nominatim: [nomi('Schönbrunner Palais', 48.1859, 16.3127, { extratags: { opening_hours: 'Mo-Su 08:30-17:30' } })] };
+  r = await lookupPlace('Schönbrunner Palais', '', { lat: 48.18581, lon: 16.31281 }, { rayonKm: RAYON_FICHE_KM, nomEntier: true });
+  v('le lieu qui porte le nom entier donne ses horaires', r?.openingHours === 'Mo-Su 08:30-17:30', J(r));
 }
 
 console.log(`\n${ok} réussis, ${ko} échoués`);

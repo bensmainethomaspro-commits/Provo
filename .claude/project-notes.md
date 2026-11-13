@@ -181,6 +181,12 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     le marque `ressemble` et l'app le propose sous son propre nom. Reste à
     faire, hors de ce signalement : les chemins légende, TikTok et site
     générique de la fonction écrivent encore un accord faible.
+  · **Autour d'un point, seul le nom entier fait adopter une fiche** (13 nov.).
+    Une fois le point de Google obtenu, la recherche du nom autour adoptait un
+    lieu qui n'en partage qu'un mot, coordonnées comprises (« Palais Dumba »
+    pour le Belvédère). `resolvePlace` exige maintenant le nom entier ; sinon
+    c'est ce qui se trouve AU point qui parle (`auPoint`). Même exigence pour
+    la complétion autour d'une fiche située, côté téléphone.
   · **Le serveur muet ne fait pas confirmer pour rien.** Quand aucun géocodeur
     ne lui répond, la fonction ne peut rien recouper et marque tout point
     `aConfirmer`. Le téléphone, lui, sait où est le voyage : un point qui tombe
