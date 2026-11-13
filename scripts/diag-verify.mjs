@@ -79,6 +79,11 @@ function ligne(nom, r) {
     p.lat != null ? `coords ${Number(p.lat).toFixed(4)},${Number(p.lon).toFixed(4)}` : null,
     p.openingHours ? 'horaires' : null,
     p.category ? `cat:${p.category}` : null,
+    // Ce que la fonction ne tient pas pour acquis, et que l'app PROPOSE au
+    // lieu de l'écrire : un point que rien ne recoupe, un lieu qui ne fait que
+    // ressembler au nom.
+    p.aConfirmer ? 'À CONFIRMER' : null,
+    p.ressemble ? `RESSEMBLE SEULEMENT (« ${p.nomTrouve || '?'} »)` : null,
   ].filter(Boolean);
   const n = [p.title, p.address, p.lat != null || null, p.openingHours].filter(Boolean).length;
   // Ce que les géocodeurs ont répondu : c'est ce qui a manqué le jour où
@@ -120,6 +125,9 @@ for (const [nom, url, catAttendue, destination, pointAttendu] of LIENS) {
     aSituer++;
     const d = p?.lat != null ? kmEntre([p.lat, p.lon], pointAttendu) : null;
     if (d != null && d < 1) situes++;
+    // Un lieu proposé n'est pas écrit dans la fiche : c'est une fiche sans
+    // point, pas une fiche fausse.
+    else if (p?.ressemble) console.log(`       ↳ pas situé : proposé seulement, à ${d.toFixed(1)} km du lieu attendu — rien n'est écrit sans accord`);
     else console.log(`       ↳ MAL SITUÉ : ${d == null ? 'aucun point' : `à ${d.toFixed(1)} km du lieu attendu`}`);
   }
   if (catAttendue && p?.category === catAttendue) bonneCat++;

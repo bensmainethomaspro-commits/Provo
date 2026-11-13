@@ -1931,6 +1931,33 @@ const PARCOURS = [
       t.verifier('elle a son point, dans le voyage', Math.abs((fiche?.lat ?? 0) - 48.1858) < 0.01, JSON.stringify(fiche?.lat));
     } },
 
+  { groupe: 'Réseau', nom: 'Un lieu qui ne fait que ressembler au nom du lien se propose, sous son propre nom', depart: 'voyage',
+    reseau: { nominatim: 'ok', extractPlace: 'ressemble' },
+    intention: "Le serveur n'a trouvé qu'un autre palais de Vienne pour « Palais du Belvedere » : il ne doit pas prêter son adresse à la fiche.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.saisir('input[placeholder*="colle un lien"]', 'https://share.google/belvedere');
+      await t.clic('.import-row button', { delai: 2800, obligatoire: false });
+      const etat = await t.p.evaluate(() => ({
+        message: document.querySelector('.import-msg')?.innerText?.trim() || '',
+        propositions: [...document.querySelectorAll('.place-result')].map(b => b.innerText.replace(/\s+/g, ' ').trim()),
+        pli: document.querySelector('.details-pli')?.innerText?.replace(/\s+/g, ' ').trim() || '',
+      }));
+      t.verifier('l’écran dit qu’aucun lieu ne porte ce nom, et demande', /aucun lieu de ce nom/.test(etat.message) && /Est-ce celui-ci/.test(etat.message), etat.message || '(rien)');
+      t.verifier('le lieu trouvé est proposé sous SON nom', etat.propositions.length === 1 && /Henckel/.test(etat.propositions[0]),
+        etat.propositions.join(' | ') || '(aucune)');
+      // La fiche porte le nom du lien, mais pas l'adresse de l'autre palais.
+      t.verifier('la fiche garde le nom du lien', /Palais du Belvedere/.test(etat.pli), etat.pli);
+      t.verifier('elle n’a PAS pris l’adresse de l’autre lieu', !/Parkring/.test(etat.pli), etat.pli);
+      // Enregistrée telle quelle : un nom et un lien, pas de point emprunté.
+      await t.clic('.btn--primary.btn--full', { delai: 1400 });
+      const fiche = (await t.voyage()).reserve.find(a => a?.title === 'Palais du Belvedere');
+      t.verifier('enregistrée sans point emprunté', Boolean(fiche) && !(Math.abs((fiche?.lat ?? 0) - 48.2068) < 0.001), JSON.stringify([fiche?.lat, fiche?.address]));
+      t.verifier('avec son lien', fiche?.link === 'https://share.google/belvedere', fiche?.link || '(vide)');
+    } },
+
   { groupe: 'Réseau', nom: "Un lien qui échoue le dit et ne perd rien", depart: 'voyage',
     reseau: { extractPlace: 'err500' },
     intention: "Le service tombe : l'app doit le dire et laisser saisir à la main.",

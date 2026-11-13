@@ -527,7 +527,7 @@ function shapePlace(p: any) {
 
 // ── Redirect resolution ───────────────────────────────────────────────────
 async function fetchOnce(
-  url: string, agent = UA_NAVIGATEUR, delai = 10000,
+  url: string, agent = UA_NAVIGATEUR, delai = 10000, plafond = 600_000,
 ): Promise<{ finalUrl: string; html: string; statut: number }> {
   const { signal, clear } = withTimeout(delai);
   try {
@@ -548,7 +548,7 @@ async function fetchOnce(
     const ct = r?.headers.get("content-type") || "";
     if (r && (ct.includes("text/html") || ct.includes("application/json") || ct === "")) {
       // Lu sous le délai, et plafonné PENDANT la lecture (A-034).
-      html = await lireCorps(r, 600_000);
+      html = await lireCorps(r, plafond);
     } else {
       await r?.body?.cancel().catch(() => {});
     }
@@ -758,8 +758,14 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
   }
   const avecVille = ou && !normalize(nom).includes(normalize(ou));
   for (const q of avecVille ? [`${nom}, ${ou}`, nom] : [nom]) {
+    // La page pèse 220 ko, la vignette est dans son en-tête : on s'arrête à
+    // 150 ko plutôt que d'attendre la fin d'un script qu'on ne lit pas. Et la
+    // trace dit le temps passé — le 13 novembre 2026, deux demandes sur trois
+    // sont revenues « muettes » sans qu'on sache si c'était un refus immédiat
+    // ou six secondes d'attente.
+    const debut = Date.now();
     const r = await fetchOnce(
-      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000,
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`, UA_ROBOT_SOCIAL, 6000, 150_000,
     );
     if (captcha(r)) {
       pointRefuse = Date.now();
@@ -767,7 +773,7 @@ async function pointGoogle(nom: string, ou: string): Promise<{ lat: number; lon:
       return null;
     }
     const p = lirePointMaps(r.html);
-    traceGeo.push(`point-google ${p ? "unique" : r.html ? "aucun" : `muet (${r.statut})`}`);
+    traceGeo.push(`point-google ${p ? "unique" : r.html ? "aucun" : `muet (${r.statut}, ${Date.now() - debut} ms)`}`);
     if (p) return p;
   }
   return null;
@@ -862,6 +868,12 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
     || distanceKm(ancre.lat, ancre.lon, coords?.lat ?? ancre.lat, coords?.lon ?? ancre.lon) > Math.max(150, ancre.rayonKm ?? 0);
   const aConfirmer = pointDemande && Boolean(place?.voisin || !place) && !ou && loinDuVoyage;
   if (aConfirmer) traceGeo.push("point-google à confirmer");
+  // Et un lieu qui ne partage qu'un MOT avec le nom, retenu faute de mieux
+  // parce que Google s'est tu : ce n'est pas le lieu, c'est ce qui lui
+  // ressemble. Il part marqué, sous son propre nom, et le téléphone le
+  // propose — « Palais du Belvedere » s'écrivait d'office sur un autre palais.
+  const ressemble = !pointDemande && place?.accord === "faible";
+  if (ressemble) traceGeo.push("ressemble seulement");
 
   if (place) {
     const { voisin, accord: _accord, ...fiche } = place;
@@ -876,6 +888,7 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
       lat: laSienne ? fiche.lat : (coords?.lat ?? fiche.lat),
       lon: laSienne ? fiche.lon : (coords?.lon ?? fiche.lon),
       ...(aConfirmer ? { aConfirmer: true } : {}),
+      ...(ressemble ? { ressemble: true, nomTrouve: fiche.title } : {}),
       link: rawUrl,
       source: "google_maps",
     };

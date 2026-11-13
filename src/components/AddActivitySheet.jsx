@@ -224,6 +224,10 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     // loin, il se propose : une légende peut nommer n'importe quoi.
     if (serveur) {
       const s = await situerParLeServeur(titre, tripDestination).catch(() => null);
+      if (s?.ressemble) {
+        setCandidates([{ ...s, title: s.nomTrouve || s.title }]);
+        return { etat: 'ressemble' };
+      }
       if (s && !aProposerSeulement(s) && loinDuVoyage(s, ancreVoyage) == null) {
         applyResult({ ...s, title: titre, ...plus }, raw);
         return { etat: 'pose', lieu: s };
@@ -292,6 +296,16 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setCandidates([{ ...lieu, id: lieu.id || `p${lieu.lat},${lieu.lon}`, title: titre || lieu.title }]);
     setImportMsg(`« ${titre || lieu.title} » — rien de ce nom ${
       tripDestination ? `près de ${tripDestination}` : 'sur la carte ouverte'}. Est-ce celui-ci ?`);
+  };
+
+  // Le serveur n'a trouvé qu'un lieu qui RESSEMBLE — un mot en commun avec le
+  // nom, rien de plus (« Palais du Belvedere » → un autre palais de Vienne, à
+  // 1,7 km, le 13 novembre 2026). Même règle que pour ce que le téléphone
+  // trouve lui-même (`situer.js`) : il se propose sous son propre nom, pour
+  // qu'on puisse juger, et ne s'écrit jamais d'office.
+  const proposerCeQuiRessemble = (lieu, titre) => {
+    setCandidates([{ ...lieu, id: lieu.id || `r${lieu.lat},${lieu.lon}`, title: lieu.nomTrouve || lieu.title }]);
+    setImportMsg(`« ${titre} » — aucun lieu de ce nom sur la carte ouverte. Est-ce celui-ci ?`);
   };
 
   // Un lieu choisi dans la liste, ou seul résultat d'une recherche : la fiche
@@ -408,6 +422,13 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           result = { ...(result || {}), title: indice, category: result?.category || 'visite' };
         }
 
+        if (result?.ressemble && result.lat != null) {
+          // La fiche garde ce que le lien a vraiment dit — son nom, ce que
+          // c'est, et lui-même — que la proposition soit acceptée ou non.
+          applyResult({ title: result.title, category: result.category, link: result.link || normalized }, raw);
+          proposerCeQuiRessemble({ ...result, link: result.link || normalized }, result.title);
+          return;
+        }
         if (aProposerSeulement(result) && result.lat != null) {
           // Le lien reste dans la fiche quoi qu'on réponde : c'est lui qu'on
           // a collé, et il mène au bon endroit même si la proposition est fausse.
@@ -592,6 +613,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       const tousLoin = found.every(c => loinDuVoyage(c, ancreVoyage) != null);
       if (tousLoin && !fortAilleurs(raw, found).lieu) {
         const s = await situerParLeServeur(raw, tripDestination).catch(() => null);
+        if (s?.ressemble) { proposerCeQuiRessemble(s, raw); return; }
         if (aProposerSeulement(s)) { proposerUnLieu(s, s.title || raw); return; }
         if (s) { choisir({ ...s, title: s.title || raw }, raw); return; }
       }

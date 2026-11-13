@@ -145,7 +145,10 @@ for (const [quoi, nom, attendu] of NOMS) {
   // (Mesuré le 12 novembre 2026 : la page ne porte PAS le nom de ce que Google
   // a trouvé, seulement la recherche qu'on lui a faite. Le point ne se vérifie
   // donc que par recoupement : la carte ouverte, ou la distance au voyage.)
-  resume.push(`point  · ${nom.padEnd(40)} ${p ? `${p.lat}, ${p.lon}` : refuse(c) ? 'CAPTCHA' : 'aucun point'}`);
+  // La fonction ne lit que les 150 premiers ko : la vignette y est-elle ?
+  const place = c.html.search(/<meta[^>]+og:image/i);
+  resume.push(`point  · ${nom.padEnd(40)} ${p ? `${p.lat}, ${p.lon}` : refuse(c) ? 'CAPTCHA' : 'aucun point'}`
+    + ` · vignette à l'octet ${place < 0 ? '—' : place} sur ${c.html.length}`);
   await pause(1800);
   if (attendu === 'voir') continue;
   if (attendu) bilan(Boolean(p) && km([p.lat, p.lon], attendu) < 1, `le point du lieu, à ${p ? Math.round(km([p.lat, p.lon], attendu) * 1000) : '—'} m de celui attendu`);

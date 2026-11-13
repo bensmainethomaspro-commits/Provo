@@ -890,7 +890,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
       // l'écran d'ajout le lui montre.
       if (!found?.lat && !situee && anchor) {
         const s = await situerParLeServeur(activity.title, trip.destination, { memoire: true });
-        if (s && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
+        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
+        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
       }
       const patch = missingFieldsFrom(activity, found);
       if (patch) {

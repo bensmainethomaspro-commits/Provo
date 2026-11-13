@@ -167,6 +167,15 @@ export const VARIANTES = {
       geocodeurs: ['nominatim sauté (refus récent)', 'photon AbortError', 'point-google unique',
         'photon-inverse sauté (muet)', 'point-google à confirmer'],
     },
+    // Google s'est tu, et la carte ouverte n'a qu'un lieu qui RESSEMBLE : un
+    // autre palais de Vienne, à 1,7 km du Belvédère (banc du 13 novembre 2026).
+    ressemble: {
+      ok: true,
+      result: { title: 'Palais du Belvedere', nomTrouve: 'Palais Henckel von Donnersmarck',
+        address: 'Parkring, Vienne, Autriche', lat: 48.2068, lon: 16.3794, category: 'visite',
+        ressemble: true, link: 'https://share.google/belvedere', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'point-google muet (0, 6003 ms)', 'ressemble seulement'],
+    },
     // Un nom qui n'existe pas : Google a quand même rendu UN lieu, à côté du
     // serveur qui posait la question (mesuré le 12 novembre 2026, en Virginie).
     // Rien ne le confirme et il est loin du voyage : la fonction le marque.

@@ -172,6 +172,14 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     moment où la fiche se remplit : « … est à Rome, Italie — à 1 100 km de
     Biarritz », sans rien bloquer ; ce qui vient d'être dit n'est pas redit par
     le contrôle des lieux (`placeCheckSig`).
+  · **Un mot en commun n'est pas le lieu, côté serveur non plus** (13 nov.).
+    Le banc a posé « Palais du Belvedere » sur un autre palais de Vienne, à
+    1,7 km : près du voyage `geocode` acceptait un accord « faible », et comme
+    la carte ouverte avait « trouvé », Google n'était plus interrogé. Un accord
+    faible ne ferme plus la porte à Google ; s'il ne reste que lui, la fonction
+    le marque `ressemble` et l'app le propose sous son propre nom. Reste à
+    faire, hors de ce signalement : les chemins légende, TikTok et site
+    générique de la fonction écrivent encore un accord faible.
   · **Le serveur muet ne fait pas confirmer pour rien.** Quand aucun géocodeur
     ne lui répond, la fonction ne peut rien recouper et marque tout point
     `aConfirmer`. Le téléphone, lui, sait où est le voyage : un point qui tombe
