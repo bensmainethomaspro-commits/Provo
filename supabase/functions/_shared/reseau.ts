@@ -55,6 +55,9 @@ export async function joindre(
   depart: string,
   signal: AbortSignal,
   entetes: (u: URL) => Record<string, string>,
+  // Options de `fetch` propres à l'hébergeur (un client HTTP/1.1 sous Deno).
+  // Jamais `redirect` ni `signal` : ceux-là sont la raison d'être de `joindre`.
+  plus: Record<string, unknown> = {},
 ): Promise<{ reponse: Response | null; urlFinale: URL } | null> {
   let courante = urlSure(depart);
   if (!courante) return null;
@@ -62,7 +65,7 @@ export async function joindre(
     let r: Response;
     try {
       r = await fetch(courante.toString(), {
-        signal, redirect: "manual", headers: entetes(courante),
+        ...plus, signal, redirect: "manual", headers: entetes(courante),
       });
     } catch {
       // Réseau coupé ou délai dépassé : l'URL atteinte sert encore (un lien
@@ -126,5 +129,28 @@ export async function lireCorps(r: Response, max: number): Promise<string> {
   }
   // `fatal: false` : un caractère coupé en deux au plafond devient �, sans
   // lever.
-  return new TextDecoder("utf-8", { fatal: false }).decode(tout);
+  return new TextDecoder(jeuDeCaracteres(r.headers.get("content-type"), tout), { fatal: false }).decode(tout);
+}
+
+/**
+ * Dans quel jeu de caractères la page est-elle écrite ?
+ *
+ * Tout était lu en UTF-8. Or l'aperçu que Google sert aux robots de messagerie
+ * arrive en ISO-8859-1 : « ADEVA Cucina Moderna · Rome » ressortait
+ * « ADEVA Cucina Moderna � Rome », et un « Café » serait devenu « Caf� »
+ * (11 novembre 2026). L'en-tête d'abord, puis la balise `<meta charset>` du
+ * début de page ; un nom inconnu du décodeur retombe sur UTF-8.
+ */
+export function jeuDeCaracteres(contentType: string | null, octets: Uint8Array): string {
+  const annonce = (texte: string) => (texte.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1] || "").toLowerCase();
+  // Les 2 premiers ko, lus octet pour octet : une balise meta est en ASCII.
+  const debut = () => String.fromCharCode(...octets.subarray(0, 2048));
+  const nom = annonce(contentType || "") || annonce(debut().match(/<meta[^>]+charset[^>]*>/i)?.[0] || "");
+  if (!nom || nom === "utf-8" || nom === "utf8") return "utf-8";
+  try {
+    new TextDecoder(nom);
+    return nom;
+  } catch {
+    return "utf-8";
+  }
 }

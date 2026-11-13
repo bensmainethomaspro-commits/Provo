@@ -356,10 +356,21 @@ const ATTENDU = {
 };
 const attenduDe = (nom) => ATTENDU[nom] || ATTENDU_PAR_DEFAUT;
 
-function juger(mesures, modele, budget) {
+function juger(mesures, modele, budget, google = { connu: false }) {
   const vivantes = mesures.filter(m => !m.absent);
   const soucis = [];
   const bonnesNouvelles = [];
+
+  // Un lien de partage Google vers un lieu qui n'est PAS dans le voyage : le
+  // 11 novembre 2026 il ressortait en fiche nue, et aucun banc ne le voyait —
+  // aucun n'envoyait la destination d'un voyage ailleurs. Rouge s'il ressort
+  // sans point. L'état des échelons Google (aperçu, point par le nom) est
+  // affiché mais n'alerte pas : ils sont capricieux par nature, et tant que la
+  // fiche est située la carte ouverte a fait le travail.
+  if (google.connu && !google.situe) {
+    soucis.push('un lien de partage Google vers un lieu hors du voyage ressort sans point '
+      + `(${google.trace.join(', ') || 'aucune trace'})`);
+  }
 
   // Le budget de 20 s de la fonction (`_shared/budget.ts`, 30 septembre 2026)
   // suit l'appel par le contexte asynchrone. Si l'hébergeur ne le porte pas,
@@ -458,13 +469,50 @@ async function sante() {
   }
 }
 
+/**
+ * Un lien de partage Google, envoyé comme l'app l'envoie : avec la destination
+ * d'un voyage — et ici un voyage AILLEURS que le lieu (un restaurant de Rome,
+ * un voyage à Biarritz). C'est la fonction déployée qui répond.
+ */
+const LIEN_GOOGLE = 'https://share.google/y4QMh42nQx6DiSBfZ';
+async function lienGoogle() {
+  const { signal, clear } = delai(45000);
+  try {
+    const r = await fetch(FONCTION, {
+      method: 'POST', signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${CLE_PUBLIABLE}`, apikey: CLE_PUBLIABLE,
+      },
+      body: JSON.stringify({ url: LIEN_GOOGLE, destination: 'Biarritz' }),
+    });
+    clear();
+    if (!r.ok) return { connu: false, pourquoi: `HTTP ${r.status}` };
+    const d = await r.json();
+    const p = d?.result || {};
+    const trace = Array.isArray(d?.geocodeurs) ? d.geocodeurs : [];
+    return {
+      connu: true,
+      situe: Number.isFinite(p.lat) && Number.isFinite(p.lon),
+      titre: p.title || '', adresse: p.address || '', trace,
+      // Une fonction pas encore redéployée ne connaît pas ces échelons.
+      echelons: trace.some(t => /^(apercu|point)-google/.test(t)),
+      apercu: trace.some(t => /^apercu-google \S+ lu$/.test(t)),
+    };
+  } catch (e) {
+    clear();
+    return { connu: false, pourquoi: String(e.message || e) };
+  }
+}
+
 const mesures = [];
 for (const t of TEMOINS) mesures.push(await mesurer(t));
 const { modele, budget } = await sante();
-const verdict = juger(mesures, modele, budget);
+const google = await lienGoogle();
+const verdict = juger(mesures, modele, budget, google);
 
 if (JSON_SEUL) {
-  console.log(JSON.stringify({ verdict, modele, budget, mesures }, null, 2));
+  console.log(JSON.stringify({ verdict, modele, budget, google, mesures }, null, 2));
 } else {
   for (const m of mesures) {
     console.log(`\n■ ${m.temoin}${m.absent ? '  (LIEN DISPARU)' : ''}`);
@@ -489,6 +537,19 @@ if (JSON_SEUL) {
     + `${budget.connu ? (budget.ok ? "actif : il suit chaque appel chez l'hébergeur"
       : "INACTIF — l'appel entier n'est plus borné (chaque requête garde son délai)")
       : `état inconnu (${budget.pourquoi})`}`);
+
+  console.log(`\n■ lien de partage Google, lieu hors du voyage (${LIEN_GOOGLE})`);
+  if (!google.connu) {
+    console.log(`  ~ état inconnu (${google.pourquoi})`);
+  } else {
+    console.log(`  ${google.situe ? '✓' : '✗'} fiche           `
+      + `${google.situe ? `« ${google.titre} » · ${google.adresse || 'sans adresse'}` : 'SANS POINT — la fiche sort nue'}`);
+    console.log(`  ${google.echelons ? (google.apercu ? '✓' : '~') : '~'} aperçu Google   `
+      + `${!google.echelons ? 'échelon absent de la fonction déployée'
+        : google.apercu ? "servi à l'hébergeur : le lien dit lui-même où est le lieu"
+          : "pas servi à l'hébergeur cette fois — située par la carte ouverte"}`);
+    console.log(`    ${google.trace.join(', ') || '(aucune trace)'}`);
+  }
 
   const sceau = { vert: '🟢', orange: '🟠', rouge: '🔴' }[verdict.etat];
   console.log(`\n${sceau} ${verdict.etat.toUpperCase()} — ${verdict.resume}\n`);

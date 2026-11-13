@@ -6,7 +6,7 @@ import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabe
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 import ImagePiece from './ImagePiece';
-import { ouvrirPiece } from '../utils/pieces';
+import { ouvrirPiece, messagePiece } from '../utils/pieces';
 
 function ActivityCard({
   activity, context, isLastDay, slot, isPastTrip,
@@ -28,7 +28,10 @@ function ActivityCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState(null);
-  const [pdfAbsent, setPdfAbsent] = useState(false);
+  // Ce qui a empêché d'ouvrir le dernier billet touché, pas un simple « absent » :
+  // une fenêtre refusée par le navigateur ne se dit pas comme un fichier qui
+  // n'est pas encore arrivé (audit A-080).
+  const [soucisPdf, setSoucisPdf] = useState(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const swipeRef = useRef({ startX: null, startY: null, isDragging: false });
   const SWIPE_MAX = 90;
@@ -284,14 +287,16 @@ function ActivityCard({
                       // part (utils/pieces.js), et un `data:` n'est de toute
                       // façon pas navigable sur tous les téléphones.
                       <button key={i} type="button" className="pdf-chip"
-                        onClick={async () => setPdfAbsent(!(await ouvrirPiece(p.data)))}>
+                        onClick={async () => setSoucisPdf(await ouvrirPiece(p.data))}>
                         <span className="pdf-chip__icon">📄</span>
                         <span className="pdf-chip__name">{p.name}</span>
                       </button>
                     ))}
-                    {pdfAbsent && (
+                    {soucisPdf && (
                       <p className="pdf-list__absent" role="status">
-                        Pas encore sur ce téléphone : il arrive avec du réseau.
+                        {/* Le nom est déjà sur la pastille juste au-dessus : le
+                            répéter ici allongerait la phrase pour rien. */}
+                        {messagePiece(soucisPdf)}
                       </p>
                     )}
                   </div>

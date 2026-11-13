@@ -23,6 +23,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { joindre, lireCorps, PRIVE, urlSure } from "../_shared/reseau.ts";
+import { lienDePassage } from "../_shared/lecture-lien.ts";
 import { origineAutorisee } from "../_shared/origine.ts";
 import { BUDGET_MS, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 
@@ -348,7 +349,10 @@ async function traiter(req: Request): Promise<Response> {
 
   // 1 · Le site officiel : celui fourni s'il y en a un, sinon celui d'OSM.
   const osm = await siteDepuisOsm(nom, lat, lon);
-  const candidat = String(corps.website || "") || osm?.site || "";
+  //     Le lien d'une fiche importée est celui par lequel on l'a trouvée (un
+  //     partage Google, une vidéo) : ce n'est pas le site du lieu.
+  const fourni = String(corps.website || "");
+  const candidat = (fourni && !lienDePassage(fourni) ? fourni : "") || osm?.site || "";
   const url = candidat ? urlSure(candidat) : null;
 
   const base = {

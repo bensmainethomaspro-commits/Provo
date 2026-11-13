@@ -138,6 +138,54 @@ export const VARIANTES = {
       ],
     },
     aucun: { ok: false },
+    // Un lien de partage Google vers un restaurant de ROME, collé dans un
+    // voyage ailleurs : le cas du 11 novembre 2026, tel que la fonction le rend
+    // depuis qu'elle cherche là où le lien dit que le lieu se trouve.
+    loin: {
+      ok: true,
+      result: { title: 'ADEVA Cucina Moderna', address: '29 Via dei Maroniti, Rome, Italie',
+        lat: 41.9021228, lon: 12.4847452, category: 'resto',
+        link: 'https://share.google/y4QMh42nQx6DiSBfZ', source: 'google_maps' },
+      geocodeurs: ['apercu-google facebook lu', 'photon 200'],
+    },
+    // Un NOM envoyé par l'app sous la forme d'un lien de recherche Maps : la
+    // carte ouverte ne le porte pas, le serveur a demandé son point à Google.
+    parLeNom: {
+      ok: true,
+      result: { title: 'Schönbrunner Palais', address: 'Schönbrunner Schloßstraße, Vienne, Autriche',
+        lat: 48.1858124, lon: 16.312764, category: 'visite',
+        link: 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner%20Palais', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'ailleurs rien', 'point-google unique', 'photon-inverse 200'],
+    },
+    // Les géocodeurs ne répondaient plus à la fonction (le soir du 12 novembre
+    // 2026) : elle n'a pu recouper le point avec rien, et l'a marqué. Mais il
+    // tombe DANS le voyage — et le téléphone, lui, sait où est le voyage.
+    nonRecoupeDansLeVoyage: {
+      ok: true,
+      result: { title: 'Schönbrunner Palais', lat: 48.1858124, lon: 16.312764, category: 'visite',
+        aConfirmer: true, link: 'https://share.google/abcDEF', source: 'google_maps' },
+      geocodeurs: ['nominatim sauté (refus récent)', 'photon AbortError', 'point-google unique',
+        'photon-inverse sauté (muet)', 'point-google à confirmer'],
+    },
+    // Google s'est tu, et la carte ouverte n'a qu'un lieu qui RESSEMBLE : un
+    // autre palais de Vienne, à 1,7 km du Belvédère (banc du 13 novembre 2026).
+    ressemble: {
+      ok: true,
+      result: { title: 'Palais du Belvedere', nomTrouve: 'Palais Henckel von Donnersmarck',
+        address: 'Parkring, Vienne, Autriche', lat: 48.2068, lon: 16.3794, category: 'visite',
+        ressemble: true, link: 'https://share.google/belvedere', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'point-google muet (0, 6003 ms)', 'ressemble seulement'],
+    },
+    // Un nom qui n'existe pas : Google a quand même rendu UN lieu, à côté du
+    // serveur qui posait la question (mesuré le 12 novembre 2026, en Virginie).
+    // Rien ne le confirme et il est loin du voyage : la fonction le marque.
+    aConfirmer: {
+      ok: true,
+      result: { title: 'Trattoria Zzqxj', address: 'Main Street, Front Royal, États-Unis',
+        lat: 38.6572722, lon: -78.2267183, category: 'resto', aConfirmer: true,
+        link: 'https://www.google.com/maps/search/?api=1&query=Trattoria%20Zzqxj', source: 'google_maps' },
+      geocodeurs: ['photon 200', 'ailleurs rien', 'point-google unique', 'photon-inverse 200', 'point-google à confirmer'],
+    },
   },
   // Le modèle a lu le texte, mais n'y a trouvé aucun lieu nommé.
   legende: { aucun: { ok: false } },

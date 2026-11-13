@@ -3,7 +3,7 @@ import { useReorderDrag } from '../hooks/useReorderDrag';
 import Icone from './Icone';
 import { GripVertical, Dices } from 'lucide-react';
 import { tempsRestant } from '../utils/piocheGuidee';
-import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts, nomDeLieu } from '../utils/helpers';
+import { formatDuration, getDayLabel, formatDateShort, formatPrice, getCategoryMeta, getTimeSlots, lienItineraire, getLogicAlerts, nomDeLieu, dateLocale } from '../utils/helpers';
 
 // Déplacer une activité : UNE poignée ⠿ (réordonner dans le jour et changer de
 // jour) et, dans la fiche dépliée, des pastilles « Déplacer vers » pour ceux qui
@@ -248,10 +248,7 @@ export default function TimelineView({ days, onOpenDetail, onDrop, onMoveToDay, 
   const aujRef = useRef(null);
   const cale = useRef(false);
 
-  const jourJ = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  })();
+  const jourJ = dateLocale();
   const idxAuj = days.findIndex(d => d.date === jourJ);
 
   // En voyage, le jour utile est aujourd'hui — pas le premier jour, qui est

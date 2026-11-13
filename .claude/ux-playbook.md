@@ -198,8 +198,19 @@ confirmations.
 *Origine : seule la suppression était annulable ; les déplacements, balayages et
 réorganisations ne l'étaient pas.*
 
-**D5. Confirmer qu'une action a eu lieu.** Une barre qui disparaît sans mot ne
-dit pas si l'annulation a marché.
+**D5. Confirmer qu'une action a eu lieu — et montrer ce qu'elle a produit.**
+Une barre qui disparaît sans mot ne dit pas si l'annulation a marché.
+**Corollaire : un succès ne doit pas ressembler à un échec.** Quand le résultat
+d'une action atterrit dans une partie repliée, hors de l'écran ou sur un autre
+écran, l'élément visible qui y mène doit le dire : ce qui a été trouvé, créé ou
+changé, nommé. Après chaque action réussie, se demander : « avec l'écran seul
+sous les yeux, saurais-je que ça a marché, et ce que ça a donné ? » Le faire
+porter par un élément déjà là (A7), pas par un bandeau de plus.
+*Origine : « quand je copie des liens […] cela ne fonctionne toujours pas ».
+Une partie de ces liens marchait : le champ se vidait, le formulaire rempli
+restait derrière une section repliée au libellé générique, et l'écran était
+identique à celui d'avant. Les contrôles automatiques, eux, dépliaient la
+section pour lire les champs — ils voyaient ce que la personne ne voyait pas.*
 
 ---
 
@@ -336,6 +347,22 @@ seulement. L'utilisateur a signalé une application concurrente qui y arrive.
 Elle est installée : elle sort par la connexion de la personne, avec un agent
 mobile ordinaire, et TikTok lui sert la page complète. Il ne fallait pas un
 meilleur extracteur côté serveur — il fallait faire la même requête d'ailleurs.*
+**Corollaire : la même demande, pas une demande qui lui ressemble.** Un
+diagnostic, un banc ou une sonde rejoue ce que le code envoie *réellement* :
+les mêmes paramètres — y compris celui que l'appelant ajoute toujours et qu'on
+oublie parce qu'il est « de contexte » —, et le même moteur d'exécution : deux
+environnements peuvent envoyer les mêmes en-têtes sans parler la même version
+du protocole. Recopier la requête depuis le code appelant, ne pas la réécrire
+de mémoire en plus simple. Et quand une mesure passe alors que l'utilisateur
+dit que ça échoue, c'est la mesure qui est fausse : chercher ce qu'elle
+n'envoie pas, avant de chercher ce que le code fait mal.
+*Origine : « cela ne fonctionne toujours pas », quatrième signalement sur la
+même fonction. Le diagnostic envoyait la donnée seule et répondait « tout va
+bien » ; l'application envoyait toujours la donnée ET le contexte de la
+personne, et c'est ce second paramètre qui faisait échouer la recherche. Puis
+une sonde écrite pour un autre moteur que celui du code obtenait une réponse
+en 0,4 s là où le code recevait un refus après 9 s — mêmes en-têtes, pas la
+même version du protocole. Deux fois, la mesure était juste pour elle-même.*
 
 **E11. Quand une source te refuse, chercher qui elle ne refuse pas — et ce
 qu'elle laisse passer ailleurs.** Un mur n'est presque jamais fermé à tout le
@@ -446,7 +473,10 @@ l'utilisateur (ticket, notification), pas dans un journal que personne ne lit ;
 elle se referme toute seule au retour à la normale, sinon on cesse de la lire.
 **Corollaire : une alarme qui rassure à tort est pire que pas d'alarme.** Si le
 service répond du remplissage générique, la sonde doit le refuser comme réponse
-— sinon elle affiche vert sur une chaîne morte.
+— sinon elle affiche vert sur une chaîne morte. Et « rempli » n'est pas
+« juste » : là où la bonne réponse est connue, la sonde la compare. Un banc qui
+compte les champs présents affiche vert sur une réponse fausse — c'est arrivé
+avec une fiche complète, à l'adresse d'un autre lieu.
 **Second corollaire : une alarme compare à ce qu'on ATTEND, pas à l'idéal.**
 Quand une dégradation est constatée, comprise et assumée, une sonde qui continue
 de la signaler sonne tous les matins pour une situation sur laquelle personne
@@ -530,6 +560,8 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-10 | « critique impitoyable, design system, gradients » : 989 textes sur dégradé jamais mesurés | B1 (corollaire) |
 | 2026-10 | même demande : quatre design systems empilés, un jeton déclaré huit fois | B5 (corollaire) |
 | 2026-10 | même demande : 130 émojis servant d'icônes, un calendrier « 17 juillet » en onglet | B6 |
+| 2026-11 | « cela ne fonctionne toujours pas » (4ᵉ fois, même fonction) : le diagnostic n'envoyait pas ce que l'app envoie, la sonde tournait sous un autre moteur, le banc comptait le rempli | E10 (corollaire), F5 (1ᵉʳ corollaire affiné) |
+| 2026-11 | même signalement : une action réussie laissait l'écran identique à celui d'avant | D5 (affinée, corollaire) |
 
 ### Récidives repérées
 
@@ -547,6 +579,17 @@ revient trois fois est un problème structurel, pas un détail.
   le raisonnement n'avait pas envisagée. → **ne rien annoncer comme corrigé sans
   une mesure** ; quand l'environnement empêche de mesurer, c'est l'environnement
   qu'il faut changer, pas la mesure qu'il faut sauter (E2, F4).
+  **Quatrième fois en novembre 2026**, sur la même fonction — et cette fois la
+  mesure existait, et elle passait. Elle n'envoyait pas ce que l'app envoie
+  (E10, corollaire). Une mesure verte face à quelqu'un qui dit « ça ne marche
+  pas » n'est pas une preuve : c'est un indice sur la mesure.
+- **Une mesure qui ne ressemble pas à ce qu'elle mesure** : cinq fois — depuis
+  le mauvais poste (E10), sous le mauvais nom (F5, 3ᵉ corollaire), par la
+  mauvaise porte (E3, corollaire), puis avec la mauvaise demande et sous le
+  mauvais moteur (E10, corollaire). À chaque fois la mesure était juste pour
+  elle-même et fausse pour le produit, et à chaque fois c'est l'utilisateur qui
+  l'a démentie. → avant de croire une sonde, la poser à côté du code appelant
+  et comparer ligne à ligne : poste, identité, entrée, paramètres, moteur.
 - **Un écran qu'aucun outil n'ouvre accumule des défauts invisibles** : deux
   fois en une semaine (formulaire de dépense, puis jour ouvert et fiche
   d'activité). À chaque fois la sonde annonçait « rien à signaler » sur un
@@ -557,9 +600,13 @@ revient trois fois est un problème structurel, pas un détail.
   que l'utilisateur (E3, corollaire). **Sixième et septième fois en octobre
   2026** : la création d'un objet et les états vides n'étaient ouverts par
   aucun outil (un champ y débordait de 34 px), et la sonde de contraste
-  écartait tout texte posé sur un dégradé (B1, corollaire). → E6, et vérifier
+  écartait tout texte posé sur un dégradé (B1, corollaire). **Huitième fois en
+  novembre 2026** : l'état d'un formulaire *après* une action réussie — les
+  contrôles dépliaient la section pour lire les champs et ne regardaient jamais
+  l'écran tel que la personne le voit (D5, corollaire). → E6, et vérifier
   qu'un écran exerce chaque sonde avant de l'ajouter ; puis se demander par où
-  la sonde entre, et ce qu'elle met de côté sans le compter.
+  la sonde entre, ce qu'elle met de côté sans le compter, et ce qu'elle ouvre
+  que la personne n'ouvre pas.
 - **Une valeur redéclarée plus bas dans la feuille** : cinq fois en deux mois
   (B5), puis un jeton déclaré huit fois. Le balayage ne tenait pas : chaque
   refonte s'ajoutait en couche au bas du fichier. → B5, corollaire : un seul
@@ -577,7 +624,11 @@ revient trois fois est un problème structurel, pas un détail.
   utilisateur qui a dû signaler la panne, alors que les liens TikTok sont
   « majoritaires » chez lui. → E9 pour la redondance, F5 pour l'alarme. Les
   deux ensemble : sans échelons il n'y a rien à surveiller, sans alarme les
-  échelons s'usent sans qu'on le sache.
+  échelons s'usent sans qu'on le sache. **Encore en novembre 2026** : un
+  service refusait l'hébergeur depuis deux mois, le second était donc devenu le
+  seul, et il s'est tu un soir — plus rien n'était trouvé. « Il ne reste qu'un
+  échelon » était su, noté, et n'avait déclenché aucune alarme : c'est
+  exactement l'orange de F5, resté sans sonnerie.
 - **« Poussé » confondu avec « livré »** : trois fois — cache Vercel qui servait
   une version périmée, preview inaccessible sans compte, mémoire partagée
   laissée sur une branche. À chaque fois le travail était fait *et* hors de

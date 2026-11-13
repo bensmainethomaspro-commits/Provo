@@ -1,6 +1,17 @@
 // Vérification : la carte garde son zoom, et tout le reste marche encore.
+//
+// Lancée par `verif.yml` (travail « parcours »), comme les parcours : elle
+// demande l'aperçu, donc elle n'est pas dans `npm run verif`. Elle n'était
+// nulle part, et elle échouait — sur `main` aussi (audit A-081).
+//
+// L'HEURE COMPTE, et c'est ce qui l'avait rendue trompeuse : piocher depuis la
+// carte ouvre la feuille « À savoir » quand il reste de la journée devant soi,
+// et rien du tout en fin de journée. Mesuré le 2026-10-12 : feuille à 02:07,
+// 08:00 et 23:30, aucune à 17:49. L'étape 7 cliquait donc dans une feuille
+// modale trois fois sur quatre, en avalant son échec — et la suite était
+// rouge selon l'heure à laquelle on la lançait.
 import { chromium } from 'playwright';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { trip as base, settings } from './ui-fixture.mjs';
 
 const trouverChromium = () => {
@@ -12,6 +23,7 @@ const trouverChromium = () => {
 };
 
 const URL_BASE = 'http://localhost:4173';
+const CAPTURES = '/tmp/provo-carte';
 const trip = { ...base, accommodationAddress: 'Hotel Sacher, Vienne', accommodationLat: 48.2036, accommodationLon: 16.3690 };
 
 const nav = await chromium.launch({ executablePath: trouverChromium() });
@@ -21,6 +33,17 @@ const ctx = await nav.newContext({
   permissions: ['geolocation'], geolocation: { latitude: 48.2082, longitude: 16.3738 },
 });
 const p = await ctx.newPage();
+// `PROVO_HEURE=02:07 npm run verif-carte` rejoue une heure précise de la
+// journée. Sans elle, la suite tourne à l'heure qu'il est — c'est ce qu'on
+// veut par défaut, mais c'est aussi ce qui a caché A-081 pendant des semaines :
+// l'écran n'est pas le même le matin et le soir, et un seul passage en fin
+// d'après-midi ne prouve donc rien pour les trois autres quarts du temps.
+if (process.env.PROVO_HEURE) {
+  const jour = new Date().toISOString().slice(0, 10);
+  await p.clock.install({ time: new Date(`${jour}T${process.env.PROVO_HEURE}:00Z`) });
+  await p.clock.resume();   // l'heure repart de là : les animations se jouent normalement
+  console.log(`(heure simulée : ${process.env.PROVO_HEURE} UTC)\n`);
+}
 const err = [];
 p.on('pageerror', e => err.push(String(e).slice(0, 200)));
 await p.route('**/*', r => r.request().url().startsWith(URL_BASE) ? r.fallback() : r.abort());
@@ -177,15 +200,46 @@ if (trouve) {
   dire('zoom conservé après avoir pioché', z3 === zPioche, { avant: zPioche, apres: z3 });
 }
 
+// 6 bis. Refermer ce que la pioche a ouvert. Selon l'heure, elle pose la
+// feuille « À savoir » par-dessus la carte — et une feuille modale bloque les
+// onglets, ce qui est le bon comportement de l'app : c'est à la suite de
+// refermer avant d'aller ailleurs.
+const feuille = p.locator('.sheet-overlay');
+if (await feuille.count()) {
+  const fermeture = p.locator('.sheet-overlay .sheet__close');
+  if (await fermeture.count()) await fermeture.first().click({ timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(600);
+  dire('la feuille ouverte par la pioche se referme', !(await feuille.count()),
+    await p.evaluate(() => document.querySelector('.sheet__title')?.textContent?.trim() || 'fermée'));
+}
+
 // 7. Quitter l'onglet puis revenir recadre à nouveau.
-await p.locator('.tab-btn', { hasText: /Planning/i }).first().click().catch(() => {});
-await p.waitForTimeout(800);
-await ongletCarte();
-const zRetour = await zoom();
-dire('retour sur l\'onglet : cadrage refait', zRetour === z0, { attendu: z0, obtenu: zRetour });
+//
+// Sans `.catch()` muet : un onglet qui ne répond pas EST le défaut qu'on
+// cherche. Il était avalé ici, et c'est `ongletCarte()` qui levait 30 s plus
+// tard — on perdait alors le dernier contrôle et le relevé des erreurs JS,
+// imprimés après.
+const souci = await p.locator('.tab-btn', { hasText: /Planning/i }).first()
+  .click({ timeout: 8000 }).then(() => null, e => String(e.message).split('\n')[0]);
+dire('l\'onglet Planning répond après un passage par la carte', !souci, souci || undefined);
+if (!souci) {
+  await p.waitForTimeout(800);
+  await ongletCarte();
+  const zRetour = await zoom();
+  dire('retour sur l\'onglet : cadrage refait', zRetour === z0, { attendu: z0, obtenu: zRetour });
+}
 
 console.log('\nerreurs JS :', err.length ? err : 'aucune');
 console.log(ratés ? `\n${ratés} vérification(s) en échec` : '\nTout passe.');
-await p.screenshot({ path: '/tmp/claude-0/-home-user-Provo/2608866b-29f4-5a36-8e48-207a0c764372/scratchpad/map-apres.png' });
+// Une capture n'aide qu'à comprendre un échec, et ne doit jamais DEVENIR
+// l'échec : le chemin écrit ici était celui du bac à sable d'une autre
+// session (A-081).
+if (ratés) {
+  try {
+    mkdirSync(CAPTURES, { recursive: true });
+    await p.screenshot({ path: `${CAPTURES}/carte.png`, timeout: 15000 });
+    console.log(`Capture de l'écran fautif : ${CAPTURES}/carte.png`);
+  } catch { /* pas de capture, mais le verdict tient */ }
+}
 await nav.close();
 process.exit(ratés ? 1 : 0);

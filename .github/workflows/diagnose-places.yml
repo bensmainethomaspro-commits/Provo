@@ -18,6 +18,8 @@ on:
       - 'scripts/diag-tiktok.mjs'
       - 'scripts/diag-instagram.mjs'
       - 'scripts/diag-adresses.mjs'
+      - 'scripts/diag-lien-google.mjs'
+      - 'scripts/diag-deno-google.ts'
       - 'supabase/functions/extract-place/**'
       - '.github/workflows/diagnose-places.yml'
   workflow_dispatch:
@@ -30,6 +32,36 @@ on:
         options: [all, search, links]
 
 jobs:
+  # Un travail À PART, et ce n'est pas de la coquetterie : les journaux d'un
+  # travail ne se lisent qu'une fois TOUT le travail terminé. Rangée en tête du
+  # banc ci-dessous, cette sonde de deux minutes attendait les dix du reste.
+  #
+  # Elle rejoue le cas que ni ce banc ni `diag-verify` ne voyaient avant le
+  # 11 novembre 2026 : un lien de partage Google vers un lieu qui n'est PAS à la
+  # destination du voyage (un restaurant de Rome collé dans un voyage à
+  # Biarritz), puis les noms de lieux connus sous un autre nom que le leur.
+  sonde-lien-google:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lien de partage Google hors de la destination du voyage
+        run: node scripts/diag-lien-google.mjs
+      # La fonction tourne sous Deno, la sonde sous Node : même adresse, mêmes
+      # en-têtes, et pas la même réponse (13 novembre 2026).
+      - uses: denoland/setup-deno@v2
+        if: ${{ always() }}
+        with:
+          deno-version: v2.x
+      - name: La même demande, sous Deno comme la fonction
+        if: ${{ always() }}
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
+        run: deno run --allow-net scripts/diag-deno-google.ts
+
   mesurer:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -71,6 +103,15 @@ jobs:
           deno-version: v2.x
       - name: extract-place de la branche (deno check + banc)
         if: ${{ always() }}
+        env:
+          # Une fonction Edge n'est pas un module du projet npm. Sans cette
+          # variable, Deno lit quand même le `package.json` de l'app et résout
+          # ses dépendances (vite, babel, capacitor…) — et il refuse tout
+          # paquet publié depuis moins de 24 h. Le 12 novembre 2026, une
+          # version de `@babel/parser` sortie le jour même a fait échouer
+          # l'étape avant d'avoir lu une ligne de la fonction : le banc n'a
+          # pas tourné, pour une dépendance que la fonction n'utilise pas.
+          DENO_NO_PACKAGE_JSON: "1"
         run: |
           # Les types de @supabase/functions-js réclament `npm:openai` : sans
           # installation automatique, la vérification échoue avant notre code.

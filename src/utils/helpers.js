@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
+import { nomsConnus, normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
 import { avecDelai, DELAI_FETCH_MS, DELAI_FONCTION_MS } from './reseau';
 
 // Server-side extractor (Supabase Edge Function "extract-place").
@@ -30,6 +30,44 @@ export async function extractViaEdge(url, destination = '') {
   } catch {
     return null;
   }
+}
+
+// Un nom que le serveur n'a pas su situer ne se redemande pas à chaque
+// complétion automatique de la fiche : chaque demande lui coûte jusqu'à deux
+// appels à Google. Trente minutes — et seulement pour la complétion : quand
+// c'est la personne qui relance la recherche, on y retourne.
+const nomsNonSitues = new Map();
+const NON_SITUE_MS = 30 * 60 * 1000;
+
+/**
+ * Dernier recours pour un NOM que la carte ouverte ne sait pas situer.
+ *
+ * « Vienna state opera », « Schönbrunner Palais », un restaurant ouvert l'an
+ * dernier : la carte ouverte ne les porte pas sous ce nom, ou pas du tout, et
+ * la fiche restait sans point — quatre sur douze dans un voyage à Vienne
+ * (11 novembre 2026). Le serveur sait demander le point d'un lieu à Google
+ * Maps par son nom ; on lui passe le nom sous la forme d'un lien de recherche
+ * Maps, celle qu'il lit déjà, sans rien lui ajouter.
+ *
+ * Rend la fiche trouvée (point, adresse, parfois horaires), ou null. Le lien
+ * de recherche fabriqué ici n'est PAS le lien du lieu : il ne ressort pas.
+ */
+export async function situerParLeServeur(nom, destination = '', { memoire = false } = {}) {
+  const n = String(nom || '').trim();
+  if (n.length < 3 || /^https?:/i.test(n)) return null;
+  const cle = `${n}|${destination}`.toLowerCase();
+  const rate = nomsNonSitues.get(cle);
+  if (memoire && rate && Date.now() - rate < NON_SITUE_MS) return null;
+  const r = await extractViaEdge(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(n)}`, destination);
+  if (!r || !Number.isFinite(r.lat) || !Number.isFinite(r.lon)) {
+    nomsNonSitues.set(cle, Date.now());
+    return null;
+  }
+  nomsNonSitues.delete(cle);
+  // eslint-disable-next-line no-unused-vars
+  const { link, source, autresLieux, ...fiche } = r;
+  return { ...fiche, id: `s${r.lat},${r.lon}` };
 }
 
 /**
@@ -330,19 +368,6 @@ export function formatPrice(amount) {
 }
 
 /**
- * Un repas posé d'office par l'app (« Repas midi », « Repas soir », 20 €) et
- * que personne n'a encore touché : ni renommé, ni situé, ni repris au prix, ni
- * coché.
- *
- * Il réserve un créneau dans la journée, pour que le temps libre se calcule
- * juste, et son prix reste dans la prévision du budget (voir ci-dessous).
- * Mais ce n'est pas une activité : il ne se compte ni dans « N activités », ni
- * dans l'avancement, ni dans les « activités préférées » du bilan. Mesuré le
- * 1er octobre 2026 : un voyage de cinq jours tout juste créé annonçait déjà
- * dix activités, et un bilan sacrait « Resto ×12 », les douze repas posés
- * d'office.
- */
-/**
  * La destination, seulement si elle apprend quelque chose de plus que le nom
  * du voyage. « Vienne » écrit sous « Vienne » occupait une ligne pour rien,
  * sur l'accueil comme dans l'en-tête du voyage.
@@ -354,11 +379,39 @@ export function destinationUtile(trip) {
   return plat(d.split(',')[0]) === plat(trip.name) ? '' : d;
 }
 
+/**
+ * Les deux repas que l'app pose d'office sur chaque journée, décrits une seule
+ * fois. Le modèle était recopié quatre fois dans `useTrips` et `repasEnAttente`
+ * répétait son titre et son prix de son côté : changer le prix par défaut
+ * aurait fait recompter tous les repas comme des activités (audit A-079, qui
+ * remet la règle d'A-070 sous une seule source).
+ *
+ * `id` est posé à la construction (`useTrips`), et `travelerIds` recopié : un
+ * tableau partagé entre toutes les journées serait un piège.
+ */
+export const REPAS_POSES = [
+  { title: 'Repas midi', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 0, isMeal: true, mealSlot: 'midi', fixedStart: '12:00', travelerIds: [] },
+  { title: 'Repas soir', category: 'resto', status: 'todo', price: '20', durationHours: 1, durationMinutes: 30, isMeal: true, mealSlot: 'soir', fixedStart: '19:00', travelerIds: [] },
+];
+
+/**
+ * Un repas posé d'office par l'app (voir `REPAS_POSES`) et que personne n'a
+ * encore touché : ni renommé, ni situé, ni repris au prix, ni coché.
+ *
+ * Il réserve un créneau dans la journée, pour que le temps libre se calcule
+ * juste, et son prix reste dans la prévision du budget (voir `budgetStats`).
+ * Mais ce n'est pas une activité : il ne se compte ni dans « N activités », ni
+ * dans l'avancement, ni dans les « activités préférées » du bilan. Mesuré le
+ * 1er octobre 2026 : un voyage de cinq jours tout juste créé annonçait déjà
+ * dix activités, et un bilan sacrait « Resto ×12 », les douze repas posés
+ * d'office.
+ */
 export function repasEnAttente(a) {
   if (!a?.isMeal || a.status === 'done') return false;
+  const modele = REPAS_POSES.find(m => m.title === (a.title || '').trim());
+  if (!modele) return false;
   const prix = a.price === undefined || a.price === null ? '' : String(a.price);
-  return /^Repas (midi|soir)$/.test((a.title || '').trim())
-    && !a.address && a.lat == null && (prix === '' || prix === '20');
+  return !a.address && a.lat == null && (prix === '' || prix === modele.price);
 }
 
 /**
@@ -862,6 +915,9 @@ function _shapeNominatim(p) {
   return {
     id: `n${p.osm_type || 'x'}${p.osm_id || p.place_id}`,
     title: _placeTitle(p),
+    // Toutes les variantes du nom (`name:en`, `alt_name`…) : à Vienne,
+    // « Vienna State Opera » n'est écrit que là, et c'est ce qu'on a tapé.
+    noms: nomsConnus(p),
     address: _placeAddress(p),
     displayName: String(p.display_name || ''),
     category: _placeCategory(p),
@@ -1762,6 +1818,11 @@ export function formatMontantExact(valeur, devise = 'EUR') {
  *
  * Écrite une fois, ici, et importée partout : la même fonction vivait en privé
  * dans `useTrips`, hors de portée des écrans qui en avaient aussi besoin.
+ *
+ * Elle est désormais la seule : six écrans en gardaient une copie en ligne
+ * (Dashboard, TripView trois fois, TimelineView, NewTripModal), toutes justes
+ * mais aucune couverte par `scripts/verif-date-locale.mjs`, qui ne découpe que
+ * ce bloc-ci (audit A-078). Ne pas en réécrire une septième : importer.
  */
 export function dateLocale(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

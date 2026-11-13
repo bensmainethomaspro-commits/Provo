@@ -23,9 +23,10 @@ import PiocheSheet from '../components/PiocheSheet';
 import { useSettings } from '../hooks/useSettings';
 import { useLocalNews } from '../hooks/useLocalNews';
 import TripSettingsSheet from '../components/TripSettingsSheet';
-import { budgetStats, repasEnAttente, destinationUtile, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit } from '../utils/helpers';
+import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice, CATEGORIES, detectCountryTheme, haversineKm, premierLien, voyageSansVoyageur, enEuros, regrouperConflits, restaurerConflit, situerParLeServeur } from '../utils/helpers';
+import { loinDuVoyage } from '../utils/situer';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
-import { lookupPlace, missingFieldsFrom } from '../utils/enrich';
+import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -411,7 +412,11 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   };
 
   const handleRemoveMember = async (memberUserId) => {
-    await removeTripMember(tripId, memberUserId);
+    const retire = await removeTripMember(tripId, memberUserId);
+    // Rien retiré : surtout ne pas délier le voyageur de son compte, il est
+    // toujours du voyage. La croix n'est offerte qu'au propriétaire, donc on
+    // n'arrive ici qu'en cas de refus inattendu.
+    if (retire?.error) return;
     const travelers = trip.tripTravelers || [];
     if (travelers.some(t => t.profileId === memberUserId)) {
       updateTrip(tripId, {
@@ -543,7 +548,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const start = new Date(trip.startDate + 'T00:00:00');
     const end = new Date(trip.endDate + 'T00:00:00');
     if (isPast || start > now || now > end) return null;
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const todayStr = dateLocale(now);
     return trip.days.find(d => d.date === todayStr) || null;
   })();
 
@@ -565,7 +570,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const start = new Date(trip.startDate + 'T00:00:00');
     const diff = Math.round((start - now) / 86400000);
     const nextDay = new Date(now); nextDay.setDate(nextDay.getDate() + 1);
-    const nextStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
+    const nextStr = dateLocale(nextDay);
     const day = isPast ? null : trip.days.find(d => d.date === nextStr) || null;
     // Le brief de demain occupait le haut du Planning TOUTE la journée : au
     // jour 1 à 11 h, le premier bloc de l'écran qui doit répondre « qu'est-ce
@@ -870,8 +875,25 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     const complete = activity.address && activity.openingHours && activity.lat;
     let aJour = activity;
     if (!complete) {
-      const found = await lookupPlace(activity.title, trip.destination,
-        { lat: anchor?.lat, lon: anchor?.lon });
+      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
+      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
+      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
+      // la carte ouverte le connaît, là où il est (11 novembre 2026).
+      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
+      let found = situee
+        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
+          { rayonKm: RAYON_FICHE_KM, nomEntier: true })
+        : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
+      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
+      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
+      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
+      // voyage — un point lointain, c'est à la personne de le confirmer, et
+      // l'écran d'ajout le lui montre.
+      if (!found?.lat && !situee && anchor) {
+        const s = await situerParLeServeur(activity.title, trip.destination, { memoire: true });
+        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
+        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
+      }
       const patch = missingFieldsFrom(activity, found);
       if (patch) {
         updateActivity(tripId, location, activityId, patch);
@@ -978,10 +1000,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
      Ces activités-là ne comptent donc NI comme dépensé (on ne sait pas ce qui
      a réellement été payé) NI comme à venir. Ce qui a vraiment été payé est
      dans l'onglet Dépenses ; c'est lui qui fait foi. */
-  const aujourdhui = (() => {
-    const n = new Date(); n.setHours(0, 0, 0, 0);
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-  })();
+  const aujourdhui = dateLocale();
   const aVenir = trip.days
     .filter(d => !d.date || d.date >= aujourdhui)
     .flatMap(d => d.activities)

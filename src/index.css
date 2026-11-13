@@ -6351,6 +6351,11 @@ h1, h2, h3,
   cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
 .details-pli small { font-size: var(--t-sm); font-weight: 400; color: var(--text-muted); }
+/* Le pli porte le nom et l'adresse du lieu trouvé : une ligne chacun, coupée
+   proprement — un nom long ne doit pas pousser le bouton hors de la feuille. */
+.details-pli__titre, .details-pli small {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .details-pli:active { background: var(--surface-sunken); }
 
 /* ─── Billets et réservations du voyage ───────────────────────────────────

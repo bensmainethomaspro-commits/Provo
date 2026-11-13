@@ -296,6 +296,44 @@ raison et sa condition de réfutation sont dans le fichier de migration.
 `with_check: null` sur une politique `UPDATE` ne prouve rien à lui seul, il faut
 lire l'expression `USING`.
 
+## Les échelons Google d'`extract-place` ne sont pas des API (relevé le 2026-11-12)
+
+Un lien de partage Google ne porte que le nom du lieu, et la page Google exige
+JavaScript. La fonction lit donc deux choses que Google sert aux robots de
+messagerie : l'aperçu du lien (`apercuDuPartage` — nom, ville, genre) et la
+vignette d'une recherche Maps, centrée sur le lieu (`pointGoogle`). Lecteurs
+purs et testés dans `_shared/lecture-lien.ts` (`lireApercuGoogle`,
+`lirePointMaps`, `categorieDuGenre`) ; mesures dans `.claude/project-notes.md`.
+
+À tenir pour acquis, et à ne pas remonter comme constat :
+
+- **Ce sont des portes, pas des contrats.** Capricieuses (même agent, même
+  lien : plein à 13 h 39, vide à 8 h 47), et Google sert son captcha à
+  certaines adresses de centre de données. Chaque échelon écrit ce qu'il a reçu
+  dans `geocodeurs`, et la fonction continue sur la carte ouverte quand il se
+  tait. C'est voulu : l'utilisateur a demandé « ce qu'il y a de meilleur en
+  gratuit », et Google Places a été écarté.
+- **Le point de Google ne se croit jamais sur parole** : la page ne dit pas le
+  nom de ce qu'elle a trouvé, et pour un nom inexistant elle a rendu un lieu
+  au hasard près du serveur. D'où `auPoint` (un voisin ne prête que sa rue) et
+  `aConfirmer` (loin du voyage et non confirmé → proposé, jamais écrit).
+- **Deux essais au plus par lien** pour l'aperçu : le quatrième appel d'affilée
+  déclenche le captcha.
+
+Ce qui reste à surveiller : `scripts/diag-lien-google.mjs` (à chaque poussée
+qui touche la fonction) et le canari quotidien, qui passe au rouge si le lien
+du signalement ressort sans point.
+
+**Vérifier le typage d'une fonction Edge sans attendre l'intégration continue :**
+Deno s'installe dans le bac à sable par npm (`npm i deno` dans un dossier à
+part), puis `DENO_NO_PACKAGE_JSON=1 DENO_CERT=/root/.ccr/ca-bundle.crt deno
+check --node-modules-dir=auto supabase/functions/<nom>/index.ts`. Supprimer le
+`deno.lock` qu'il laisse à la racine. `DENO_NO_PACKAGE_JSON` n'est pas un
+détail : sans elle Deno résout aussi le `package.json` de l'app, et refuse tout
+paquet publié depuis moins de 24 h — le banc de la branche est tombé pour ça le
+2026-11-12 (`@babel/parser`), sans avoir lu une ligne de la fonction. Le réseau du bac à sable ne joint ni
+Google ni Supabase : exécuter la fonction reste l'affaire du banc.
+
 ## Le code partagé entre le client et les fonctions Edge
 
 Depuis le 2026-09-29, **du code de `supabase/functions/_shared/` est importé par
@@ -411,6 +449,60 @@ inscrire, comme `push_subscriptions` le 2026-10-08 (A-075). Le workflow
 manque, et l'inscrit alors dans l'historique (A-076). Les deux
 migrations du 2026-09-30 sont rangées avec leurs commentaires ; la base a
 exécuté le même SQL sans eux.
+
+## Comparer le dépôt à la base, sans re-délibérer (relevé le 2026-10-12)
+
+Les six fichiers de `supabase/migrations/` sont bien le SQL que la base a
+exécuté. Méthode, à rejouer telle quelle au prochain passage plutôt que de
+relire le SQL à l'œil : empreinte md5 des deux côtés, après retrait des
+commentaires `--`, écrasement des blancs et passage en minuscules.
+
+```sql
+select version,
+       md5(btrim(btrim(lower(regexp_replace(regexp_replace(
+         array_to_string(statements, ';'), '--[^\n]*', '', 'g'),
+         '\s+', ' ', 'g'))), ' ;'))
+from supabase_migrations.schema_migrations order by version;
+```
+
+Côté dépôt, la même normalisation sur chaque fichier. Au 2026-10-12 les six
+concordent. Quatre concordent même octet pour octet : elles ont été recopiées
+depuis la base le 2026-10-08. Les deux du 2026-09-30 n'ont que leurs
+commentaires français en écart.
+
+## Ce que l'intégration continue lance vraiment (relevé le 2026-10-12)
+
+`.github/workflows/verif.yml`, deux travaux : `npm run verif` (22 suites hors
+réseau, dette ESLint plafonnée comprise) et, dans un vrai navigateur,
+`npm run parcours`, `npm run verif-demarrage` puis `npm run verif-carte`.
+
+**Hors de la CI, donc lancé par personne : `verif-ui`.** C'est assumé et écrit
+dans le workflow (il rougit par construction sur 52 marqueurs Leaflet de
+32 px). `verif-carte` était dans le même cas sans que ce soit voulu, et il
+échouait — sur `main` aussi (A-081). Avant de croire qu'une suite garde
+quelque chose, vérifier qu'un travail de `verif.yml` la nomme.
+
+**Et vérifier à quelle HEURE elle a été lancée.** `verif-carte` passait en fin
+d'après-midi et échouait le reste du temps : piocher depuis la carte ouvre la
+feuille « À savoir » tant qu'il reste de la journée devant soi, et rien du tout
+une fois la journée finie. Une suite qui touche à ce qui dépend du moment
+(pioche, brief de demain, temps restant, « Aujourd'hui ») ne prouve rien d'un
+seul passage. `PROVO_HEURE=02:07 npm run verif-carte` rejoue une heure précise,
+et la CI lance cette suite deux fois pour cette raison.
+
+## Une seule réduction d'image, une seule date du jour, un seul modèle de repas
+
+Trois fonctions qui existaient en plusieurs exemplaires, ramenées à une et
+dont la copie est un piège connu :
+
+- `reduireImage(fichier, largeurMax, qualite)` (`helpers.js`) : la seule qui
+  REJETTE sur un fichier illisible. Les copies privées de `NewTripModal` et
+  `AddActivitySheet` ne se terminaient jamais (A-077). Ne pas en réécrire.
+- `dateLocale(d)` (`helpers.js`) : la seule que `verif-date-locale.mjs`
+  vérifie, parce qu'il découpe ce bloc par son nom (A-078, A-028).
+- `REPAS_POSES` (`helpers.js`) : le modèle des deux repas posés d'office, lu
+  par `useTrips` qui les pose ET par `repasEnAttente` qui les reconnaît pour
+  ne pas les compter comme des activités (A-079, A-070).
 
 ## Le budget de temps des fonctions Edge repose sur AsyncLocalStorage
 
@@ -541,6 +633,60 @@ Conséquences à connaître sans les redécouvrir :
 Volumétrie au 2026-07-29 : `trips` 4, `profiles` 3, `shared_trips` 2,
 `trip_members` 0. La collaboration par code d'invitation n'a donc jamais servi ;
 le partage par `shared_trips` (bouton « Partager ») si.
+
+## Qui voit les membres d'un voyage (relevé le 2026-10-12)
+
+Volumétrie inchangée sur ce point : `trips` 5, `profiles` 3, `auth.users` 3,
+**`trip_members` toujours 0**. Trois mois plus tard, la collaboration par code
+d'invitation n'a toujours jamais tourné en production. Tout ce qui la concerne
+est donc du code jamais exécuté pour de vrai : le lire ne suffit pas, il faut
+l'essayer.
+
+La ligne du 2026-07-29 ci-dessus (« `member_read_own` ne laisse voir à un
+collaborateur que sa propre ligne ») **n'est plus vraie** : la migration
+`20261012192359_membres_du_voyage_visibles` ajoute `membre_lit_les_membres`
+(SELECT, `to authenticated`, `est_du_voyage(trip_id)`), et chacun voit donc les
+gens de ses propres voyages — rien d'autre (A-086).
+
+Deux pièges rencontrés en la posant, à ne pas redécouvrir :
+
+- **`anon` qui lit `trip_members` ne reçoit pas zéro ligne : il reçoit une
+  erreur.** `owner_manage_members` est `FOR ALL`, donc évaluée aussi en SELECT,
+  et elle appelle `is_trip_owner`, dont l'exécution n'est pas donnée à `anon`
+  (« permission denied for function is_trip_owner »). C'est antérieur à cette
+  migration, et sans conséquence visible : le client ne lit cette table que
+  connecté, et `fetchTripMembers` avale l'erreur. Une politique ajoutée ici se
+  limite à `to authenticated` pour ne pas en ajouter une deuxième.
+- **`drop policy` sur `trip_members` fait expirer l'outil MCP** (60 s), même
+  quand la politique n'existe pas et qu'il n'y a aucun verrou en attente
+  (`pg_stat_activity` vide). Rien n'est appliqué dans ce cas — vérifié trois
+  fois. D'où la forme de la migration : un `do $$ … if not exists … $$`, qui ne
+  supprime rien et se rejoue sans danger (PostgreSQL n'a pas
+  `create policy if not exists` — c'est aussi la leçon d'A-076).
+
+### Essayer une politique RLS sans deuxième compte, et sans rien laisser
+
+Le banc d'essai tourne déconnecté : aucun parcours ne peut exercer ces
+politiques. On les mesure donc directement sur la base, en se faisant passer
+pour chaque compte, dans un bloc qui **s'annule toujours** — le `raise
+exception` final est le rollback, et il porte le résultat :
+
+```sql
+do $$
+declare collab int;
+begin
+  insert into trip_members(trip_id, user_id, role) values (…);  -- posé pour l'essai
+  execute 'set local role authenticated';        -- `postgres` contourne RLS (rolbypassrls)
+  perform set_config('request.jwt.claims', json_build_object('sub', <uuid>)::text, true);
+  select count(*) into collab from trip_members where trip_id = …;
+  execute 'reset role';
+  raise exception 'RESULTAT %', collab;          -- annule l'insertion ET l'essai
+end $$;
+```
+
+Toujours mesurer les quatre cas : le collaborateur, le propriétaire, **un
+compte étranger au voyage** (il doit voir 0) et ce que le collaborateur voit de
+la table ENTIÈRE (il ne doit rien voir hors de ses voyages).
 
 ## Budget de temps de la fonction Edge — relevé le 2026-08-03
 

@@ -42,7 +42,7 @@ const LIENS = [
   ['share.google (utilisateur)', 'https://share.google/WNSiI0AooI1HiDmyD', null],
   // Un lien Maps SANS coordonnées, comme en donne share.google : seul le nom
   // est lu, et sans la destination « Café Sacher » part à 250 km.
-  ['Café Sacher (sans coords)', 'https://www.google.com/maps/search/?api=1&query=Caf%C3%A9+Sacher', 'resto', 'Vienne'],
+  ['Café Sacher (sans coords)', 'https://www.google.com/maps/search/?api=1&query=Caf%C3%A9+Sacher', 'resto', 'Vienne', [48.2039, 16.3697]],
   // Un lieu dont le nom OpenStreetMap est en grec : le lien donne le nom
   // latin, que seules les variantes (`name:en`, `int_name`) portent.
   ['Musée de l’Acropole (grec)', 'https://www.google.com/maps/place/Acropolis+Museum/@37.9685,23.7285,17z', 'visite'],
@@ -52,6 +52,22 @@ const LIENS = [
   ['OpenStreetMap (marqueur seul)', 'https://www.openstreetmap.org/?mlat=41.8902&mlon=12.4922#map=17/41.8902/12.4922', null, 'Rome'],
   // Un site officiel : JSON-LD s'il en publie un, sinon le titre nettoyé.
   ['Site du Prado', 'https://www.museodelprado.es/', 'visite', 'Madrid'],
+  // Le lieu n'est PAS là où se passe le voyage : un restaurant de Rome, collé
+  // dans un voyage à Biarritz (11 novembre 2026). Tous les cas ci-dessus
+  // envoient la destination où se trouve le lieu, ou aucune : aucun ne
+  // rejouait ce que l'app envoie dans ce cas-là, et la fonction y rendait un
+  // titre nu en dix secondes. La destination départage des homonymes ; elle
+  // n'empêche plus de trouver le lieu.
+  ['share.google, hors du voyage', 'https://share.google/y4QMh42nQx6DiSBfZ', 'resto', 'Biarritz', [41.9021, 12.4847]],
+  ['Maps sans coords, hors du voyage', 'https://www.google.com/maps/search/?api=1&query=ADEVA+Cucina+Moderna', 'resto', 'Biarritz', [41.9021, 12.4847]],
+  // Des noms que la carte ouverte ne porte pas tels quels : dits dans une autre
+  // langue, germanisés à la main, ou d'un lieu qu'elle ne connaît pas. C'est ce
+  // que l'app envoie quand un nom tapé à la main ne se laisse pas situer (les
+  // fiches restées sans point dans un voyage à Vienne, 11 novembre 2026).
+  ['Nom dit en anglais', 'https://www.google.com/maps/search/?api=1&query=Vienna+state+opera', 'fun', 'Vienne Autriche', [48.2033, 16.3692]],
+  ['Nom dit en français', 'https://www.google.com/maps/search/?api=1&query=Palais+du+Belvedere', 'visite', 'Vienne Autriche', [48.1915, 16.3809]],
+  ['Nom germanisé à la main', 'https://www.google.com/maps/search/?api=1&query=Sch%C3%B6nbrunner+Palais', 'visite', 'Vienne Autriche', [48.1858, 16.3128]],
+  ['Absent de la carte ouverte', 'https://www.google.com/maps/search/?api=1&query=Agapii+Mou', null, 'Biarritz', [43.4816, -1.5589]],
 ];
 
 function ligne(nom, r) {
@@ -60,9 +76,14 @@ function ligne(nom, r) {
   const champs = [
     p.title ? 'titre' : null,
     p.address ? 'adresse' : null,
-    p.lat != null ? 'coords' : null,
+    p.lat != null ? `coords ${Number(p.lat).toFixed(4)},${Number(p.lon).toFixed(4)}` : null,
     p.openingHours ? 'horaires' : null,
     p.category ? `cat:${p.category}` : null,
+    // Ce que la fonction ne tient pas pour acquis, et que l'app PROPOSE au
+    // lieu de l'écrire : un point que rien ne recoupe, un lieu qui ne fait que
+    // ressembler au nom.
+    p.aConfirmer ? 'À CONFIRMER' : null,
+    p.ressemble ? `RESSEMBLE SEULEMENT (« ${p.nomTrouve || '?'} »)` : null,
   ].filter(Boolean);
   const n = [p.title, p.address, p.lat != null || null, p.openingHours].filter(Boolean).length;
   // Ce que les géocodeurs ont répondu : c'est ce qui a manqué le jour où
@@ -77,8 +98,18 @@ console.log('FONCTION EDGE EN PRODUCTION — ce qui arrive dans le formulaire');
 console.log('='.repeat(76));
 
 let complets = 0, total = 0, bonneCat = 0, avecHoraires = 0;
+// Une fiche « renseignée » peut être renseignée FAUX : le 13 novembre 2026,
+// « Palais du Belvedere » sortait ✅ avec l'adresse d'un autre palais de
+// Vienne, à 1,7 km. Là où le point attendu est connu, on le vérifie.
+let situes = 0, aSituer = 0;
+const kmEntre = (a, b) => {
+  const rad = (d) => (d * Math.PI) / 180;
+  const h = Math.sin(rad(b[0] - a[0]) / 2) ** 2
+    + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(rad(b[1] - a[1]) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+};
 const pause = ms => new Promise(r => setTimeout(r, ms));
-for (const [nom, url, catAttendue, destination] of LIENS) {
+for (const [nom, url, catAttendue, destination, pointAttendu] of LIENS) {
   // Chaque extraction déclenche jusqu'à trois requêtes Nominatim, qui limite à
   // une par seconde. Sans cette pause, c'est le banc qui se fait jeter — et il
   // le lit comme un échec du code.
@@ -90,12 +121,22 @@ for (const [nom, url, catAttendue, destination] of LIENS) {
   const n = [p?.title, p?.address, p?.lat != null || null, p?.openingHours].filter(Boolean).length;
   if (n >= 3) complets++;
   if (p?.openingHours) avecHoraires++;
+  if (pointAttendu) {
+    aSituer++;
+    const d = p?.lat != null ? kmEntre([p.lat, p.lon], pointAttendu) : null;
+    if (d != null && d < 1) situes++;
+    // Un lieu proposé n'est pas écrit dans la fiche : c'est une fiche sans
+    // point, pas une fiche fausse.
+    else if (p?.ressemble) console.log(`       ↳ pas situé : proposé seulement, à ${d.toFixed(1)} km du lieu attendu — rien n'est écrit sans accord`);
+    else console.log(`       ↳ MAL SITUÉ : ${d == null ? 'aucun point' : `à ${d.toFixed(1)} km du lieu attendu`}`);
+  }
   if (catAttendue && p?.category === catAttendue) bonneCat++;
   else if (catAttendue) console.log(`       ↳ catégorie attendue « ${catAttendue} », obtenue « ${p?.category || '—'} »`);
 }
 
 console.log('\n' + '='.repeat(76));
 console.log(`fiches renseignées (≥3 champs) : ${complets}/${total}`);
+console.log(`au bon endroit (à moins d'1 km) : ${situes}/${aSituer}`);
 console.log(`horaires récupérés             : ${avecHoraires}/${total}`);
 console.log(`catégorie juste                : ${bonneCat}/${LIENS.filter(l => l[2]).length}`);
 console.log('='.repeat(76));

@@ -53,6 +53,9 @@ trace de ce qu'on a sciemment écarté.
 | B5 / E7 · Une seule déclaration | `src/styles/tokens.css` ; `verif-jetons` refuse un jeton racine hors de ce fichier et plafonne couleurs, ombres, dégradés, `!important` |
 | B6 · L'émoji est du contenu, l'icône est du chrome | `components/Icone.jsx` (Lucide, licence ISC) : barre d'onglets, en-têtes, menus, fermetures |
 | E6 · Écrans visités | `verif-ui` : Accueil vide, Nouveau voyage (tout déplié), Réserve vide, Dépenses vide |
+| D5 · Montrer ce que l'action a produit | Feuille d'ajout : le pli « Détails » porte le nom et l'adresse du lieu trouvé ; écran « Ajout (lieu trouvé) » dans `verif-ui` ; les parcours d'import lisent le pli FERMÉ |
+| E10 · La même demande, le même moteur | `diagnose-link` envoie la destination, comme l'app ; `diag-deno-google.ts` mesure sous Deno, comme la fonction |
+| F5 · Rempli n'est pas juste | `diag-verify` compte les fiches posées à moins d'1 km du point attendu |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -65,16 +68,27 @@ Bancs dans `scripts/diag-*.mjs`, lancés par
 | Comment remplir une fiche depuis un lien Maps ? | **Nom + ville déduite des coordonnées** (64 pts) ≫ nom seul (57) ≫ géocodage inverse (28) |
 | Chercher le nom sans ville ? | **Dangereux** — « Da Enzo al 29 » ramène une rue au Brésil |
 | Overpass par nom en repli ? | **Écarté** — 504 sur deux requêtes sur trois, 9 s de latence |
-| Une page `share.google` porte-t-elle des coordonnées ? | **Non** — ni `@lat,lon`, ni JSON-LD, ni adresse. Le paramètre `q=` est le seul signal |
+| Une page `share.google` porte-t-elle des coordonnées ? | **Non** — ni `@lat,lon`, ni JSON-LD, ni adresse. Le paramètre `q=` est le seul signal *de la page servie à un téléphone*. Voir les trois lignes suivantes (12 nov. 2026) |
+| Que sert Google à un **robot de messagerie** pour un lien `share.google` ? | Un aperçu de 5 ko : `og:title` « Nom · Ville, Région, Pays », `og:description` « 4.8 ⭐ · Restaurant », en **ISO-8859-1**. Facebook et Twitter le reçoivent ; WhatsApp et Discord, quinze octets ; un téléphone, 93 ko de coquille JavaScript. **Capricieux** : plein à 13 h 39, vide à 8 h 47 pour le même agent |
+| Google Maps donne-t-il le **point** d'un lieu par son nom, sans clé ? | **Oui**, dans la vignette `og:image` de `/maps/search/?api=1&query=…` servie aux robots : `center=lat,lon`, `zoom=17`, `900x900`, sans épingle quand la recherche désigne UN lieu ; `200x200` et des épingles quand il y en a plusieurs ; le logo de Maps quand il n'y a rien ; `zoom=14` pour une ville. 9 contrôles justes sur 9, à 5 m près, y compris un lieu absent d'OSM et des noms dits dans une autre langue. **La page ne dit PAS le nom de ce qu'elle a trouvé** : le point se recoupe, il ne se croit pas sur parole |
+| Ajouter la ville aide-t-il Google ? | **Ça dépend** : « Café Central » seul → quarante cafés, avec « Vienne » → un. Mais « ADEVA Cucina Moderna, Rome » → deux épingles, le nom seul → une. D'où l'ordre : avec la ville, puis sans. Donné avec la MAUVAISE ville, un nom distinctif ramène quand même le bon lieu |
+| Google sert-il ces pages à un centre de données ? | **Pas toujours.** Sur deux exécuteurs GitHub le même jour : l'un a tout obtenu, l'autre a reçu le captcha (429 `/sorry/`) dès son premier appel. Le QUATRIÈME appel d'affilée sur un même lien le déclenche aussi. La fonction retient un captcha trois minutes et continue sur la carte ouverte |
+| Google Maps répond-il à Deno, sous lequel tourne la fonction ? | **Pas en HTTP/2.** Même adresse, mêmes en-têtes, sept variantes (13 nov. 2026) : le client ordinaire de Deno reçoit un 403 après neuf secondes d'attente, quels que soient l'agent, le témoin de consentement ou la compression ; forcé en HTTP/1.1 (`Deno.createHttpClient({ http2: false })`), 200 en 0,4 s, la vignette au 1 854e octet. Node parle HTTP/1.1 : c'est pour ça que la sonde obtenait tout et la fonction rien, deux bancs de suite. **Une sonde qui ne tourne pas sous le même moteur que le code ne prouve rien pour lui** |
+| Un lecteur tiers (r.jina.ai) pour le panneau Google ? | **Écarté** — panneau entier à 16 h 27, captcha de Google à 21 h 16 le même jour |
+| Les géocodeurs répondent-ils à la fonction, là où elle tourne ? | **Pas toujours, et parfois aucun.** Nominatim refuse l'hébergeur (403) depuis le 28 sept. 2026 ; Photon était donc le SEUL, et le 12 nov. au soir il ne répondait plus (`photon AbortError`) : la fonction en ligne rendait un titre nu pour tout lien sans coordonnées. D'où trois choses tenues dans le code : un refus et un délai dépassé sont retenus (10 min, 1 min) au lieu d'être repayés à chaque recherche ; le point demandé à Google ne dépend d'aucun des deux ; et la fiche se complète ensuite depuis le TÉLÉPHONE, auquel Nominatim répond |
 | TikTok depuis un serveur ? | **Captcha** sur le HTML ; seul l'oEmbed répond |
 | Instagram depuis un serveur ? | **Fermé** — page sans balises `og:`, oEmbed 404/400 sans jeton Facebook, proxys 403/521. Abandonné sciemment |
 
 Conséquence tenue dans le code : les coordonnées d'un lien servent à *situer et
 vérifier* une recherche par nom, jamais à interroger la carte à l'aveugle.
 
-**Limite assumée :** un lieu absent d'OpenStreetMap ne sera jamais complété
-(vérifié sur « Agapii Mou », Athènes). L'app garde le titre et le lien, et le
-dit franchement plutôt que de laisser croire à une panne.
+**Limite assumée, et réduite le 12 novembre 2026 :** un lieu absent
+d'OpenStreetMap n'aura jamais ses HORAIRES par cette voie. Il a maintenant son
+point (demandé à Google Maps par le nom) et sa rue (ce que la carte ouverte
+connaît à ce point) — tant que Google sert la page à l'hébergeur. Sinon l'app
+garde le titre et le lien, et le dit franchement plutôt que de laisser croire à
+une panne. (« Agapii Mou », pris ici pour un restaurant d'Athènes, est à
+Biarritz : c'est Google qui l'a dit, la carte ouverte ne le connaît pas.)
 
 ### Lecture des légendes par un modèle
 
@@ -115,6 +129,95 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
+
+- **Un lieu qui n'est pas là où se passe le voyage, et un nom que la carte
+  ouverte ne porte pas** (11–12 novembre 2026). Demandé : « quand je copie des
+  liens de partage Google, cela ne fonctionne toujours pas. Aussi lorsque je
+  copie des liens ou des noms de restaurant, lieu, activités qui viennent de
+  l'étranger » — avec un lien `share.google` vers un restaurant de Rome et la
+  capture de ce qu'on devait trouver.
+  · **L'erreur.** La destination du voyage servait de MUR, pas de départage,
+    à trois étages : la fonction ne cherchait le nom que dans le pays et le
+    rayon de la destination ; l'app relançait « nom, destination » ; la
+    complétion cherchait autour du voyage. Mesuré en production, les deux
+    appels côte à côte : `{url}` → fiche complète en 3,3 s ; `{url,
+    destination:"Biarritz"}` → un titre nu en 10 s. **Aucun banc ne rejouait ce
+    que l'app envoie** : `diagnose-link` n'envoyait pas la destination,
+    `diag-verify` seulement celle où se trouve le lieu.
+  · **La règle qui remplace la proximité** (`_shared/lecture-lien.ts`,
+    `src/utils/situer.js`) : le NOM ENTIER passe avant la distance. Près du
+    voyage d'abord ; sinon ailleurs, s'il est SEUL à porter ce nom ; sinon on
+    PROPOSE. Un voisin qui partage un mot ne s'écrit plus tout seul.
+  · **Quatre échelons pour un lien Google sans point** (`extract-place`,
+    chacun inscrit dans `geocodeurs`) : l'aperçu servi aux robots de messagerie
+    (nom, ville, genre) → la carte ouverte autour de la ville du LIEN → le point
+    demandé à Google Maps par le nom → ce que la carte ouverte connaît à ce
+    point. Voir le tableau des mesures plus haut.
+  · **Ce qui est trouvé AU point n'est pas le lieu** s'il n'en porte pas le
+    nom : du voisin on ne garde que la rue et la ville. Avant, ses horaires, son
+    tarif et son numéro partaient dans la fiche (un restaurant absent de la
+    carte héritait des heures de la pharmacie d'à côté).
+  · **Un point que rien ne confirme se propose** (`aConfirmer`) : pour un nom
+    qui n'existe pas, Google a rendu une fois sur quatre un lieu précis à côté
+    du serveur. Loin du voyage et sans que la carte ouverte y porte ce nom, le
+    point part marqué, et l'écran demande « Est-ce celui-ci ? ».
+  · **Un nom tapé passe par le même chemin** : quand la carte ouverte ne situe
+    rien près du voyage, l'app envoie le nom au serveur sous la forme d'un lien
+    de recherche Maps (`situerParLeServeur`), qui ne ressort jamais dans la
+    fiche. Les fiches déjà en Réserve sans point en profitent par la complétion.
+  · **La complétion se fait autour de la FICHE** quand elle a son point (2 km,
+    `RAYON_FICHE_KM`), plus autour du voyage ; et le lien d'origine d'une fiche
+    importée (partage, vidéo) n'est plus pris pour le site du lieu
+    (`lienDePassage`).
+  · **L'écran dit ce qu'il a trouvé.** Vu en regardant le rendu : après un
+    import RÉUSSI, rien ne changeait à l'écran — champ vidé, pli « Détails »
+    muet, fiche remplie derrière. Le pli porte maintenant le nom et l'adresse
+    du lieu (aucun élément ajouté). Et un lieu hors du voyage est annoncé au
+    moment où la fiche se remplit : « … est à Rome, Italie — à 1 100 km de
+    Biarritz », sans rien bloquer ; ce qui vient d'être dit n'est pas redit par
+    le contrôle des lieux (`placeCheckSig`).
+  · **Un mot en commun n'est pas le lieu, côté serveur non plus** (13 nov.).
+    Le banc a posé « Palais du Belvedere » sur un autre palais de Vienne, à
+    1,7 km : près du voyage `geocode` acceptait un accord « faible », et comme
+    la carte ouverte avait « trouvé », Google n'était plus interrogé. Un accord
+    faible ne ferme plus la porte à Google ; s'il ne reste que lui, la fonction
+    le marque `ressemble` et l'app le propose sous son propre nom. Reste à
+    faire, hors de ce signalement : les chemins légende, TikTok et site
+    générique de la fonction écrivent encore un accord faible.
+  · **Autour d'un point, seul le nom entier fait adopter une fiche** (13 nov.).
+    Une fois le point de Google obtenu, la recherche du nom autour adoptait un
+    lieu qui n'en partage qu'un mot, coordonnées comprises (« Palais Dumba »
+    pour le Belvédère). `resolvePlace` exige maintenant le nom entier ; sinon
+    c'est ce qui se trouve AU point qui parle (`auPoint`). Même exigence pour
+    la complétion autour d'une fiche située, côté téléphone.
+  · **Le serveur muet ne fait pas confirmer pour rien.** Quand aucun géocodeur
+    ne lui répond, la fonction ne peut rien recouper et marque tout point
+    `aConfirmer`. Le téléphone, lui, sait où est le voyage : un point qui tombe
+    dedans s'écrit sans question (`aProposerSeulement`).
+  · **Ce qui n'est pas acquis, à ne pas présenter comme tel.** Les deux portes
+    Google ne sont pas des API : rien ne garantit qu'elles durent, et Google
+    sert son captcha à certaines adresses de centre de données. Mesuré une fois
+    depuis l'hébergeur de la fonction : il répond 200, sans captcha — mais les
+    échelons eux-mêmes n'y ont pas encore tourné (la fonction ne se déploie
+    qu'à la fusion). Le prix (« 30–80 € ») et les horaires du panneau Google ne
+    se lisent par aucune voie gratuite : ils viennent de la carte ouverte quand
+    elle connaît le lieu, sinon restent à compléter.
+  · **Mesure finale (13 nov. 2026, banc de la branche, fonction lancée sous
+    Deno dans un exécuteur GitHub)** : 20 fiches renseignées sur 21 (la
+    fonction en ligne : 13 sur 17 le 11 nov.), 7 sur 7 posées à moins d'un
+    kilomètre du point attendu, catégorie juste 16 sur 18, horaires 12 sur 21.
+    Le seul échec est « Site du Prado », un site générique hors de ce
+    signalement. Côté app : 23 suites, 97 parcours, `verif-ui` à zéro hors
+    épingles de carte dans les deux thèmes. **Rien de tout cela n'a tourné
+    chez l'hébergeur réel** : la fonction ne se déploie qu'à la fusion sur
+    `main`, et c'est le canari du lendemain qui dira ce que Google lui sert.
+  · **Garde-fous.** `diag-lien-google.mjs` relit Google avec les lecteurs de la
+    fonction à chaque poussée ; `diag-verify` porte six cas de plus (lieu hors
+    du voyage, noms étrangers) ; `diagnose-link` envoie enfin la destination et
+    montre la réponse entière ; le canari quotidien passe au rouge si ce lien
+    ressort sans point. Deno s'installe dans le bac à sable (`npm i deno`,
+    `DENO_CERT=/root/.ccr/ca-bundle.crt deno check …`) : le typage des
+    fonctions se vérifie sans attendre l'intégration continue.
 
 - **Critique design du 1er octobre 2026, appliquée** (rapport :
   `.audit/critique-design-2026-10-01.md`, journal A-066 à A-074). Demandé :
@@ -1218,6 +1321,16 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 - Qualité réelle de la complétion automatique sur les petits commerces
   (couverture OpenStreetMap) — à valider à l'usage.
+- **Le canari ne sonne pas quand la fonction n'a plus qu'un géocodeur** (F5,
+  « sonner à l'orange »). Nominatim refuse l'hébergeur depuis le 28 sept. 2026,
+  Photon est donc le seul, et son silence du 12 nov. au soir n'a prévenu
+  personne. Le canari ne passe au rouge que si le lien témoin ressort sans
+  point ; l'état « un seul échelon répond » n'a pas d'alarme. À faire : lire
+  `geocodeurs` dans la réponse du témoin et alerter à l'orange quand un seul
+  géocodeur a répondu.
+- **Les chemins légende, TikTok et site générique d'`extract-place`** écrivent
+  encore un lieu retenu sur un seul mot en commun près du voyage (corrigé pour
+  les liens Google et les noms tapés seulement, journal A-092).
 - Vercel Deployment Protection à passer sur « Only Preview Deployments » pour
   que la preview soit accessible sans compte (F2).
 

@@ -12,6 +12,15 @@ on:
         description: 'Lien à analyser'
         required: true
         default: 'https://share.google/WNSiI0AooI1HiDmyD'
+      destination:
+        # L'app envoie TOUJOURS la destination du voyage avec le lien. Ce
+        # diagnostic ne l'envoyait pas : il a rendu « tout va bien » pendant
+        # que le même lien, collé dans un voyage ailleurs, sortait en fiche
+        # nue (11 novembre 2026). Un diagnostic doit rejouer ce que l'app
+        # envoie, pas une version simplifiée.
+        description: 'Destination du voyage où le lien est collé'
+        required: false
+        default: 'Biarritz'
 
 jobs:
   diagnose:
@@ -31,21 +40,29 @@ jobs:
             -D - -o /dev/null --max-time 30 -w '\n--- CODE: %{http_code} ---\n' \
             | grep -iE '^(HTTP/|access-control|vary)' || true
 
-      - name: B · POST avec Origin — les en-têtes CORS reviennent-ils ?
+      - name: B · POST avec Origin — ce que l'app envoie, et ce qu'elle reçoit
         env:
           URL: ${{ github.event.inputs.url || 'https://share.google/WNSiI0AooI1HiDmyD' }}
+          DESTINATION: ${{ github.event.inputs.destination || 'Biarritz' }}
         run: |
-          curl -sS -X POST "$FN" \
-            -H "Origin: $ORIGIN" \
-            -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
-            -H "Content-Type: application/json" \
-            -H "x-client-info: supabase-js-web/2.0.0" \
-            -D /tmp/h -o /tmp/b --max-time 60 -w '\n--- CODE: %{http_code} ---\n' \
-            -d "{\"url\":\"$URL\"}"
-          echo "--- en-têtes CORS de la réponse ---"
-          grep -iE '^access-control' /tmp/h || echo "AUCUN en-tête CORS !"
-          echo "--- corps ---"
-          head -c 600 /tmp/b; echo
+          # Le corps est fabriqué par Python, pas par le shell : un lien ou une
+          # destination avec une apostrophe ou un guillemet casserait le JSON.
+          python3 -c "import json,os;print(json.dumps({'url':os.environ['URL'],'destination':os.environ['DESTINATION']}))" > /tmp/avec.json
+          python3 -c "import json,os;print(json.dumps({'url':os.environ['URL']}))" > /tmp/sans.json
+          for CAS in avec sans; do
+            echo "════ $CAS destination : $(cat /tmp/$CAS.json)"
+            curl -sS -X POST "$FN" \
+              -H "Origin: $ORIGIN" \
+              -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+              -H "Content-Type: application/json" \
+              -H "x-client-info: supabase-js-web/2.0.0" \
+              -D /tmp/h -o /tmp/b --max-time 60 -w '--- CODE: %{http_code} en %{time_total} s ---\n' \
+              --data-binary @/tmp/$CAS.json
+            grep -iE '^access-control-allow-origin' /tmp/h || echo "AUCUN en-tête CORS !"
+            # La réponse ENTIÈRE : `geocodeurs` dit quel échelon a répondu quoi.
+            head -c 2000 /tmp/b; echo
+            sleep 4
+          done
 
       - name: C · Proxys CORS de secours — lesquels vivent encore ?
         env:

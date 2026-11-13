@@ -10,11 +10,13 @@
 #    dont la dette ESLint qui ne doit plus monter. Une à deux minutes ;
 #  · parcours : l'app construite, servie par `vite preview`, et les 87 parcours
 #    qui appuient vraiment sur les boutons (services distants rejoués), plus la
-#    synchro au démarrage. Une dizaine de minutes.
+#    synchro au démarrage et la carte. Une dizaine de minutes.
 #
 # `verif-ui` n'est pas ici : il rougit par construction sur les 52 points
 # assumés de la carte (marqueurs Leaflet de 32 px). Il reste à lancer à la main
-# avant une livraison d'interface.
+# avant une livraison d'interface. C'est le SEUL cas assumé : avant de croire
+# qu'une suite garde quelque chose, vérifier qu'un travail ci-dessous la nomme.
+# `verif-carte` n'y était pas, et il échouait — y compris sur `main` (A-081).
 name: Vérifier la PR
 
 on:
@@ -78,3 +80,11 @@ jobs:
         run: npm run parcours
       - name: Synchro au démarrage (npm run verif-demarrage)
         run: npm run verif-demarrage
+      # Deux fois, et ce n'est pas du zèle : piocher depuis la carte ouvre une
+      # feuille quand il reste de la journée devant soi, et rien en fin de
+      # journée. Un seul passage ne couvre donc qu'un quart du temps — c'est ce
+      # qui a laissé cette suite rouge sans que personne ne le voie (A-081).
+      - name: Carte (npm run verif-carte)
+        run: |
+          npm run verif-carte
+          PROVO_HEURE=02:07 npm run verif-carte

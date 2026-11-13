@@ -611,6 +611,25 @@ const ECRANS = [
       await p.waitForTimeout(600);
     },
   },
+  // Le pli replié porte le nom et l'adresse du lieu trouvé (12 novembre 2026) :
+  // c'est ce que l'écran montre après un lien collé. Un nom et une adresse
+  // longs, exprès — c'est là qu'un bouton pousse hors de la feuille.
+  {
+    nom: 'Ajout (lieu trouvé)',
+    repere: '.details-pli__titre',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('.header__add-btn').click().catch(() => {});
+      await p.waitForTimeout(500);
+      await p.locator('.details-pli').click().catch(() => {});
+      await p.locator('input[placeholder="Ex: Déjeuner au marché"]')
+        .fill('Kunsthistorisches Museum Wien — collections impériales et cabinet des curiosités').catch(() => {});
+      await p.locator('input[placeholder="Lieu"]')
+        .fill('Maria-Theresien-Platz, Innere Stadt, 1010 Vienne, Autriche').catch(() => {});
+      await p.locator('.details-pli').click().catch(() => {});
+      await p.waitForTimeout(400);
+    },
+  },
   {
     nom: 'Notes',
     aller: async (p) => {

@@ -279,12 +279,74 @@ export function depuisBlob(blob) {
   });
 }
 
-/** Ouvre une pièce (ou une donnée en clair) dans le lecteur du téléphone. Rend `false` si elle manque. */
-export async function ouvrirPiece(valeur) {
-  const data = estRef(valeur) ? await lirePiece(idDe(valeur)).catch(() => undefined) : valeur;
-  if (!data) return false;
+/** Ouvre une donnée déjà en clair. Rend `null` si la fenêtre s'est ouverte. */
+function afficher(data) {
   const url = URL.createObjectURL(versBlob(data));
-  window.open(url, '_blank', 'noopener');
+  let fenetre;
+  // `noopener` dans les options faisait rendre `null` à `window.open` MÊME
+  // quand l'onglet s'ouvrait — c'est la spécification, et c'est mesuré dans
+  // Chromium : trois clics, trois onglets, trois `null`. Regarder la valeur de
+  // retour sans l'enlever aurait donc déclaré « refusée » chaque ouverture
+  // réussie, sur tous les navigateurs.
+  //
+  // Il ne protégeait rien ici : le blob porte NOTRE origine, et `DONNEE` (en
+  // tête de ce fichier) n'admet qu'une image d'appareil photo ou un PDF — le
+  // SVG, qui pourrait porter du script, est écarté exprès. Le lien avec
+  // l'ouvrant est coupé à la main, ce que `noopener` faisait.
+  try { fenetre = window.open(url, '_blank'); } catch { fenetre = null; }
+  if (fenetre) { try { fenetre.opener = null; } catch { /* déjà hors de portée */ } }
   setTimeout(() => URL.revokeObjectURL(url), 60000);
-  return true;
+  return fenetre ? null : 'refusee';
+}
+
+/**
+ * Ouvre une pièce (ou une donnée en clair) dans le lecteur du téléphone.
+ *
+ * Rend CE QUI A EMPÊCHÉ l'ouverture, ou `null` si c'est ouvert. Deux échecs,
+ * qui ne se disent pas de la même façon :
+ *  · `'absente'` : la pièce n'est pas (encore) sur ce téléphone ;
+ *  · `'refusee'` : elle est bien là, mais le navigateur n'a pas ouvert la
+ *    fenêtre.
+ *
+ * Elle rendait `true` dans les deux cas, et les deux écrans qui ont un message
+ * prêt n'affichaient donc rien : un billet touché dans une gare pouvait ne
+ * rien ouvrir et ne rien dire (audit A-080). Ne pas revenir à un booléen.
+ *
+ * Le chemin court n'est pas une optimisation, c'est le correctif : une pièce
+ * déjà lue est en mémoire, donc la fenêtre s'ouvre SANS attente, dans la pile
+ * du geste. Safari n'autorise une fenêtre que là — après un `await` sur
+ * IndexedDB, il la refuse. Et comme l'attente, elle, remplit la mémoire, le
+ * second essai passe par le chemin court : c'est ce qui rend « touche à
+ * nouveau » vrai plutôt que poli.
+ */
+export async function ouvrirPiece(valeur) {
+  const enMemoire = estRef(valeur) ? pieceEnMemoire(idDe(valeur)) : valeur;
+  if (enMemoire) return afficher(enMemoire);
+  if (!estRef(valeur)) return 'absente';
+  const data = await lirePiece(idDe(valeur)).catch(() => undefined);
+  return data ? afficher(data) : 'absente';
+}
+
+/**
+ * Ce qu'on montre pour ce qu'`ouvrirPiece` a rendu, avec le nom du fichier
+ * quand l'écran l'a sous la main.
+ *
+ * Écrit ici, une fois : la phrase de l'absence vivait déjà en trois exemplaires
+ * (`ActivityCard`, `TripDocuments` deux fois), et le refus en demandait une
+ * quatrième. Rend `''` quand il n'y a rien à dire, pour qu'un appel de trop
+ * n'affiche pas une alerte vide.
+ */
+export function messagePiece(souci, nom) {
+  const sujet = nom ? `« ${nom} »` : '';
+  if (souci === 'absente') {
+    return sujet
+      ? `${sujet} n'est pas encore sur ce téléphone : il arrive avec du réseau.`
+      : 'Pas encore sur ce téléphone : il arrive avec du réseau.';
+  }
+  if (souci === 'refusee') {
+    return sujet
+      ? `${sujet} est bien là, mais ton navigateur a refusé de l'ouvrir. Touche-le à nouveau.`
+      : "Le document est bien là, mais ton navigateur a refusé de l'ouvrir. Touche à nouveau.";
+  }
+  return '';
 }

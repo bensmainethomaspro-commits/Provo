@@ -9,7 +9,7 @@
  * Usage :  node scripts/verif-lecture-lien.mjs
  */
 import {
-  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, titreDeSite,
+  accordNom, lienCarte, lireJsonLd, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom, titreDeSite,
 } from '../supabase/functions/_shared/lecture-lien.ts';
 
 let ok = 0, ko = 0;
@@ -128,7 +128,134 @@ console.log('\n5 · Comparer des noms dans toutes les écritures');
     && accordNom('Restaurante Botín', ['Sobrino de Botín']) === 'faible');
 }
 
-console.log('\n6 · Le module reste importable par le navigateur (A-048)');
+console.log('\n6 · Un lieu qui n’est pas là où se passe le voyage');
+{
+  // Le cas du 11 novembre 2026 : un lien de partage Google vers un restaurant
+  // de Rome, collé dans un voyage à Biarritz. Rien de ce nom en France — et la
+  // recherche s'arrêtait là. Le géocodeur, interrogé sans frontière, n'en
+  // connaît pourtant qu'un.
+  const adeva = { noms: ['ADEVA Cucina Moderna'], lat: 41.9021, lon: 12.4847 };
+  const r1 = seulDeSonNom('ADEVA Cucina Moderna', [adeva]);
+  verifier('un seul lieu porte ce nom : c’est lui, où qu’il soit', r1.lieux.length === 1 && !r1.ambigu);
+  // Le même commerce ressort souvent deux fois : en point, et en bâtiment.
+  const r2 = seulDeSonNom('ADEVA Cucina Moderna', [adeva, { ...adeva, lat: 41.9022, lon: 12.4848 }]);
+  verifier('le même lieu rendu deux fois n’est pas une ambiguïté', r2.lieux.length === 2 && !r2.ambigu);
+  // Deux homonymes : ce n'est plus à nous de choisir.
+  const vienne = { noms: ['Café Central'], lat: 48.2104, lon: 16.3654 };
+  const porto = { noms: ['Café Central'], lat: 41.1496, lon: -8.6109 };
+  const r3 = seulDeSonNom('Café Central', [vienne, porto]);
+  verifier('deux homonymes à 2 000 km : ambigu, aucun n’est retenu', r3.ambigu && r3.lieux.length === 0);
+  // Un mot en commun ne suffit pas, loin du voyage.
+  const r4 = seulDeSonNom('Restaurante Botín', [{ noms: ['Sobrino de Botín'], lat: 40.4141, lon: -3.7081 }]);
+  verifier('un mot en commun ne désigne pas le lieu', r4.lieux.length === 0 && !r4.ambigu);
+  // Un nom court perdu dans une longue phrase : « Palace » n'est pas la Hofburg.
+  const r5 = seulDeSonNom('Hofburg Imperial Palace - 1st District, Innere Stadt',
+    [{ noms: ['Palace'], lat: 43.48, lon: -1.56 }, { noms: ['Imperial'], lat: 50.08, lon: 14.43 }]);
+  verifier('un nom court contenu dans une longue phrase est refusé', r5.lieux.length === 0);
+  // La ville écrite à la suite du nom ne gêne pas.
+  const r6 = seulDeSonNom('Da Enzo al 29, Rome', [{ noms: ['Da Enzo al 29'], lat: 41.8887, lon: 12.4776 }]);
+  verifier('« nom, ville » désigne le lieu qui porte ce nom', r6.lieux.length === 1);
+  // Le nom d'usage dans une autre langue : c'est une variante qui le porte.
+  const opera = { name: 'Wiener Staatsoper', namedetails: { name: 'Wiener Staatsoper', 'name:en': 'Vienna State Opera' } };
+  const r7 = seulDeSonNom('Vienna state opera', [{ noms: nomsConnus(opera), lat: 48.2029, lon: 16.3689 }]);
+  verifier('le nom anglais d’un lieu au nom allemand', r7.lieux.length === 1);
+  // Une commune qui s'appelle comme ce qu'on cherche n'est pas un établissement.
+  const r8 = seulDeSonNom('Opera', [{ noms: ['Opera'], lat: 45.38, lon: 9.21, generique: true }]);
+  verifier('une commune homonyme n’est pas un établissement', r8.lieux.length === 0);
+  verifier('un nom de moins de cinq lettres ne prouve rien',
+    seulDeSonNom('Noma', [{ noms: ['Noma'], lat: 55.68, lon: 12.61 }]).lieux.length === 0);
+  // Une adresse : la voie ET le code postal (ou la commune) doivent y être écrits.
+  const maroniti = { noms: ['29'], lat: 41.9021, lon: 12.4847, generique: true,
+    voie: 'Via dei Maroniti', reperes: ['00187', 'Rome'] };
+  verifier('une adresse complète se reconnaît à sa voie et à son code postal',
+    seulDeSonNom('Via dei Maroniti 29, 00187 Roma', [maroniti]).lieux.length === 1);
+  verifier('la même voie dans une autre commune n’est pas cette adresse',
+    seulDeSonNom('Via dei Maroniti 29, 00187 Roma',
+      [{ ...maroniti, lat: 45.46, lon: 9.19, reperes: ['20121', 'Milan'] }]).lieux.length === 0);
+  verifier('une adresse sans numéro n’est pas une adresse',
+    seulDeSonNom('Via dei Maroniti, Roma', [{ ...maroniti, reperes: ['Roma'] }]).lieux.length === 0);
+  verifier('un résultat sans coordonnées est ignoré',
+    seulDeSonNom('ADEVA Cucina Moderna', [{ ...adeva, lat: NaN }]).lieux.length === 0);
+}
+
+console.log('\n7 · Ce que Google sert aux robots de messagerie');
+{
+  const {
+    categorieDuGenre, communeEtPays, lienDePassage, lireApercuGoogle, lirePointMaps,
+  } = await import('../supabase/functions/_shared/lecture-lien.ts');
+  const { jeuDeCaracteres, lireCorps } = await import('../supabase/functions/_shared/reseau.ts');
+  const J = JSON.stringify;
+
+  // L'aperçu du lien de partage, tel que mesuré le 11 novembre 2026.
+  const apercu = '<meta property="og:title" content="ADEVA Cucina Moderna · Rome, Metropolitan City of Rome Capital, Italie">'
+    + '<meta property="og:description" content="4.8 &#11088; · Restaurant">';
+  const a = lireApercuGoogle(apercu);
+  verifier('le nom du lieu', a?.nom === 'ADEVA Cucina Moderna', J(a));
+  verifier('où le lien dit qu’il est', a?.localite === 'Rome, Metropolitan City of Rome Capital, Italie');
+  verifier('ce que c’est, sans la note', a?.genre === 'Restaurant', J(a));
+  verifier('la commune et le pays suffisent à un géocodeur', communeEtPays(a.localite) === 'Rome, Italie');
+  verifier('« Vienne, Autriche » reste tel quel', communeEtPays('Vienne, Autriche') === 'Vienne, Autriche');
+  verifier('pas de localité : chaîne vide', communeEtPays(null) === '');
+  // Lu dans le mauvais jeu de caractères, le séparateur arrive en « � ».
+  verifier('le séparateur abîmé par le décodage se lit quand même',
+    lireApercuGoogle(apercu.replace(/·/g, '�'))?.genre === 'Restaurant');
+  verifier('des étoiles au lieu d’une note',
+    lireApercuGoogle('<meta property="og:title" content="Café Central · Vienne, Autriche"><meta property="og:description" content="★★★★☆ · Café">')?.genre === 'Café');
+  verifier('la page d’accueil de Google n’est pas un lieu',
+    lireApercuGoogle('<meta property="og:title" content="Google">') === null
+    && lireApercuGoogle('<meta property="og:title" content="Google Maps">') === null);
+  verifier('une page sans balise : rien', lireApercuGoogle('<!doctype html>') === null);
+  verifier('un nom sans localité se lit, la localité reste vide',
+    lireApercuGoogle('<meta property="og:title" content="Rocher de la Vierge">')?.localite === null);
+
+  // La vignette d'une recherche Maps, telle que mesurée le 12 novembre 2026.
+  const carte = (params) => `<meta content="https://maps.google.com/maps/api/staticmap?${params}&amp;language=en&amp;sensor=false&amp;key=K&amp;signature=S" property="og:image">`;
+  const un = lirePointMaps(carte('center=41.9021228%2C12.4847452&amp;zoom=17&amp;size=900x900'));
+  verifier('un lieu : le centre de la vignette est son point', un?.lat === 41.9021228 && un?.lon === 12.4847452, J(un));
+  verifier('plusieurs résultats : des épingles, donc aucun point',
+    lirePointMaps(carte('center=41.90081425%2C12.48368195&amp;zoom=16&amp;size=200x200&amp;markers=41.9021228%2C12.4847452%7C41.8995057%2C12.4826187')) === null);
+  verifier('une ville (« Biarritz ») sort à l’échelle d’une ville : aucun point',
+    lirePointMaps(carte('center=43.4709514%2C-1.5561909&amp;zoom=14&amp;size=900x900')) === null);
+  verifier('rien trouvé : le logo de Maps, aucun point',
+    lirePointMaps('<meta content="//www.gstatic.com/images/branding/productlogos/maps_2025_round/v1/web-512dp/logo.png" property="og:image">') === null);
+  verifier('longitude négative', lirePointMaps(carte('center=43.48159%2C-1.5588756&amp;zoom=17&amp;size=900x900'))?.lon === -1.5588756);
+  verifier('des coordonnées impossibles : aucun point',
+    lirePointMaps(carte('center=141.9%2C12.4&amp;zoom=17&amp;size=900x900')) === null);
+
+  // Le genre que Google annonce → la catégorie de l'app.
+  for (const [genre, cat] of [
+    ['Restaurant', 'resto'], ['Restaurant italien', 'resto'], ['Café', 'resto'], ['Bar à cocktails', 'resto'],
+    ['Musée d’art', 'visite'], ['Site historique', 'visite'], ['Château', 'visite'],
+    ['Parc', 'balade'], ['Parc d’attractions', 'fun'], ['Plage', 'plage'], ['Hôtel', 'repos'],
+    ['Salle de sport', 'sport'], ['Gare', 'trajet'], ['Opéra', 'fun'],
+  ]) verifier(`« ${genre} » → ${cat}`, categorieDuGenre(genre) === cat, String(categorieDuGenre(genre)));
+  verifier('un genre inconnu ne classe rien', categorieDuGenre('Cabinet comptable') === null && categorieDuGenre(null) === null);
+  verifier('« Palais du Belvedere » est un palais, pas un point de vue', categorieDuGenre('Palais du Belvedere') === 'visite');
+  verifier('« España » ne contient pas de spa', categorieDuGenre('Museo de España') === 'visite');
+
+  // Le lien d'une fiche importée n'est pas le site du lieu.
+  for (const u of ['https://share.google/y4QMh42nQx6DiSBfZ', 'https://maps.app.goo.gl/abc', 'https://www.google.com/maps/place/X',
+    'https://vm.tiktok.com/ZNabc/', 'https://www.instagram.com/p/abc/', 'https://maps.apple.com/?q=X', 'https://g.co/kgs/abc']) {
+    verifier(`lien de passage : ${u.slice(8, 40)}`, lienDePassage(u) === true);
+  }
+  verifier('le site d’un restaurant n’est pas un lien de passage',
+    lienDePassage('https://www.adevaroma.it/') === false && lienDePassage('https://www.museodelprado.es/') === false);
+  verifier('un domaine qui CONTIENT « google » n’est pas Google', lienDePassage('https://notgoogle.example.com/') === false);
+  verifier('une chaîne qui n’est pas une adresse', lienDePassage('pas une url') === false);
+
+  // Le jeu de caractères annoncé : l'aperçu Google arrive en ISO-8859-1.
+  const latin = Uint8Array.from([...'<title>Caf'].map(c => c.charCodeAt(0)).concat([0xE9, 0x20, 0xB7, 0x20], [...'Rome</title>'].map(c => c.charCodeAt(0))));
+  verifier('ISO-8859-1 annoncé par l’en-tête : « Café · Rome »',
+    (await lireCorps(new Response(latin, { headers: { 'content-type': 'text/html; charset=ISO-8859-1' } }), 1000)) === '<title>Café · Rome</title>');
+  verifier('annoncé par une balise meta en début de page',
+    jeuDeCaracteres('text/html', new TextEncoder().encode('<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">')) === 'windows-1252');
+  verifier('rien d’annoncé : UTF-8', jeuDeCaracteres(null, new Uint8Array()) === 'utf-8');
+  verifier('un jeu inconnu du décodeur retombe sur UTF-8', jeuDeCaracteres('text/html; charset=klingon', new Uint8Array()) === 'utf-8');
+  verifier('UTF-8 reste UTF-8',
+    (await lireCorps(new Response(new TextEncoder().encode('Café · Rome'), { headers: { 'content-type': 'text/html; charset=utf-8' } }), 1000)) === 'Café · Rome');
+}
+
+console.log('\n8 · Le module reste importable par le navigateur (A-048)');
 {
   // Il vit dans supabase/functions/_shared, que le lint ignore, mais l'app
   // l'importe (helpers.js, enrich.js, doublon.js). Un `Deno.env` ajouté ici
