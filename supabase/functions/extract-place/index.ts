@@ -21,8 +21,9 @@ import { origineAutorisee } from "../_shared/origine.ts";
 import { BUDGET_MS, budgetActif, dansLeBudget, withTimeout } from "../_shared/budget.ts";
 import { joindre, lireCorps, urlSure } from "../_shared/reseau.ts";
 import {
-  accordNom, type ApercuGoogle, categorieDuGenre, communeEtPays, lienCarte, lireApercuGoogle, lireJsonLd,
-  lirePointMaps, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom, titreDeSite,
+  accordNom, type ApercuGoogle, avantLeCaptcha, categorieDuGenre, communeEtPays, jetonOpaque, lienCarte,
+  lireApercuGoogle, lireJsonLd, lirePointMaps, metaGeo, nomDepuisAdresse, nomsConnus, normaliser, seulDeSonNom,
+  titreDeSite,
 } from "../_shared/lecture-lien.ts";
 
 const CORS = {
@@ -628,7 +629,10 @@ function extractMapsCoords(s: string): { lat: number; lon: number } | null {
 
 function extractMapsName(s: string): string | null {
   try {
-    const u = new URL(s);
+    // Une page de vérification ne nomme rien : son `q` est un jeton.
+    const voulue = avantLeCaptcha(s);
+    if (!voulue) return null;
+    const u = new URL(voulue);
     const m = u.pathname.match(/\/maps\/(?:place|search)\/([^/@?&]+)/);
     if (m) {
       const name = decodeURIComponent(m[1].replace(/\+/g, " ")).replace(/_/g, " ").trim();
@@ -639,7 +643,7 @@ function extractMapsName(s: string): string | null {
     // Google Maps. Il n'était pas lu — le lien tombait sur la page de
     // consentement, et la fiche restait sans nom.
     const q = u.searchParams.get("q") || u.searchParams.get("destination") || u.searchParams.get("query");
-    if (q && !/^-?\d+\.\d+,/.test(q)) return q;
+    if (q && !/^-?\d+\.\d+,/.test(q) && !jetonOpaque(q)) return q;
   } catch { /* ignore */ }
   return null;
 }
@@ -652,12 +656,6 @@ function extractMapsName(s: string): string | null {
 // jeton de continuation opaque. Mesuré sur un lien partagé réel, qui a donné
 // « EhAmAB8UFTcGCj9f3UFPv9qGGLS3vtMGIjC4PObIgUP6… » en guise de titre.
 // Un nom de lieu contient des espaces, ou reste court.
-function looksLikeOpaqueToken(s: string): boolean {
-  const t = s.trim();
-  if (!t) return true;
-  if (/\s/.test(t)) return false;
-  return t.length > 24 && /^[A-Za-z0-9_\-]+$/.test(t) && /\d/.test(t) && /[A-Z]/.test(t);
-}
 
 function extractGoogleSearchName(finalUrl: string, html: string): string | null {
   try {
@@ -668,7 +666,7 @@ function extractGoogleSearchName(finalUrl: string, html: string): string | null 
         const name = decodeURIComponent(q.replace(/\+/g, " ")).trim();
         // Un jeton opaque ferait un titre absurde : on préfère le <title> ou
         // le JSON-LD ci-dessous, quitte à ne rien rendre du tout.
-        if (name && !looksLikeOpaqueToken(name)) return name;
+        if (name && !jetonOpaque(name)) return name;
       }
     }
   } catch { /* ignore */ }
@@ -829,9 +827,18 @@ async function handleGoogleMaps(rawUrl: string, ancre: Ancre | null = null, dest
   //     n'apprend rien de plus, et chaque appel inutile rapproche du captcha.
   const direct = !partage && extractMapsName(rawUrl)
     && (extractMapsCoords(rawUrl) || /\/maps\/search\/?$/i.test(new URL(rawUrl).pathname));
-  const { finalUrl, html } = partage
+  const lu = partage
     ? { finalUrl: partage.finalUrl, html: "" }
     : direct ? { finalUrl: rawUrl, html: "" } : await resolve(rawUrl);
+  // Google a répondu « êtes-vous un robot ? » : ni l'adresse de cette page ni
+  // son contenu ne parlent du lieu. Le banc du 14 novembre 2026 a vu la fiche
+  // prendre pour titre le jeton de la vérification. Ce que Google allait
+  // servir, en revanche, porte souvent le nom : on repart de là, sans la page.
+  const voulue = avantLeCaptcha(lu.finalUrl);
+  const verification = voulue !== lu.finalUrl;
+  if (verification) traceGeo.push(`page-google captcha (${voulue ? "suite lue" : "sans suite"})`);
+  const finalUrl = voulue || rawUrl;
+  const html = verification ? "" : lu.html;
   const haystack = finalUrl + "\n" + html.slice(0, 200_000);
 
   let name = apercu?.nom || extractMapsName(finalUrl);

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { nomsConnus, normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
+import { avantLeCaptcha, jetonOpaque, nomsConnus, normaliser } from '../../supabase/functions/_shared/lecture-lien.ts';
 import { avecDelai, DELAI_FETCH_MS, DELAI_FONCTION_MS } from './reseau';
 
 // Server-side extractor (Supabase Edge Function "extract-place").
@@ -502,14 +502,18 @@ export function deduceTitle(category, address, notes) {
 
 export function parseGoogleMapsUrl(url) {
   try {
-    const u = new URL(url);
+    // La page « êtes-vous un robot ? » de Google ne nomme rien : son `q` est
+    // un jeton. On lit l'adresse qu'elle allait servir, ou rien.
+    const voulue = avantLeCaptcha(url);
+    if (!voulue) return null;
+    const u = new URL(voulue);
     if (!u.hostname.includes('google') && !u.hostname.includes('goo.gl')) return null;
     const m = u.pathname.match(/\/maps\/(?:place|search)\/([^/@?&]+)/);
     if (m) return decodeURIComponent(m[1].replace(/\+/g, ' ')).replace(/_/g, ' ');
     // `query` : format officiel `/maps/search/?api=1&query=…`. Des
     // coordonnées nues ne sont pas un nom.
     const q = u.searchParams.get('q') || u.searchParams.get('daddr') || u.searchParams.get('query');
-    if (q && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(q.trim())) return q;
+    if (q && !/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(q.trim()) && !jetonOpaque(q)) return q;
   } catch {}
   return null;
 }

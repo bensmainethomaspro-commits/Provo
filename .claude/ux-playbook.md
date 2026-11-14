@@ -430,10 +430,30 @@ fichier depuis le dépôt tel qu'un autre le verra ; installer ce qu'on vient de
 publier. **Corollaire :** ce qui est destiné à être partagé entre projets vit
 sur la **branche par défaut** — une branche de travail ou une PR en brouillon
 n'existe pour personne d'autre.
+**Second corollaire : « fusionné » n'est pas « livré » non plus.** Entre la
+fusion et ce qui tourne chez l'utilisateur il y a une chaîne — déploiement,
+publication, migration — qui échoue toute seule, et dont le rouge ne se lit
+pas. Le travail finit quand **le cas signalé a été rejoué sur ce qui tourne
+réellement**, pas quand la PR est verte : lire le résultat de la chaîne, puis
+refaire la demande de l'utilisateur en production. Et ne jamais écrire « à la
+fusion, cela se déploie » d'un chemin qu'on n'a pas vu tourner récemment :
+c'est une hypothèse, elle s'annonce comme telle (F4).
+**Troisième corollaire : un outil qui livre se fige.** Une version « latest »
+dans une chaîne de livraison est une dépendance qui change sans qu'aucun
+commit le dise — et elle casse le jour où l'on livre, c'est-à-dire le jour où
+l'on est pressé. Figer l'outil à une version dont on a relu les options ; le
+monter exprès, en lançant la chaîne à blanc avant de compter dessus.
 *Origines : (1) « quand je lui donne ce lien il doit se connecter à Vercel, je
 ne veux pas » ; (2) une mémoire écrite pour tous les projets, laissée sur une
 branche non fusionnée — une autre session n'a rien trouvé et a dû demander où
-chercher.*
+chercher ; (3) un correctif attendu (« il faut absolument régler ce
+problème »), fusionné, tous contrôles verts — et jamais déployé : l'outil de
+déploiement, installé en « latest », exigeait depuis onze jours une
+confirmation que la chaîne ne pouvait pas donner. Quatorze heures sur
+l'ancienne version, pendant que l'interface, elle, était à jour. La PR
+promettait le déploiement sur la foi d'un chemin qui n'avait pas tourné depuis
+six semaines. Rejouer ensuite le cas signalé en production a aussitôt montré
+un second défaut, qu'aucun banc hors production ne voyait.*
 
 **F3. Aucune API payante, ni compte de facturation, sans accord explicite.**
 Vérifier aussi les conditions d'utilisation, pas seulement le prix.
@@ -562,6 +582,7 @@ revient trois fois est un problème structurel, pas un détail.
 | 2026-10 | même demande : 130 émojis servant d'icônes, un calendrier « 17 juillet » en onglet | B6 |
 | 2026-11 | « cela ne fonctionne toujours pas » (4ᵉ fois, même fonction) : le diagnostic n'envoyait pas ce que l'app envoie, la sonde tournait sous un autre moteur, le banc comptait le rempli | E10 (corollaire), F5 (1ᵉʳ corollaire affiné) |
 | 2026-11 | même signalement : une action réussie laissait l'écran identique à celui d'avant | D5 (affinée, corollaire) |
+| 2026-11 | même signalement, le lendemain : la PR fusionnée et verte n'avait rien déployé — l'outil de déploiement en « latest » exigeait une confirmation | F2 (2ᵉ et 3ᵉ corollaires) |
 
 ### Récidives repérées
 
@@ -634,3 +655,10 @@ revient trois fois est un problème structurel, pas un détail.
   laissée sur une branche. À chaque fois le travail était fait *et* hors de
   portée de son destinataire. → vérifier depuis le poste du destinataire fait
   partie de la livraison, pas de l'après (F2).
+  **Quatrième et cinquième fois, sur la même chaîne de déploiement** (septembre
+  puis novembre 2026) : des correctifs fusionnés qui n'arrivaient pas en
+  production — un jeton refusé pendant quatre semaines, puis un outil en
+  « latest ». La première fois on a posé une alarme (F5) ; la seconde fois elle
+  a sonné dans la minute, et le correctif est resté hors ligne quatorze heures
+  quand même. Une alarme ne remplace pas le geste : après une fusion qui doit
+  livrer, aller lire le résultat et rejouer le cas (F2, 2ᵉ corollaire).

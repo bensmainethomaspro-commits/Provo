@@ -530,3 +530,44 @@ export function lienDePassage(brut: string): boolean {
   }
   return DE_PASSAGE.some((re) => re.test(hote));
 }
+
+// ── Quand Google demande « êtes-vous un robot ? » ───────────────────────────
+
+/**
+ * Un jeton, pas un nom : long, d'un seul tenant, lettres et chiffres mêlés
+ * (« EgQDKdJFGNba4NcGIjCUk8Qh… », « ChIJN1t_tDeuEmsRUsoyG83frY4 »).
+ */
+export function jetonOpaque(s: string): boolean {
+  const t = String(s || "").trim();
+  if (!t) return true;
+  if (/\s/.test(t)) return false;
+  return t.length > 24 && /^[A-Za-z0-9_\-]+$/.test(t) && /\d/.test(t) && /[A-Z]/.test(t);
+}
+
+/**
+ * L'adresse que Google allait servir avant de demander une vérification.
+ *
+ * Sa page de vérification vit à `/sorry/index?continue=<l'adresse voulue>&q=<jeton>`.
+ * Le 14 novembre 2026, le banc a vu la fonction lire ce `q` comme le nom du
+ * lieu : la fiche s'appelait « EgQDKdJFGNba4NcGIjCUk8Qh… ». L'adresse voulue,
+ * elle, porte souvent le vrai nom (`/search?q=ADEVA+Cucina+Moderna`).
+ *
+ * Rend l'adresse telle quelle quand ce n'est pas une page de vérification, et
+ * `null` quand c'en est une qui ne dit pas où elle menait.
+ */
+export function avantLeCaptcha(adresse: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(adresse);
+  } catch {
+    return adresse;
+  }
+  const verification = (x: URL) => /(^|\.)google\.[a-z.]+$/i.test(x.hostname) && /^\/sorry\//.test(x.pathname);
+  if (!verification(u)) return adresse;
+  try {
+    const voulue = new URL(u.searchParams.get("continue") || "");
+    return /^https?:$/.test(voulue.protocol) && !verification(voulue) ? voulue.toString() : null;
+  } catch {
+    return null;
+  }
+}

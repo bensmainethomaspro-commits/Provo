@@ -255,7 +255,37 @@ console.log('\n7 · Ce que Google sert aux robots de messagerie');
     (await lireCorps(new Response(new TextEncoder().encode('Café · Rome'), { headers: { 'content-type': 'text/html; charset=utf-8' } }), 1000)) === 'Café · Rome');
 }
 
-console.log('\n8 · Le module reste importable par le navigateur (A-048)');
+console.log('\n8 · Quand Google demande « êtes-vous un robot ? »');
+{
+  const { avantLeCaptcha, jetonOpaque } = await import('../supabase/functions/_shared/lecture-lien.ts');
+  // Relevé sur le banc du 14 novembre 2026 : ce jeton est devenu le TITRE de la fiche.
+  const JETON = 'EgQDKdJFGNba4NcGIjCUk8QhWqzylJ4p_e5Kjpaqd6e2DTECigX3mTgQbxUkBsfyMj1kTv';
+  const voulue = 'https://www.google.com/search?q=ADEVA+Cucina+Moderna&kgmid=/g/11x9d2brwt';
+  const sorry = `https://www.google.com/sorry/index?continue=${encodeURIComponent(voulue)}&q=${JETON}`;
+  verifier('la page de vérification rend l’adresse qu’elle allait servir',
+    avantLeCaptcha(sorry) === voulue, String(avantLeCaptcha(sorry)));
+  verifier('… et cette adresse porte le vrai nom',
+    new URL(avantLeCaptcha(sorry)).searchParams.get('q') === 'ADEVA Cucina Moderna');
+  verifier('sans suite annoncée : rien, plutôt qu’un jeton',
+    avantLeCaptcha(`https://www.google.com/sorry/index?q=${JETON}`) === null);
+  verifier('une suite qui est encore une vérification : rien',
+    avantLeCaptcha(`https://www.google.com/sorry/index?continue=${encodeURIComponent(sorry)}`) === null);
+  verifier('une suite qui n’est pas une adresse web : rien',
+    avantLeCaptcha('https://www.google.com/sorry/index?continue=javascript:alert(1)') === null);
+  verifier('le domaine local de Google aussi (google.fr)',
+    avantLeCaptcha(`https://www.google.fr/sorry/index?continue=${encodeURIComponent(voulue)}`) === voulue);
+  for (const u of ['https://www.google.com/maps/place/Colosseo/@41.89,12.49,17z', 'https://share.google/y4QMh42nQx6DiSBfZ',
+    'https://exemple.fr/sorry/index?continue=https://x.fr', 'pas une url']) {
+    verifier(`une adresse ordinaire est rendue telle quelle : ${u.slice(0, 34)}`, avantLeCaptcha(u) === u);
+  }
+  verifier('le jeton de la vérification n’est pas un nom', jetonOpaque(JETON) === true);
+  verifier('un identifiant de lieu Google non plus', jetonOpaque('ChIJN1t_tDeuEmsRUsoyG83frY4') === true);
+  for (const nom of ['ADEVA Cucina Moderna', 'Schönbrunner Palais', 'Colosseo', 'Katz’s Delicatessen', 'Restaurant-Le-Petit-Paris', 'teamLab']) {
+    verifier(`un vrai nom reste un nom : ${nom}`, jetonOpaque(nom) === false);
+  }
+}
+
+console.log('\n9 · Le module reste importable par le navigateur (A-048)');
 {
   // Il vit dans supabase/functions/_shared, que le lint ignore, mais l'app
   // l'importe (helpers.js, enrich.js, doublon.js). Un `Deno.env` ajouté ici

@@ -7,7 +7,9 @@
 #
 # Deux travaux en parallèle :
 #  · suites : build, puis les suites sans réseau ni navigateur (npm run verif),
-#    dont la dette ESLint qui ne doit plus monter. Une à deux minutes ;
+#    dont la dette ESLint qui ne doit plus monter ; puis les fonctions Edge
+#    sous Deno (typage, et `extract-place` entière face à un réseau simulé).
+#    Une à deux minutes ;
 #  · parcours : l'app construite, servie par `vite preview`, et les 87 parcours
 #    qui appuient vraiment sur les boutons (services distants rejoués), plus la
 #    synchro au démarrage et la carte. Une dizaine de minutes.
@@ -51,6 +53,22 @@ jobs:
         run: npm run build
       - name: Suites (npm run verif)
         run: npm run verif
+      # La fonction Edge ENTIÈRE, sous son moteur, réseau simulé. Les suites
+      # ci-dessus tournent sous Node et ne lisent que ses lecteurs partagés ;
+      # le banc (`diagnose-places`) la lance pour de bon, mais Google n'y sert
+      # pas son captcha sur commande. Le 14 novembre 2026, il l'a servi par
+      # hasard : la fiche a pris pour titre le jeton de la page de vérification.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Fonction extract-place sous Deno, Google refusant tout
+        env:
+          # Sans elle, Deno lit le `package.json` de l'app et résout ses
+          # dépendances (voir `diagnose-places.yml`).
+          DENO_NO_PACKAGE_JSON: "1"
+        run: |
+          deno check --node-modules-dir=auto supabase/functions/extract-place/index.ts supabase/functions/enrich-place/index.ts
+          deno run --no-prompt --allow-env scripts/verif-fonction-captcha.ts
 
   parcours:
     name: Parcours dans un vrai navigateur
