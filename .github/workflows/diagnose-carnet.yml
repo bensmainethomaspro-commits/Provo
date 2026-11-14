@@ -1,0 +1,28 @@
+name: Diagnostic — carnet illustré
+
+# De quoi une fiche « carnet » (photos, présentation, bon à savoir) peut-elle se
+# nourrir gratuitement ? Le bac à sable ne joint ni la carte ouverte ni
+# Wikimedia : un exécuteur GitHub, si. Ne modifie rien, mesure et imprime.
+
+on:
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'scripts/diag-carnet.mjs'
+      - '.github/workflows/diagnose-carnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mesurer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Couverture des sources libres sur les lieux d'un vrai carnet
+        run: node scripts/diag-carnet.mjs
