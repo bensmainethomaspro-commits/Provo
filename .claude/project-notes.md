@@ -56,6 +56,7 @@ trace de ce qu'on a sciemment écarté.
 | D5 · Montrer ce que l'action a produit | Feuille d'ajout : le pli « Détails » porte le nom et l'adresse du lieu trouvé ; écran « Ajout (lieu trouvé) » dans `verif-ui` ; les parcours d'import lisent le pli FERMÉ |
 | E10 · La même demande, le même moteur | `diagnose-link` envoie la destination, comme l'app ; `diag-deno-google.ts` mesure sous Deno, comme la fonction |
 | F5 · Rempli n'est pas juste | `diag-verify` compte les fiches posées à moins d'1 km du point attendu |
+| F2 · Fusionné n'est pas livré | Après une fusion qui touche `supabase/functions/` : lire « Déployer les fonctions Supabase », puis `diagnose-link` et le banc sur `main` (ils mesurent la production). CLI Supabase figé en 3.1.0 dans `deploy-edge-functions.yml` |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -211,6 +212,36 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
     épingles de carte dans les deux thèmes. **Rien de tout cela n'a tourné
     chez l'hébergeur réel** : la fonction ne se déploie qu'à la fusion sur
     `main`, et c'est le canari du lendemain qui dira ce que Google lui sert.
+  · **Le déploiement de la fusion #107 a échoué, et la production est restée
+    quatorze heures sur l'ancienne fonction** (13 nov. 18 h 55 → 14 nov.
+    9 h 30 UTC). Le workflow installait le CLI Supabase « latest » ; le 3.0
+    (2 nov.) exige une confirmation (`--yes`) avant de toucher un projet en
+    ligne. L'alerte #108 s'est ouverte aussitôt — le garde-fou de septembre a
+    tenu — mais la PR promettait « à la fusion, le workflow redéploie » sans
+    que ce chemin ait tourné depuis le 1er octobre. Corrigé (CLI figé en 3.1.0,
+    `--yes`, `--remote=`), relancé depuis la branche : `extract-place` v39,
+    `enrich-place` v14.
+  · **Mesuré chez l'hébergeur réel (14 nov. 2026, banc `diagnose-places`
+    lancé sur `main` juste après)** : 19 fiches renseignées sur 21, 7 sur 7 à
+    moins d'un kilomètre du point attendu, catégorie juste 15 sur 18,
+    **horaires 0 sur 21** (attendu : Nominatim refuse toujours l'hébergeur,
+    Photon ne porte pas d'horaires, c'est le téléphone qui complète ensuite).
+    Le lien du signalement, avec la destination « Biarritz » : fiche entière
+    cinq fois sur cinq, en 1,5 à 3,2 s (un titre nu en 10 s le 11).
+    Ce que Google sert à Supabase : l'aperçu du lien lu 5 fois sur 6
+    (Twitterbot 3, Facebook 2 quand Twitterbot recevait un captcha, les deux
+    refusés 1 fois) ; le point par le nom obtenu 3 fois sur 5, les deux autres
+    demandes ont expiré à 6 s (cause inconnue : pas le HTTP/2, qui les ferait
+    toutes échouer). Les deux échecs : « Site du Prado » (connu) et
+    « Agapii Mou » — aperçu refusé, inconnu de Photon, point expiré : titre
+    seul, que le téléphone situe ensuite avec SON Nominatim.
+    Vu au passage, pas corrigé : « La Cité du Vin » sort en « trajet » en
+    production — Photon rend l'arrêt de tram du même nom, à 180 m du musée.
+  · **Le jeton du captcha pris pour un nom (A-097, 14 nov.)** : trouvé par ce
+    même banc. `avantLeCaptcha` et `jetonOpaque` (module partagé, donc aussi
+    le téléphone) ; `verif-fonction-captcha.ts` lance la fonction entière sous
+    Deno face à un réseau simulé, sur chaque PR. **Ce correctif-là n'est pas
+    en ligne tant que sa branche n'est pas fusionnée.**
   · **Garde-fous.** `diag-lien-google.mjs` relit Google avec les lecteurs de la
     fonction à chaque poussée ; `diag-verify` porte six cas de plus (lieu hors
     du voyage, noms étrangers) ; `diagnose-link` envoie enfin la destination et
@@ -1328,6 +1359,17 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
   point ; l'état « un seul échelon répond » n'a pas d'alarme. À faire : lire
   `geocodeurs` dans la réponse du témoin et alerter à l'orange quand un seul
   géocodeur a répondu.
+- **Un arrêt de transport qui porte le nom du lieu passe pour le lieu** (vu en
+  production le 14 nov. 2026). Avec Photon seul, « La Cité du Vin » rend l'arrêt
+  de tram du même nom, à 180 m du musée : catégorie « trajet », point décalé.
+  Le nom est entier, donc la règle du nom entier ne l'écarte pas. À faire : à
+  accord égal, préférer ce qui n'est pas un arrêt (`railway`, `highway`,
+  `public_transport`) — dans `pickBest`, donc à mesurer sur tout le banc.
+- **Le point demandé à Google Maps expire parfois à 6 s depuis l'hébergeur**
+  (2 demandes sur 5 le 14 nov. 2026, les 3 autres en moins d'une seconde).
+  Cause inconnue ; la fonction retombe alors sur le nom seul, et le téléphone
+  situe avec son propre Nominatim. À mesurer sur plusieurs jours avant d'y
+  toucher : la trace `point-google muet (0, N ms)` le dit à chaque appel.
 - **Les chemins légende, TikTok et site générique d'`extract-place`** écrivent
   encore un lieu retenu sur un seul mot en commun près du voyage (corrigé pour
   les liens Google et les noms tapés seulement, journal A-092).
@@ -1458,6 +1500,16 @@ Le déploiement de la fonction Edge est automatique :
 `.github/workflows/deploy-edge-functions.yml` se déclenche sur `main` dès que
 `supabase/functions/**` change. Un correctif de l'extracteur poussé sur une
 branche n'est donc **pas** en ligne tant qu'il n'est pas fusionné.
+
+Une fusion ne vaut pas déploiement : ce workflow a déjà échoué deux fois sans
+bruit suffisant (jeton refusé du 31 août au 28 septembre 2026 ; CLI Supabase 3
+et sa confirmation obligatoire le 13 novembre 2026). Après toute fusion qui
+touche `supabase/functions/`, **lire le résultat du workflow**, puis mesurer la
+production (`diagnose-link`, canari). Le CLI y est figé (3.1.0) : le monter se
+fait exprès, en relisant `supabase functions deploy --help` et en lançant le
+workflow à la main. Il se lance aussi depuis une branche (Actions › Run
+workflow › choisir la branche) : c'est ainsi qu'un correctif du workflow
+lui-même se vérifie avant d'être fusionné.
 
 ## Enrichissement par le site du lieu (`enrich-place` + `deepEnrich.js`)
 

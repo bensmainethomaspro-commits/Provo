@@ -332,7 +332,17 @@ check --node-modules-dir=auto supabase/functions/<nom>/index.ts`. Supprimer le
 détail : sans elle Deno résout aussi le `package.json` de l'app, et refuse tout
 paquet publié depuis moins de 24 h — le banc de la branche est tombé pour ça le
 2026-11-12 (`@babel/parser`), sans avoir lu une ligne de la fonction. Le réseau du bac à sable ne joint ni
-Google ni Supabase : exécuter la fonction reste l'affaire du banc.
+Google ni Supabase : exécuter la fonction contre le vrai réseau reste l'affaire
+du banc.
+
+**Exécuter la fonction entière sans réseau, sous son moteur :**
+`DENO_NO_PACKAGE_JSON=1 deno run --no-prompt --allow-env
+scripts/verif-fonction-captcha.ts`. Le script remplace `fetch` et `Deno.serve`
+avant d'importer le vrai `index.ts`, puis lui envoie ce que l'app envoie. C'est
+le modèle à reprendre pour tout cas que le réseau réel ne rejoue pas à la
+demande (un captcha, un géocodeur muet). Il tourne sur chaque PR dans
+`verif.yml`, avec le typage des deux fonctions — `npm run verif` ne le lance
+pas (Node).
 
 ## Le code partagé entre le client et les fonctions Edge
 
