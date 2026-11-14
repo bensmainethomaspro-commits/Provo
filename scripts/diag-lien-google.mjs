@@ -94,6 +94,15 @@ for (const [qui, ua] of Object.entries(ROBOTS)) {
   if (c.html.length < 400) console.log(`    corps   : ${JSON.stringify(c.html)}`);
   console.log(`    lu : ${a ? JSON.stringify(a) : 'rien'}`);
   if (a) { unApercu = true; console.log(`    → cherché autour de « ${communeEtPays(a.localite) || '—'} », catégorie « ${categorieDuGenre(a.genre) || '—'} »`); }
+  // Ce que l'aperçu porte EN PLUS du nom : une image du lieu ? Demandé le
+  // 14 novembre 2026 — une fiche illustrée voudrait une photo pour chaque lieu
+  // ajouté par un lien de partage, et les restaurants n'en ont nulle part
+  // ailleurs (`diag-carnet.mjs` : 1 sur 15).
+  if (a) {
+    const balise = (nom) => ((c.html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${nom}["'][^>]+content=["']([^"']+)["']`, 'i')) || [])[1] || '').replace(/&amp;/g, '&');
+    console.log(`    en plus : og:image « ${court(balise('og:image'), 170) || '—'} » · og:description « ${court(balise('og:description'), 80) || '—'} »`);
+    resume.push(`aperçu · ${qui.padEnd(9)} image : ${court(balise('og:image'), 120) || 'aucune'}`);
+  }
   resume.push(`aperçu · ${qui.padEnd(9)} ${String(c.html.length).padStart(6)} o · ${refuse(c) ? 'CAPTCHA' : a ? `« ${a.nom} » · ${communeEtPays(a.localite) || '—'} · ${categorieDuGenre(a.genre) || '—'}` : 'rien'}`);
   await pause(2000);
 }
