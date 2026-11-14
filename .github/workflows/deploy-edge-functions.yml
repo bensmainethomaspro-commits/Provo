@@ -64,9 +64,18 @@ jobs:
             *) echo "::warning::Réponse inattendue ($CODE), on tente quand même le déploiement." ;;
           esac
 
+      # Version FIGÉE, et non « latest ». Le 13 novembre 2026, la fusion #107 n'a
+      # rien déployé : le CLI 3.0, sorti onze jours plus tôt, demande une
+      # confirmation avant de toucher un projet en ligne, et un workflow ne peut
+      # pas répondre (« Confirmation required… Re-run with --yes »). Le dernier
+      # déploiement réussi datait du 1er octobre, sous le CLI 2 : entre-temps
+      # l'outil avait changé sans qu'aucun commit d'ici le dise.
+      # Un outil de déploiement se met à jour EXPRÈS : changer ce numéro, lire
+      # `supabase functions deploy --help` de la nouvelle version, puis lancer
+      # ce workflow à la main avant de compter dessus.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
 
       - name: Déployer toutes les fonctions
         env:
@@ -86,13 +95,17 @@ jobs:
           # est passée dans le navigateur. Une fonction supprimée ici se
           # supprime AUSSI à la main, dans le tableau de bord Supabase
           # (Edge Functions › la fonction › Delete).
+          echo "CLI Supabase : $(supabase --version)"
           echo "Fonctions trouvées :"
           ls -1 supabase/functions
           for d in supabase/functions/*/; do
             nom=$(basename "$d")
             [ -f "$d/index.ts" ] || { echo "· $nom ignorée (pas d'index.ts)"; continue; }
             echo "::group::Déploiement de $nom"
-            supabase functions deploy "$nom" --project-ref usztistixgzdrvjzplqx
+            # `--yes` : la confirmation que le CLI 3 exige. `--remote=` remplace
+            # `--project-ref`, que le CLI 3 n'accepte plus qu'avec un
+            # avertissement et que le CLI 4 retire.
+            supabase functions deploy "$nom" --remote=usztistixgzdrvjzplqx --yes
             echo "::endgroup::"
           done
 
@@ -110,7 +123,7 @@ jobs:
           gh label create deploiement --color B60205 \
             --description "Déploiement des fonctions Edge en échec" 2>/dev/null || true
           NUM=$(gh issue list --state open --label deploiement --limit 1 --json number --jq '.[0].number // empty')
-          CORPS=$(printf '🔴 **Les fonctions Edge ne sont pas déployées.** Ce qui a été fusionné sur `main` dans `supabase/functions/` n'\''est PAS en production.\n\nSi le journal dit `401 Unauthorized` : le jeton a expiré. En créer un sur https://supabase.com/dashboard/account/tokens, le reposer dans Settings › Secrets › Actions › `SUPABASE_ACCESS_TOKEN`, puis relancer ce workflow.\n\n%s\n' "$RUN")
+          CORPS=$(printf '🔴 **Les fonctions Edge ne sont pas déployées.** Ce qui a été fusionné sur `main` dans `supabase/functions/` n'\''est PAS en production.\n\nSi le journal dit `401 Unauthorized` : le jeton a expiré. En créer un sur https://supabase.com/dashboard/account/tokens, le reposer dans Settings › Secrets › Actions › `SUPABASE_ACCESS_TOKEN`, puis relancer ce workflow.\n\nSi le journal dit `Confirmation required` ou refuse une option : le CLI Supabase a changé de version, voir le commentaire au-dessus de `setup-cli` dans le workflow.\n\n%s\n' "$RUN")
           if [ -n "$NUM" ]; then
             printf '%s' "$CORPS" | gh issue comment "$NUM" --body-file -
           else
