@@ -56,6 +56,7 @@ trace de ce qu'on a sciemment écarté.
 | D5 · Montrer ce que l'action a produit | Feuille d'ajout : le pli « Détails » porte le nom et l'adresse du lieu trouvé ; écran « Ajout (lieu trouvé) » dans `verif-ui` ; les parcours d'import lisent le pli FERMÉ |
 | E10 · La même demande, le même moteur | `diagnose-link` envoie la destination, comme l'app ; `diag-deno-google.ts` mesure sous Deno, comme la fonction |
 | F5 · Rempli n'est pas juste | `diag-verify` compte les fiches posées à moins d'1 km du point attendu |
+| F2 · Fusionné n'est pas livré | Après une fusion qui touche `supabase/functions/` : lire « Déployer les fonctions Supabase », puis `diagnose-link` et le banc sur `main` (ils mesurent la production). CLI Supabase figé en 3.1.0 dans `deploy-edge-functions.yml` |
 
 ## Détection de lieux — ce qui a été mesuré
 
