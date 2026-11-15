@@ -57,6 +57,9 @@ trace de ce qu'on a sciemment écarté.
 | E10 · La même demande, le même moteur | `diagnose-link` envoie la destination, comme l'app ; `diag-deno-google.ts` mesure sous Deno, comme la fonction |
 | F5 · Rempli n'est pas juste | `diag-verify` compte les fiches posées à moins d'1 km du point attendu |
 | F2 · Fusionné n'est pas livré | Après une fusion qui touche `supabase/functions/` : lire « Déployer les fonctions Supabase », puis `diagnose-link` et le banc sur `main` (ils mesurent la production). CLI Supabase figé en 3.1.0 dans `deploy-edge-functions.yml` |
+| A7 · Porté par l'existant | Un carnet se colle dans le champ d'ajout ou par le bouton « Coller » de la Réserve : aucun bouton de plus. La fiche ouverte EST la page du carnet ; le rangement par quartier est une option du tri |
+| D4 · Annulable, même en lot | Coller un carnet : « 📦 32 lieux mis en réserve » · « Annuler » retire tout d'un geste (`ajouterLeCarnet`, `TripView`) |
+| C3 · Complétion auto, sans rien inventer | Fiche d'un carnet : situer puis illustrer dans la foulée, une fiche après l'autre ; des horaires « à vérifier » restent du texte, jamais un « Fermé » deviné (`horairesVersOsm`) |
 
 ## Détection de lieux — ce qui a été mesuré
 
@@ -131,6 +134,56 @@ est payante et que la clé publique Supabase est lisible dans le bundle :
 Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 
 ## Décisions récentes
+
+- **Le carnet de visite, sans PDF à part** (14–15 novembre 2026). Demandé, avec
+  un carnet de Venise de 33 pages : « une PDF avec les lieux, sur la forme de
+  celui que je te joins », sinon « que chaque activité ajoutée ressemble
+  davantage à chaque page d'activité », mais « je ne veux pas non plus générer
+  un PDF à part […] le but est de passer le moins de temps possible sur
+  l'application ». Recommandé puis accepté (« Ok pour tout ») :
+  · **La fiche ouverte est la page du carnet** (`pageFiche.js`) : catégorie ·
+    quartier, présentation, tuiles Horaires et Prix, « Bon à savoir », crédit
+    de la photo. Rien n'est affiché vide.
+  · **Photo et deux phrases de Wikipédia, créditées**, sans rien demander
+    (`illustrer.js`) : Wikidata → Wikipédia en français → Commons. Mesuré
+    (`diag-carnet`) : les monuments oui (9 sur 10), les restaurants non (1 sur
+    15) — on n'invente pas de photo pour ceux-là.
+  · **La Réserve se range par quartier** (`quartiers.js`). Mesuré dans cinq
+    villes : aucun champ de la carte ouverte n'est le quartier partout, d'où
+    un niveau choisi par voyage.
+  · **Coller un carnet crée ses fiches d'un coup** (`carnet.js`) : nom,
+    adresse, présentation, horaires, prix, « bon à savoir », quartier. Mesuré
+    sur le carnet entier, sous trois formes d'extraction : `pdftotext -raw`,
+    la copie d'un lecteur de PDF (pdf.js, celui de Firefox : capitales
+    espacées « V I S I T E ») et `pdftotext` par défaut (lignes vides, tuiles
+    lues titre après titre) : **32 lieux sur 32** sous les trois. La première
+    version en lisait 21 : elle mesurait la ligne pleine sur le « bon à
+    savoir », plus large que la colonne de présentation, et collait l'adresse
+    au nom. La colonne se mesure maintenant sur les lignes coupées en pleine
+    phrase (la suivante commence par une minuscule).
+  · **Un seul bouton pour tout mettre en réserve : celui du bas de la
+    feuille**, toujours visible, qui devient « 📦 31 en réserve » et prend les
+    deux tiers du pied. Le premier rendu en montrait deux (« Mettre 31 en
+    réserve » dans la liste, « En réserve » en bas, qui aurait enregistré une
+    fiche vide). Ce qui est déjà dans le voyage part décoché, et le dit ;
+    « Annuler » retire tout le lot d'un geste.
+  · **Les horaires d'un carnet ne passent au format machine que s'ils sont
+    sûrs** : 8 lieux sur 32 (« Lun-sam 9h30 - 17h15 », « Dim-jeu 10h30 -
+    22h30 »…) ; adresse, présentation, « bon à savoir » et quartier pour les
+    32, un montant pour 27 (« Gratuit », « Budget élevé » n'en sont pas). « Midi et soir », « Fermé le jeudi (à vérifier) », « ≈ 16h -
+    1h » restent du texte — l'app ne dira ni « ouvert » ni « fermé » plutôt
+    que de se tromper. Si la carte ouverte apporte ensuite des horaires sûrs,
+    ils font foi sur la page (« à vérifier », c'est vérifié).
+  · **Le quartier de la carte passe AVANT celui du carnet**, qui comble ses
+    trous (une île, une fiche pas encore située). Mesuré sur ce carnet : il
+    range ses visites par paires de sestieri (« San Marco & Rialto ») et ses
+    restaurants un par un (« San Marco », « Rialto ») ; suivi à la lettre,
+    San Marco faisait trois groupes. Une fiche montrée seule garde les mots
+    du carnet.
+  · **Pas d'export PDF** : la demande l'écartait d'emblée (« pas un PDF à
+    part »), tout reste dans la fiche. Si l'utilisateur le redemande, la voie
+    gratuite est l'impression du navigateur — non vérifiée en mode
+    application sur iPhone.
 
 - **Un lieu qui n'est pas là où se passe le voyage, et un nom que la carte
   ouverte ne porte pas** (11–12 novembre 2026). Demandé : « quand je copie des
@@ -1374,6 +1427,15 @@ Modèle : `claude-haiku-4-5-20251001`, environ 0,001 € par lien.
 - **Les chemins légende, TikTok et site générique d'`extract-place`** écrivent
   encore un lieu retenu sur un seul mot en commun près du voyage (corrigé pour
   les liens Google et les noms tapés seulement, journal A-092).
+- **La copie d'un PDF sur iPhone (Fichiers, Aperçu) n'a pas été mesurée.**
+  Le carnet a été lu sous trois extractions (pdftotext deux fois, pdf.js) ;
+  ni Safari, ni l'app Fichiers, ni Chrome (PDFium) n'ont pu être rejoués ici.
+  Un carnet illisible ne casse rien : le texte retombe dans le champ comme
+  avant. À vérifier au premier collage réel.
+- **Les noms doubles d'un carnet se situent mal** (« Palais des Doges & Pont
+  des Soupirs », « Pont du Rialto & Grand Canal ») : la recherche par le nom
+  entier ne trouve ni l'un ni l'autre. L'adresse du carnet, elle, est juste ;
+  elle ne sert pas encore à situer la fiche.
 - Vercel Deployment Protection à passer sur « Only Preview Deployments » pour
   que la preview soit accessible sans compte (F2).
 

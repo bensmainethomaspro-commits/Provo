@@ -454,6 +454,10 @@ html, body, #root { min-height: 100dvh; height: 100%; }
 .sheet__close:hover { background: var(--border-strong); }
 .sheet__body { flex: 1; overflow-y: auto; padding: 6px 20px 12px; }
 .sheet__footer { padding: 10px 20px 14px; display: flex; gap: 10px; flex-shrink: 0; border-top: 1px solid var(--border); background: var(--surface-raised); }
+/* « 📦 31 en réserve » ne tient pas dans une moitié de pied de feuille : le
+   geste principal prend les deux tiers, « Annuler » se resserre. */
+.sheet__footer--large > .btn { flex: 1 1 0; min-width: 0; }
+.sheet__footer--large > .btn--primary { flex-grow: 2; }
 
 /* ─── FORM ───────────────────────────────────────────────── */
 .form-group { margin-bottom: 14px; }
@@ -5353,6 +5357,8 @@ h1, h2, h3,
   gap: 8px; margin-top: 14px;
 }
 .fiche-page__tuile:only-child { grid-column: 1 / -1; }
+/* Un prix écrit en phrases, des horaires de carnet : l'une sous l'autre. */
+.fiche-page__tuiles--larges { grid-template-columns: 1fr; }
 .fiche-page__tuile {
   background: var(--surface-sunken);
   border-radius: var(--radius-md);
@@ -5372,6 +5378,7 @@ h1, h2, h3,
   overflow-wrap: anywhere;
 }
 .fiche-page__valeur + .fiche-page__valeur { margin-top: 2px; }
+.fiche-page__valeur--lignes { white-space: pre-line; }
 .fiche-page__quand { color: var(--text-muted); font-weight: 600; }
 .fiche-page__creneau { display: inline-block; white-space: pre; }
 .fiche-page__bon {
@@ -6252,7 +6259,9 @@ h1, h2, h3,
 .autres-lieux__titre {
   margin: 0 0 8px; font-size: var(--t-sm); font-weight: 600; color: var(--text-muted);
 }
-.autres-lieux__liste { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
+/* `minmax(0, 1fr)` : sans lui, un nom long (« Palais des Doges & Pont des
+   Soupirs ») élargit la colonne au-delà du cadre au lieu de s'abréger. */
+.autres-lieux__liste { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
 .autres-lieux__item {
   display: flex; align-items: center; gap: 9px;
   width: 100%; min-height: 44px; padding: 0 8px;
@@ -6264,6 +6273,7 @@ h1, h2, h3,
 .autres-lieux__coche { font-size: var(--t-lg); color: var(--accent-deep, var(--accent)); flex-shrink: 0; }
 .autres-lieux__nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .autres-lieux__valider { width: 100%; }
+.autres-lieux__deja { color: var(--text-muted); font-size: var(--t-sm); }
 
 /* ─── Le ⋯ d'une fiche : 33 × 20 px mesurés ───────────────────────────────
    C'est la porte d'entrée vers modifier, supprimer et déplacer — les trois

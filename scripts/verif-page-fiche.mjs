@@ -110,5 +110,38 @@ console.log('\n5 · La page');
     !vide.presentation && !vide.horaires.length && !vide.prix && !vide.bon.length && !vide.credit && !vide.surtitre, J(vide));
 }
 
+console.log('\n6 · Une fiche venue d’un carnet');
+{
+  const p = pageDeFiche({
+    title: 'Scuola Grande di San Rocco', quartier: 'San Polo & Dorsoduro',
+    horairesTexte: 'Tous les jours 9h30 - 17h30\nDernière entrée 17h', openingHours: 'Mo-Su 09:30-17:30',
+    prixTexte: '12 € plein tarif\nRéduit 10 €', price: '12',
+  }, { libelle: 'Visite' });
+  v('les horaires tels que le carnet les écrit, nuance comprise',
+    dites(p) === 'Tous les jours 9h30 - 17h30 / Dernière entrée 17h', J(p.horaires));
+  v('… en texte qui revient à la ligne', p.horaires.every(b => b.texte), J(p.horaires));
+  v('le prix du carnet, sur ses deux lignes', p.prix === '12 € plein tarif\nRéduit 10 €', J(p.prix));
+  v('un prix en phrases : les tuiles l’une sous l’autre', p.larges === true);
+  const g = pageDeFiche({ title: 'Gallerie dell’Accademia', horairesTexte: 'Mar-dim 8h15 - 19h15\nFermé le lundi',
+    openingHours: 'Tu-Su 08:15-19:15' });
+  v('« Fermé le lundi » dit une fois, par le carnet, pas redit en « bon à savoir »',
+    dites(g) === 'Mar-dim 8h15 - 19h15 / Fermé le lundi' && g.bon.length === 0, J(g));
+  const verifie = pageDeFiche({ title: 'Osteria da Alberto', horairesTexte: 'Midi et soir\nFermé le dimanche (à vérifier)',
+    openingHours: 'Mo-Sa 12:00-15:00,18:30-22:30' });
+  v('« à vérifier » puis la carte sait : ses horaires font foi',
+    dites(verifie) === 'Lun–sam 12h–15h, 18h30–22h30' && J(verifie.bon) === '["Fermé le dimanche"]', J(verifie));
+  const change = pageDeFiche({ title: 'Basilique', prixTexte: '≈ 3 € (6 € coupe-file en ligne)', price: 6 },
+    { prix: n => `${n} €` });
+  v('un montant changé à la main remplace le prix du carnet', change.prix === '6 €', J(change.prix));
+  const budget = pageDeFiche({ title: 'Caffè Florian', prixTexte: 'Budget élevé\nSupplément orchestre ≈ 6 - 7 €', price: 0 });
+  v('« Budget élevé » reste dit, même sans montant', budget.prix.startsWith('Budget élevé'), J(budget.prix));
+  const libre = pageDeFiche({ title: 'Pont', prixTexte: 'Gratuit', price: 0 });
+  v('« Gratuit » du carnet, montant nul', libre.prix === 'Gratuit', J(libre.prix));
+  const court = pageDeFiche({ title: 'Antico Forno', openingHours: 'Mo-Su 11:30-21:30', price: '5' });
+  v('des horaires de la carte et un petit prix : côte à côte', court.larges === false, J(court));
+  const illisible = pageDeFiche({ title: 'X', openingHours: 'Apr-Oct: Mo-Su 09:00-19:00' });
+  v('une règle de la carte qu’on ne lit pas revient à la ligne aussi', illisible.horaires[0].texte === true);
+}
+
 console.log(`\n${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);

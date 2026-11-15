@@ -29,6 +29,7 @@ import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
 import { illustrer, resteAIllustrer, aIllustrer, empreinte, fichierDe } from '../utils/illustrer';
 import { choisirNiveau, quartierDe, rangerParQuartier, rangementPossible } from '../utils/quartiers';
+import { lireCarnet } from '../utils/carnet';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -450,6 +451,45 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     return aJour;
   };
 
+  /**
+   * Situer la fiche, puis — si elle vient de l'être — chercher sa photo et sa
+   * présentation autour de son point, tout de suite plutôt qu'au prochain
+   * passage de la fouille silencieuse.
+   */
+  const situerPuisIllustrer = async (activity, activityId, location) => {
+    let aJour = await completerDepuisLaCarte(activity, activityId, location);
+    const situee = (a) => Number.isFinite(a.lat) && Number.isFinite(a.lon);
+    if (!situee(activity) && situee(aJour) && resteAIllustrer(aJour)) {
+      aJour = await completerDepuisLaCarte(aJour, activityId, location);
+    }
+    return aJour;
+  };
+
+  // Un carnet collé ajoute des dizaines de fiches d'un coup. Elles se
+  // complètent l'une après l'autre — la carte ouverte demande une seconde
+  // entre deux recherches — et sans proposer d'aller lire leurs sites : le
+  // carnet a déjà dit horaires et prix, la fouille silencieuse fera le reste.
+  const fileDuCarnet = useRef(Promise.resolve());
+  const ajouterLeCarnet = (lieux) => {
+    const avant = tripRef.current;
+    const ajouts = lieux.map(a => ({ a, id: addToReserve(tripId, a) }));
+    const n = ajouts.length;
+    // Trente fiches d'un geste se retirent d'un geste.
+    if (avant) pushUndo(avant, `📦 ${n} lieu${n > 1 ? 'x' : ''} mis en réserve`);
+    navigateTab('reserve');
+    // Un temps pour annuler — et pour que `tripRef` voie les nouvelles fiches —
+    // avant la première recherche.
+    fileDuCarnet.current = fileDuCarnet.current.then(() => new Promise(r => setTimeout(r, 1500)));
+    for (const { a, id } of ajouts) {
+      fileDuCarnet.current = fileDuCarnet.current.then(async () => {
+        // Annulé entre-temps : rien à compléter. Hors ligne : la fouille
+        // silencieuse s'en chargera au retour du réseau.
+        if (!navigator.onLine || !tripRef.current?.reserve?.some(r => r.id === id)) return;
+        await situerPuisIllustrer(a, id, { type: 'reserve' });
+      }).catch(() => {});
+    }
+  };
+
   const fouillerEnSilence = async () => {
     const f = fouilleAutoRef.current;
     if (f.enCours || propsAuto?.length) return;
@@ -817,7 +857,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     let texte = '';
     // Refus de l'utilisateur, ou API absente : on ouvre quand même la feuille.
     try { texte = await navigator.clipboard.readText(); } catch { /* rien à coller */ }
-    const lien = premierLien(texte);
+    // Un carnet entier passe tel quel : la feuille propose ses lieux.
+    const lien = texte.includes('\n') && lireCarnet(texte) ? texte : premierLien(texte);
     // Rien d'exploitable : on ouvre quand même la feuille, prête à recevoir.
     setLienColle(lien || null);
     setSheetDefaultDayId(null);
@@ -960,7 +1001,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   // n'attend pas le réseau, et un échec ne casse rien.
   const autoEnrich = async (activity, activityId, location) => {
     if (!activityId || activity.isMeal) return;
-    const aJour = await completerDepuisLaCarte(activity, activityId, location);
+    const aJour = await situerPuisIllustrer(activity, activityId, location);
 
     // Les bases ouvertes s'arrêtent là. Le site du lieu, lui, donne les
     // horaires réels, une gamme de prix et de quoi décrire l'endroit — c'est
@@ -1466,8 +1507,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         type="button"
                         className="reserve-search-coller"
                         onClick={collerUnLien}
-                        title="Coller un lien depuis le presse-papier"
-                        aria-label="Coller un lien depuis le presse-papier"
+                        title="Coller un lien ou un carnet depuis le presse-papier"
+                        aria-label="Coller un lien ou un carnet depuis le presse-papier"
                       ><Icone de={ClipboardPaste} /></button>
                       <button
                         type="button"
@@ -1494,8 +1535,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         type="button"
                         className="reserve-cmd reserve-search-coller"
                         onClick={collerUnLien}
-                        title="Coller un lien depuis le presse-papier"
-                        aria-label="Coller un lien depuis le presse-papier"
+                        title="Coller un lien ou un carnet depuis le presse-papier"
+                        aria-label="Coller un lien ou un carnet depuis le presse-papier"
                       ><Icone de={ClipboardPaste} /></button>
                       {/* Un lieu dont on ignore les horaires n'est jamais masqué :
                           le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
@@ -1850,6 +1891,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
         lienInitial={lienEnCours}
+        onAjouterCarnet={ajouterLeCarnet}
       />
 
       {fouilleEnCours && (

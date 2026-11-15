@@ -22,7 +22,7 @@
  *                                   [--seul <motif>] [--json] [--garder-captures]
  */
 import { chromium } from 'playwright';
-import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { trip as TRIP, settings as SETTINGS } from './ui-fixture.mjs';
 import { brancherReseau } from './reseau-stubs.mjs';
@@ -1710,6 +1710,84 @@ const PARCOURS = [
       await t.ouvrirVoyage();
       await t.onglet(/Réserve/i);
       t.verifier('le rangement par quartier est retenu', (await t.combien('.reserve-groupe__titre--quartier')) >= 4);
+    } },
+
+  { groupe: 'Réserve', nom: 'Coller un carnet crée toutes ses fiches d’un coup', depart: VENISE_QUARTIERS,
+    intention: "Préparer le voyage avec un carnet (un guide en PDF, des notes) : tout copier, "
+      + "coller, et trouver dans la Réserve une fiche complète par lieu — sans rien retaper.",
+    async faire(t) {
+      const carnet = readFileSync(new URL('./fixtures/carnet-venise.txt', import.meta.url), 'utf8');
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const avant = (await t.voyage()).reserve.length;
+
+      // 1. Collé dans le champ d'ajout, comme on colle un lien.
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.p.evaluate((texte) => {
+        const champ = document.querySelector('input[placeholder*="colle un lien"]');
+        champ.focus();
+        const dt = new DataTransfer();
+        dt.setData('text/plain', texte);
+        champ.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      }, carnet);
+      await t.p.waitForTimeout(500);
+      const titre = await t.p.locator('.autres-lieux--carnet .autres-lieux__titre').first().innerText().catch(() => '');
+      t.verifier('le carnet est lu : « Ce carnet compte 10 lieux »', /compte 10 lieux/.test(titre), titre || '(rien)');
+      const champ = await t.p.locator('input[placeholder*="colle un lien"]').inputValue().catch(() => '?');
+      t.verifier('le texte ne s’entasse pas dans le champ', champ === '', JSON.stringify(champ.slice(0, 40)));
+      const forno = t.p.locator('.autres-lieux__item', { hasText: 'Antico Forno' }).first();
+      t.verifier('un lieu déjà dans la Réserve part décoché, et le dit',
+        (await forno.getAttribute('aria-pressed')) === 'false' && /déjà dans ta Réserve/.test(await forno.innerText()),
+        await forno.innerText().catch(() => '(absent)'));
+      // Le bouton du bas de la feuille, toujours visible, compte ce qui part —
+      // et il est le seul : pas de second bouton au bout de trente lignes.
+      const bouton = await t.p.locator('.sheet__footer .btn--primary').innerText().catch(() => '');
+      t.verifier('le bouton du bas compte les 9 autres, et il est le seul', /9 en réserve/.test(bouton)
+        && (await t.combien('.autres-lieux__valider')) === 0, bouton);
+      const deborde = await t.p.evaluate(() => {
+        const cadre = document.querySelector('.autres-lieux')?.getBoundingClientRect();
+        return [...document.querySelectorAll('.autres-lieux__item')].filter(i => i.getBoundingClientRect().right > cadre.right + 1).length;
+      });
+      t.verifier('un nom long s’abrège dans son cadre', deborde === 0, `${deborde} lignes débordent`);
+
+      // 2. Trente fiches d'un geste se retirent d'un geste.
+      await t.clic('.sheet__footer .btn--primary', { delai: 900 });
+      const toast = await t.p.locator('.undo-toast__msg').innerText().catch(() => '');
+      t.verifier('« 9 lieux mis en réserve », annulable', /9 lieux mis en réserve/.test(toast)
+        && await t.visible('.undo-toast__btn'), toast || '(aucun message)');
+      t.verifier('la feuille s’est refermée sur la Réserve', !(await t.visible('.sheet')) && (await t.voyage()).reserve.length === avant + 9,
+        `${(await t.voyage()).reserve.length} fiches`);
+      await t.clic('.undo-toast__btn', { texte: /Annuler/, delai: 700 });
+      t.verifier('« Annuler » les retire toutes', (await t.voyage()).reserve.length === avant, `${(await t.voyage()).reserve.length} fiches`);
+
+      // 3. Par le bouton « Coller » de la Réserve, et en écartant un lieu.
+      await t.p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await t.p.evaluate((texte) => navigator.clipboard.writeText(texte), carnet);
+      await t.clic('.reserve-search-coller', { delai: 1200 });
+      t.verifier('le bouton « Coller » de la Réserve lit le carnet aussi', await t.visible('.autres-lieux--carnet'));
+      await t.clic('.autres-lieux__item', { texte: 'Margaret Duchamp', delai: 300 });
+      await t.clic('.sheet__footer .btn--primary', { texte: /8 en réserve/, delai: 1200 });
+      const v = await t.voyage();
+      t.verifier('huit fiches de plus', v.reserve.length === avant + 8, `${v.reserve.length - avant} ajoutées`);
+      const b = v.reserve.find(a => a.title === 'Basilique Saint-Marc') || {};
+      t.verifier('la fiche porte ce que dit le carnet',
+        b.address === 'Piazza San Marco' && b.category === 'visite' && b.quartier === 'San Marco & Rialto'
+        && /^Joyau byzantin/.test(b.description || '') && b.bonASavoir === 'Tenue correcte exigée : épaules et genoux couverts.',
+        JSON.stringify({ address: b.address, category: b.category, quartier: b.quartier, bon: b.bonASavoir }));
+      t.verifier('horaires lisibles ET sûrs pour « ouvert / fermé »',
+        b.horairesTexte === 'Lun-sam 9h30 - 17h15\nDim 14h - 17h15' && b.openingHours === 'Mo-Sa 09:30-17:15; Su 14:00-17:15',
+        JSON.stringify([b.horairesTexte, b.openingHours]));
+      t.verifier('un prix pour le budget, et le texte du carnet', b.price === 3 && /coupe-file/.test(b.prixTexte || ''),
+        JSON.stringify([b.price, b.prixTexte]));
+      t.verifier('une durée de visite, comme tout ajout', b.durationHours === 2, JSON.stringify([b.durationHours, b.durationMinutes]));
+      t.verifier('Antico Forno n’est pas en double', v.reserve.filter(a => a.title === 'Antico Forno').length === 1);
+
+      // 4. Ouverte, la fiche se lit comme la page du carnet.
+      await t.clic('.activity-card__title', { texte: /Basilique Saint-Marc/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('la page dit horaires, prix et « bon à savoir » du carnet',
+        /Lun-sam 9h30 - 17h15/.test(page) && /coupe-file en ligne/.test(page) && /Bon à savoir · Tenue correcte/.test(page),
+        page.slice(0, 160));
     } },
 
   { groupe: 'Réserve', nom: 'Un titre à rallonge ne casse pas la fiche', depart: TITRE_LONG,

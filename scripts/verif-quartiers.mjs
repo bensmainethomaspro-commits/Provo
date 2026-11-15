@@ -86,18 +86,25 @@ console.log('\n4 · Vienne : le Bezirk');
     `${c.niveau} → ${noms(rangerParQuartier(VIENNE, c))}`);
 }
 
-console.log('\n5 · Le quartier d’un carnet passe avant la carte');
+console.log('\n5 · Le carnet comble les trous de la carte, sans passer devant elle');
 {
+  // Le carnet de Venise range ses visites par paires de sestieri et ses
+  // restaurants un par un : suivi à la lettre, San Marco aurait fait trois groupes.
   const mixte = [
     { title: 'Basilique Saint-Marc', quartier: 'San Marco & Rialto', secteurs: { neighbourhood: 'San Marco' } },
+    { title: 'Caffè Florian', quartier: 'San Marco', secteurs: { neighbourhood: 'San Marco' } },
     { title: 'Antico Forno', quartier: 'San Polo' },
+    { title: 'Murano', quartier: 'Les Îles de la Lagune', secteurs: { suburb: 'Venezia-Murano-Burano' } },
     ...VENISE.slice(0, 4),
   ];
   const c = choisirNiveau(mixte);
   const g = rangerParQuartier(mixte, c);
-  v('la fiche du carnet garde son secteur', quartierDe(mixte[0], c) === 'San Marco & Rialto');
-  v('les deux façons de nommer cohabitent, sans doublon de casse',
-    noms(g) === 'San Marco:3 | San Marco & Rialto:1 | San Polo:2', noms(g));
+  v('la carte situe la basilique dans son sestiere', quartierDe(mixte[0], c) === 'San Marco', quartierDe(mixte[0], c));
+  v('une fiche pas encore située prend le secteur du carnet', quartierDe(mixte[2], c) === 'San Polo');
+  v('une île hors des sestieri aussi', quartierDe(mixte[3], c) === 'Les Îles de la Lagune', quartierDe(mixte[3], c));
+  v('un seul « San Marco », et l’île à part',
+    noms(g) === 'Les Îles de la Lagune:1 | San Marco:5 | San Polo:2', noms(g));
+  v('une fiche montrée seule garde les mots du carnet', quartierDe(mixte[0]) === 'San Marco & Rialto');
   const casse = rangerParQuartier([{ title: 'a', quartier: 'Cannaregio' }, { title: 'b', quartier: 'CANNAREGIO' }]);
   v('« CANNAREGIO » et « Cannaregio » : un seul groupe', casse.length === 1 && casse[0].items.length === 2, noms(casse));
 }

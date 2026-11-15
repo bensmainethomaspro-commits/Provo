@@ -19,7 +19,7 @@
  * Usage : node scripts/verif-ui.mjs [--url http://localhost:4173] [--json]
  */
 import { chromium } from 'playwright';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { trip, settings } from './ui-fixture.mjs';
 import { brancherReseau } from './reseau-stubs.mjs';
 
@@ -628,6 +628,49 @@ const ECRANS = [
         .fill('Maria-Theresien-Platz, Innere Stadt, 1010 Vienne, Autriche').catch(() => {});
       await p.locator('.details-pli').click().catch(() => {});
       await p.waitForTimeout(400);
+    },
+  },
+  // Un carnet collé (15 novembre 2026) : une liste de dizaines de lieux, le
+  // bouton avant elle, un doublon décoché qui le dit — et la fiche qui en
+  // sort, avec ses horaires et son prix écrits en phrases.
+  {
+    nom: 'Ajout (carnet collé)',
+    repere: '.autres-lieux--carnet',
+    aller: async (p) => {
+      await ouvrirVoyage(p);
+      await p.locator('.header__add-btn').click().catch(() => {});
+      await p.waitForTimeout(500);
+      await p.evaluate((texte) => {
+        const champ = document.querySelector('input[placeholder*="colle un lien"]');
+        const dt = new DataTransfer();
+        dt.setData('text/plain', texte);
+        champ?.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      }, readFileSync(new URL('./fixtures/carnet-venise.txt', import.meta.url), 'utf8'));
+      await p.waitForTimeout(500);
+    },
+  },
+  {
+    nom: 'Fiche d’un carnet',
+    repere: '.fiche-page__tuiles--larges',
+    aller: async (p) => {
+      await p.evaluate(() => {
+        const t = JSON.parse(localStorage.getItem('provo_trips'));
+        t[0].reserve.unshift({ id: 'carnet1', title: 'Basilique Saint-Marc', category: 'visite', status: 'todo',
+          durationHours: 2, durationMinutes: 0, travelerIds: [], quartier: 'San Marco & Rialto',
+          address: 'Piazza San Marco',
+          description: "Joyau byzantin aux célèbres mosaïques dorées, sous cinq coupoles. La Pala d'Oro et le trésor se visitent en supplément.",
+          horairesTexte: 'Lun-sam 9h30 - 17h15\nDim 14h - 17h15', openingHours: 'Mo-Sa 09:30-17:15; Su 14:00-17:15',
+          prixTexte: "≈ 3 € (6 € coupe-file en ligne)\nPala d'Oro + 5 €", price: 3,
+          bonASavoir: 'Tenue correcte exigée : épaules et genoux couverts.' });
+        localStorage.setItem('provo_trips', JSON.stringify(t));
+        sessionStorage.setItem('verif_garder', '1');
+      });
+      await p.reload({ waitUntil: 'domcontentloaded' }); await p.waitForTimeout(900);
+      await ouvrirVoyage(p); await onglet(p, /Réserve/i);
+      await p.locator('.activity-card__title', { hasText: 'Basilique Saint-Marc' }).first().click({ timeout: 4000 }).catch(() => {});
+      await p.waitForTimeout(600);
+      await p.evaluate(() => document.querySelector('.fiche-page__tuiles')?.scrollIntoView({ block: 'center' }));
+      await p.waitForTimeout(300);
     },
   },
   {

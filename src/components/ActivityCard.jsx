@@ -274,16 +274,17 @@ function ActivityCard({
                   {/* Une tuile n'existe que si elle a quelque chose à dire : pas
                       de cadre « Prix » vide sur une fiche qui n'en a pas. */}
                   {(lue.horaires.length > 0 || lue.prix) && (
-                    <div className="fiche-page__tuiles">
+                    <div className={`fiche-page__tuiles${lue.larges ? ' fiche-page__tuiles--larges' : ''}`}>
                       {lue.horaires.length > 0 && (
                         <div className="fiche-page__tuile">
                           <div className="fiche-page__label"><Icone de={Clock} taille={14} /> Horaires</div>
                           {/* Chaque créneau d'un seul tenant : la tuile coupe
-                              entre deux services, jamais dans « 9h30–17h15 ». */}
+                              entre deux services, jamais dans « 9h30–17h15 ».
+                              Le texte d'un carnet, lui, revient à la ligne. */}
                           {lue.horaires.map((b, i) => (
                             <div key={i} className="fiche-page__valeur">
                               {b.quand && <span className="fiche-page__quand">{b.quand} </span>}
-                              {b.creneaux.map((c, k) => (
+                              {b.texte ? b.creneaux[0] : b.creneaux.map((c, k) => (
                                 <span key={k} className="fiche-page__creneau">{c}{k < b.creneaux.length - 1 ? ', ' : ''}</span>
                               ))}
                             </div>
@@ -293,7 +294,7 @@ function ActivityCard({
                       {lue.prix && (
                         <div className="fiche-page__tuile">
                           <div className="fiche-page__label"><Icone de={Euro} taille={14} /> Prix</div>
-                          <div className="fiche-page__valeur">{lue.prix}</div>
+                          <div className="fiche-page__valeur fiche-page__valeur--lignes">{lue.prix}</div>
                         </div>
                       )}
                     </div>

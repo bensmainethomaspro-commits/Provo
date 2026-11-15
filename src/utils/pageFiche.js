@@ -12,6 +12,7 @@
  */
 
 import { quartierDe } from './quartiers.js';
+import { horairesVersOsm, montantDe } from './carnet.js';
 
 const JOURS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const COURTS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
@@ -180,23 +181,38 @@ function joursFermes(fermes) {
  * Tout ce que la page montre sous le nom du lieu.
  *
  * @param {object} a la fiche
- * @param {{libelle?: string, prix?: (n: number) => string}} [o]
- *   `libelle` : le nom de la catégorie ; `prix` : la mise en forme d'un montant.
+ * @param {{libelle?: string, prix?: (n: number) => string, quartier?: string|null}} [o]
+ *   `libelle` : le nom de la catégorie ; `prix` : la mise en forme d'un montant ;
+ *   `quartier` : celui où la Réserve range la fiche.
  */
 export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €`, quartier = null } = {}) {
   const description = String(a.description || '').trim();
   const notes = String(a.notes || '').trim();
   const faits = Array.isArray(a.faits) ? a.faits : [];
 
-  const lus = horairesLisibles(a.openingHours);
+  // Les horaires d'un carnet se montrent comme il les écrit : ses nuances
+  // (« Dernière entrée 17h », « à vérifier ») ne tiennent pas dans le format
+  // machine, qui ne sert qu'à dire « ouvert » ou « fermé ». Sauf quand des
+  // horaires sûrs sont venus d'ailleurs — la carte, ou la personne — là où le
+  // carnet disait « Midi et soir, jours à vérifier » : vérifiés, ils font foi.
+  const duCarnet = String(a.horairesTexte || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const lusAilleurs = horairesLisibles(a.openingHours);
+  const carnetDepasse = duCarnet.length > 0 && lusAilleurs !== null && a.openingHours !== horairesVersOsm(duCarnet);
+  const montrerCarnet = duCarnet.length > 0 && !carnetDepasse;
+  const lus = montrerCarnet ? null : lusAilleurs;
   const brut = String(a.openingHours || '').trim();
   // Ce qui ne se lit pas (« Midi et soir », une règle de saison) se montre tel
-  // quel, d'un seul tenant.
-  const horaires = lus ? lus.blocs : brut ? [{ quand: '', creneaux: [brut] }] : [];
+  // quel, en texte qui revient à la ligne (`texte`).
+  const horaires = montrerCarnet ? duCarnet.map(l => ({ quand: '', creneaux: [l], texte: true }))
+    : lus ? lus.blocs : brut ? [{ quand: '', creneaux: [brut], texte: true }] : [];
 
-  const montant = parseFloat(a.price);
-  const prixDit = String(a.prixTexte || '').trim()
-    || (montant > 0 ? prix(montant) : faits.includes('gratuit') ? 'Gratuit' : '');
+  const montant = parseFloat(a.price) > 0 ? parseFloat(a.price) : 0;
+  // Le prix tel que le carnet l'écrit (« ≈ 3 € (6 € coupe-file en ligne) »),
+  // tant que le montant n'a pas été changé à la main depuis.
+  const prixCarnet = String(a.prixTexte || '').trim();
+  const carnetTient = prixCarnet && (montantDe(prixCarnet.split('\n')[0]) ?? 0) === montant;
+  const prixDit = carnetTient ? prixCarnet
+    : montant > 0 ? prix(montant) : faits.includes('gratuit') ? 'Gratuit' : '';
 
   const bon = [
     String(a.bonASavoir || '').trim().replace(/\.$/, ''),
@@ -204,6 +220,11 @@ export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €`, quartie
     lus ? joursFermes(lus.fermes) : '',
     lus?.feries ? 'Fermé les jours fériés' : '',
   ].filter(Boolean);
+
+  // Deux tuiles côte à côte laissent au prix une dizaine de caractères par
+  // ligne sur un téléphone : un prix écrit en phrases (« ≈ 10 - 25 €
+  // (estimation) ») ou des horaires longs passent l'une sous l'autre.
+  const larges = prixDit.length > 12 || prixDit.includes('\n') || (montrerCarnet && duCarnet.some(l => l.length > 24));
 
   return {
     // Le quartier tel que la Réserve le range (passé par l'écran), sinon le
@@ -215,6 +236,7 @@ export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €`, quartie
     notes: description ? notes : '',
     horaires,
     prix: prixDit,
+    larges,
     bon,
     credit: String(a.photoCredit || '').trim(),
   };

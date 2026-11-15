@@ -13,8 +13,15 @@
  * Aucun champ n'est le bon partout. La fiche garde donc tous les niveaux
  * (`secteurs`), et le rangement choisit, pour CE voyage, celui qui le découpe
  * en quelques quartiers : ni un seul groupe (la ville entière), ni un groupe
- * par lieu. Un quartier écrit par la personne ou lu dans un carnet
- * (`quartier`) passe avant tout : c'est sa façon de découper la ville.
+ * par lieu.
+ *
+ * Le quartier lu dans un carnet (`quartier`) comble les trous de la carte —
+ * une île qu'elle ne range dans aucun quartier, une fiche pas encore située —
+ * sans passer devant elle. Mesuré sur le carnet de Venise (15 novembre 2026) :
+ * il range ses visites par paires de sestieri (« San Marco & Rialto ») et ses
+ * restaurants un par un (« San Marco », « Rialto ») ; suivi à la lettre, il
+ * aurait coupé San Marco en trois groupes. La carte, elle, découpe tout le
+ * voyage de la même façon.
  */
 
 export const NIVEAUX = ['neighbourhood', 'quarter', 'suburb', 'city_district'];
@@ -46,7 +53,7 @@ const cle = (v) => net(v).toLowerCase();
  * @returns {{niveau: string|null, grossiers: Set<string>}}
  */
 export function choisirNiveau(fiches) {
-  const situees = (fiches || []).filter(f => f?.secteurs && !net(f.quartier));
+  const situees = (fiches || []).filter(f => f?.secteurs);
   const n = situees.length;
   const grossiers = new Set();
   let meilleur = null, score = -Infinity;
@@ -73,14 +80,15 @@ export function choisirNiveau(fiches) {
 }
 
 /**
- * Le quartier d'une fiche, dans le découpage choisi pour le voyage.
- * Sans contexte (une fiche affichée seule), le niveau le plus local connu.
+ * Le quartier d'une fiche, dans le découpage choisi pour le voyage ; à défaut
+ * celui du carnet, puis le niveau le plus local que la carte connaisse.
+ * Sans contexte (une fiche affichée seule), le carnet d'abord.
  */
 export function quartierDe(fiche, { niveau = null, grossiers = new Set() } = {}) {
   if (!fiche) return '';
-  if (net(fiche.quartier)) return net(fiche.quartier);
   const s = fiche.secteurs || {};
   if (niveau && net(s[niveau])) return net(s[niveau]);
+  if (net(fiche.quartier)) return net(fiche.quartier);
   for (const k of NIVEAUX) if (!grossiers.has(k) && k !== niveau && net(s[k])) return net(s[k]);
   return '';
 }
