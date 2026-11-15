@@ -52,6 +52,16 @@ async function page(url, delai = 9000) {
   } catch { return ''; } finally { clearTimeout(t); }
 }
 
+// Ce que la carte ouverte range sous « quartier » : le champ change d'une ville
+// à l'autre (sestiere, Bezirk, arrondissement, rione, barri). L'app retient
+// le premier présent de cette liste (`quartierDe`, src/utils/enrich.js).
+const ORDRE_QUARTIER = ['quarter', 'suburb', 'city_district', 'neighbourhood', 'borough'];
+function champsQuartier(a = {}) {
+  const vus = ORDRE_QUARTIER.filter(k => a[k]).map(k => `${k}=${a[k]}`);
+  const retenu = ORDRE_QUARTIER.map(k => a[k]).find(Boolean) || '—';
+  return `« ${retenu} »  (${vus.join(' · ') || 'aucun champ'})`;
+}
+
 // Les faits de la carte ouverte dont on sait écrire un « bon à savoir ».
 const FAITS = ['reservation', 'payment:cash', 'payment:credit_cards', 'payment:cards', 'outdoor_seating', 'takeaway',
   'wheelchair', 'fee', 'charge', 'dress_code', 'diet:vegetarian', 'diet:vegan', 'diet:gluten_free', 'toilets',
@@ -62,12 +72,13 @@ async function mesurer(nom) {
     commonsLieu: 0, commonsAutour: 0, imageSite: false, texteSite: 0 };
 
   const l = await json(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nom)}`
-    + `&viewbox=${CADRE}&bounded=1&format=json&limit=1&extratags=1&namedetails=1`);
+    + `&viewbox=${CADRE}&bounded=1&format=json&limit=1&extratags=1&namedetails=1&addressdetails=1`);
   await sleep(1100);
   const p = l?.[0];
   if (!p) return m;
   const ex = p.extratags || {};
   m.trouve = p.namedetails?.name || p.name || p.display_name.split(',')[0];
+  m.quartiers = champsQuartier(p.address);
   m.horaires = Boolean(ex.opening_hours);
   m.site = ex.website || ex['contact:website'] || ex.url || '';
   m.faits = FAITS.filter(k => ex[k]);
@@ -122,6 +133,7 @@ function ligne(m) {
   if (!m.trouve) return `  ✗ ${m.nom.padEnd(30)} introuvable sur la carte ouverte`;
   const texte = m.texteFr ? `fr ${String(m.texteFr).padStart(3)} c` : m.texteAutre ? `(${m.texteAutre}) ` : m.texteSite ? `site ${m.texteSite} c` : '—';
   return `  ${m.photoWiki || m.imageSite ? '✓' : '✗'} ${m.nom.slice(0, 30).padEnd(30)} « ${m.trouve.slice(0, 26)} »\n`
+    + `      quartier : ${m.quartiers}\n`
     + `      photo wiki ${oui(m.photoWiki)} · Commons du lieu ${String(m.commonsLieu).padStart(2)} · à 80 m ${String(m.commonsAutour).padStart(2)}`
     + ` · image du site ${oui(m.imageSite)} | texte ${texte} | horaires ${oui(m.horaires)} | faits : ${m.faits.join(', ') || '—'}`;
 }
@@ -136,6 +148,25 @@ function bilan(titre, ms) {
   console.log(`   aucun texte du tout                   : ${c(m => m.texteFr < 60 && m.texteSite < 20)}/${n}`);
   console.log(`   horaires                              : ${c(m => m.horaires)}/${n}`);
   console.log(`   au moins un fait pour « bon à savoir » : ${c(m => m.faits.length)}/${n}`);
+}
+
+// D'autres villes, pour le seul quartier : ce que « quartier » veut dire ailleurs.
+const AILLEURS = [
+  ['Café Central', 'Wien'], ['Kunsthistorisches Museum', 'Wien'], ['Naschmarkt', 'Wien'],
+  ['Musée du Louvre', 'Paris'], ['Le Comptoir du Relais', 'Paris'], ['Sacré-Cœur', 'Paris'],
+  ['Da Enzo al 29', 'Roma'], ['Fontana di Trevi', 'Roma'], ['Pantheon', 'Roma'],
+  ['Sagrada Família', 'Barcelona'], ['Bar del Pla', 'Barcelona'],
+  ['Pastéis de Belém', 'Lisboa'], ['Time Out Market Lisboa', 'Lisboa'],
+];
+console.log('\n════ QUARTIER, AILLEURS ════');
+for (const [nom, ville] of AILLEURS) {
+  const l = await json(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(`${nom}, ${ville}`)}`
+    + '&format=json&limit=1&addressdetails=1');
+  await sleep(1100);
+  const ph = await json(`https://photon.komoot.io/api/?q=${encodeURIComponent(`${nom} ${ville}`)}&limit=1&lang=fr`);
+  const q = ph?.features?.[0]?.properties || {};
+  console.log(`  ${`${nom} (${ville})`.padEnd(36)} ${l?.[0] ? champsQuartier(l[0].address) : 'introuvable'}`
+    + `\n      photon : district=${q.district || '—'} · locality=${q.locality || '—'}`);
 }
 
 for (const [titre, noms] of [['VISITES', VISITES], ['RESTAURANTS, CAFÉS, BARS', TABLES]]) {
