@@ -58,6 +58,12 @@ const SEUL_HORS_LIGNE = args.includes('--hors-ligne');
 const SEUL_RESEAU = args.includes('--reseau');
 const CAPTURES = '/tmp/provo-parcours';
 
+// « Cherché dans les sources libres » se retient sur la fiche, pour qu'elle ne
+// repasse pas demain (`illustreSig`, `illustreAt`, `illustreVide`). Ce n'est
+// pas une information écrite à la place de la personne : les parcours qui
+// vérifient « rien n'a été écrit sans accord » comparent le voyage sans elles.
+const sansMarques = (v) => JSON.stringify(v, (k, x) => (/^illustre(Sig|At|Vide)$/.test(k) ? undefined : x));
+
 // ── Boîte à outils offerte à chaque parcours ────────────────────────────────
 function outils(p, journal) {
   const t = {
@@ -1997,7 +2003,7 @@ const PARCOURS = [
         `${t.appels().enrichPlace || 0} appels`);
       const popup = await t.visible('.sheet--check, .enrich-photo, .check-card');
       t.verifier('une confirmation est proposée', popup);
-      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      t.verifier("rien n'a été écrit sans accord", sansMarques(await t.voyage()) === sansMarques(JSON.parse(avant)));
       if (!popup) return;
       const texte = await t.texte();
       t.verifier('les informations trouvées sont montrées',
@@ -2026,9 +2032,52 @@ const PARCOURS = [
       t.verifier('la barre de messages annonce les fiches complétées', /complétées? en ligne/.test(msg),
         msg || '(rien)');
       t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
-      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      t.verifier("rien n'a été écrit sans accord", sansMarques(await t.voyage()) === sansMarques(JSON.parse(avant)));
       await t.clic('.undo-toast__btn', { texte: /Voir/, delai: 900 });
       t.verifier('« Voir » ouvre les propositions, à accepter ou refuser', await t.visible('.check-card'));
+    } },
+
+  { groupe: 'Réseau', nom: 'Un monument reçoit sa photo créditée et sa présentation, sans rien demander', depart: 'voyage',
+    reseau: { nominatim: 'monument', enrichPlace: 'vide' },
+    intention: "Ouvrir son voyage et retrouver, sur un musée gardé en Réserve sans photo ni texte, "
+      + "sa photo, deux phrases de présentation et son quartier — comme une page de carnet.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Le passage silencieux part dix secondes après l'ouverture, puis la
+      // carte ouverte demande une seconde entre deux recherches.
+      let musee = null;
+      for (let i = 0; i < 45 && !musee?.photoUrl; i++) {
+        await t.p.waitForTimeout(1000);
+        musee = (await t.voyage())?.reserve.find(a => a.id === 'r3');
+      }
+      t.verifier('la photo est arrivée', /900px-Kunsthistorisches/.test(musee?.photoUrl || ''), musee?.photoUrl || '(aucune)');
+      t.verifier('avec son auteur et sa licence', musee?.photoCredit === 'Thomas Ledl · CC BY-SA 4.0 · Wikimedia Commons', musee?.photoCredit);
+      t.verifier('deux phrases en français, sans la parenthèse d’encyclopédie',
+        musee?.description === "Le musée d'Histoire de l'art de Vienne est l'un des premiers musées d'art au monde. Il abrite les collections des Habsbourg.",
+        musee?.description);
+      t.verifier('le quartier', musee?.quartier === 'Innere Stadt', musee?.quartier);
+      t.verifier('ce que la personne avait saisi n’a pas bougé',
+        musee?.title === 'Kunsthistorisches Museum' && musee.price === '21' && musee.openingHours === 'Tu-Su 10:00-18:00',
+        JSON.stringify({ t: musee?.title, p: musee?.price, h: musee?.openingHours }));
+      const v = await t.voyage();
+      const autres = [...v.reserve, ...v.days.flatMap(d => d.activities)].filter(a => a.id !== 'r3');
+      t.verifier('aucune autre fiche ne reçoit la photo du musée',
+        !autres.some(a => /Kunsthistorisches/.test(a.photoUrl || '') || /Habsbourg/.test(a.description || '')));
+      t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
+
+      // Et la fiche ouverte la montre comme une page.
+      await t.onglet(/Réserve/i);
+      await t.clic('.activity-card__title', { texte: /Kunsthistorisches/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('ouverte, la fiche dit la catégorie et le quartier', /VISITE · INNERE STADT/i.test(page), page.slice(0, 80));
+      t.verifier('… sa présentation', /premiers musées d'art au monde/.test(page));
+      t.verifier('… ses horaires en français, pas au format de la carte', /Mar–dim 10h–18h/.test(page) && !/Tu-Su/.test(page), page.slice(0, 300));
+      t.verifier('… ce qu’il faut savoir : réservation conseillée, fermé le lundi',
+        /Bon à savoir · Réservation conseillée · Fermé le lundi/.test(page), page.slice(0, 400));
+      t.verifier('… et le crédit de la photo', /Photo : Thomas Ledl · CC BY-SA 4\.0/.test(page));
+      const img = await t.p.locator('.activity-card--page .activity-card__photo').first()
+        .evaluate(el => ({ l: el.naturalWidth, h: el.getBoundingClientRect().height })).catch(() => null);
+      t.verifier('la photo est affichée, en grand', img?.l > 0 && img.h >= 200, JSON.stringify(img));
     } },
 
   { groupe: 'Réseau', nom: "Compléter sans rien trouver ne redemandera pas", depart: 'voyage',

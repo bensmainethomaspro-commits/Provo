@@ -27,6 +27,7 @@ import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice,
 import { loinDuVoyage } from '../utils/situer';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
+import { illustrer, resteAIllustrer, aIllustrer, empreinte, fichierDe } from '../utils/illustrer';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -371,6 +372,74 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     setPropsAuto(null);
     setUndoVisible(false);
   };
+  /**
+   * Ce que les sources libres savent du lieu, écrit sans rien demander :
+   * adresse, horaires, point, quartier — puis sa photo et deux phrases de
+   * présentation quand la carte ouverte le relie à Wikidata (les monuments,
+   * presque toujours ; les restaurants, presque jamais : `diag-carnet.mjs`).
+   * Rend la fiche telle qu'elle est après.
+   */
+  const completerDepuisLaCarte = async (activity, activityId, location) => {
+    const complete = activity.address && activity.openingHours && activity.lat;
+    const aVoir = resteAIllustrer(activity);
+    let aJour = activity;
+    if (!complete || aVoir) {
+      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
+      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
+      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
+      // la carte ouverte le connaît, là où il est (11 novembre 2026).
+      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
+      const suivi = { repondu: false };
+      let found = situee
+        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
+          { rayonKm: RAYON_FICHE_KM, nomEntier: true, suivi })
+        : await lookupPlace(activity.title, trip?.destination || '', { lat: anchor?.lat, lon: anchor?.lon });
+      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
+      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
+      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
+      // voyage — un point lointain, c'est à la personne de le confirmer, et
+      // l'écran d'ajout le lui montre.
+      if (!found?.lat && !situee && anchor) {
+        const s = await situerParLeServeur(activity.title, trip?.destination || '', { memoire: true });
+        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
+        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
+      }
+      const patch = missingFieldsFrom(activity, found) || {};
+      // La photo et la présentation ne se cherchent que pour une fiche déjà
+      // située : le lieu retenu porte alors son nom ENTIER, à deux pas d'elle.
+      // Une fiche située à l'instant passera au prochain tour.
+      if (aVoir) {
+        const lien = found?.wikidata || found?.wikipedia;
+        const ill = (lien || fichierDe(activity.photoUrl))
+          ? await illustrer({ wikidata: found?.wikidata, wikipedia: found?.wikipedia, photoUrl: activity.photoUrl || '' })
+          : null;
+        if (ill?.photoUrl && !activity.photoUrl) {
+          Object.assign(patch, { photoUrl: ill.photoUrl, photoCredit: ill.photoCredit || '' },
+            ill.photoPage ? { photoPage: ill.photoPage } : {});
+        } else if (ill?.photoCredit && activity.photoUrl && !activity.photoCredit) {
+          Object.assign(patch, { photoCredit: ill.photoCredit }, ill.photoPage ? { photoPage: ill.photoPage } : {});
+        }
+        if (ill?.description && !(activity.description || '').trim()) patch.description = ill.description;
+        // Cherché : on s'en souvient, pour ne pas redemander demain. Si aucun
+        // service n'a répondu (hors ligne, portail d'hôtel), on n'a rien
+        // cherché du tout — la fiche repassera.
+        if (suivi.repondu) {
+          Object.assign(patch, {
+            illustreSig: empreinte({ ...activity, ...patch }),
+            illustreAt: new Date().toISOString(),
+            // La carte ouverte ne connaît pas ce lieu : on y reviendra.
+            illustreVide: !found,
+          });
+        }
+      }
+      if (Object.keys(patch).length) {
+        updateActivity(tripId, location, activityId, patch);
+        aJour = { ...activity, ...patch };
+      }
+    }
+    return aJour;
+  };
+
   const fouillerEnSilence = async () => {
     const f = fouilleAutoRef.current;
     if (f.enCours || propsAuto?.length) return;
@@ -379,10 +448,19 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     // dix fois dans le métro.
     if (Date.now() - f.derniere < 30 * 60 * 1000) return;
     const liste = aEnrichir(tripRef.current);
-    if (!liste.length) return;
+    // Les fiches d'avant : photo, présentation et quartier viennent des sources
+    // libres et s'écrivent sans rien demander. Douze par passage — la carte
+    // ouverte demande une seconde entre deux recherches.
+    const sansImage = aIllustrer(tripRef.current).slice(0, 12);
+    if (!liste.length && !sansImage.length) return;
     f.enCours = true;
     f.derniere = Date.now();
     try {
+      for (const { activite, emplacement } of sansImage) {
+        if (!navigator.onLine) break;
+        await completerDepuisLaCarte(activite, activite.id, emplacement);
+      }
+      if (!liste.length) return;
       const { propositions, marques } = await fouillerLesFiches(liste, {});
       marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
       if (propositions.length) {
@@ -872,34 +950,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   // n'attend pas le réseau, et un échec ne casse rien.
   const autoEnrich = async (activity, activityId, location) => {
     if (!activityId || activity.isMeal) return;
-    const complete = activity.address && activity.openingHours && activity.lat;
-    let aJour = activity;
-    if (!complete) {
-      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
-      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
-      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
-      // la carte ouverte le connaît, là où il est (11 novembre 2026).
-      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
-      let found = situee
-        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
-          { rayonKm: RAYON_FICHE_KM, nomEntier: true })
-        : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
-      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
-      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
-      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
-      // voyage — un point lointain, c'est à la personne de le confirmer, et
-      // l'écran d'ajout le lui montre.
-      if (!found?.lat && !situee && anchor) {
-        const s = await situerParLeServeur(activity.title, trip.destination, { memoire: true });
-        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
-        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
-      }
-      const patch = missingFieldsFrom(activity, found);
-      if (patch) {
-        updateActivity(tripId, location, activityId, patch);
-        aJour = { ...activity, ...patch };
-      }
-    }
+    const aJour = await completerDepuisLaCarte(activity, activityId, location);
 
     // Les bases ouvertes s'arrêtent là. Le site du lieu, lui, donne les
     // horaires réels, une gamme de prix et de quoi décrire l'endroit — c'est
