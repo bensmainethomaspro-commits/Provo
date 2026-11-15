@@ -24,6 +24,9 @@ function ActivityCard({
   // déjà durée, prix et adresse ; `action` se range dans la rangée du haut, à
   // côté du ⋯, qui a de la hauteur à revendre.
   etat, action,
+  // Le quartier tel que la Réserve range le voyage : le même mot dans l'en-tête
+  // du groupe et sur la fiche ouverte.
+  quartier = null,
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -140,7 +143,7 @@ function ActivityCard({
   // avant d'y aller. C'est la même fiche, pas un écran de plus (14 nov. 2026).
   // Le souvenir d'un voyage passé garde son dessin de polaroid.
   const lue = expanded && !showPolaroid
-    ? pageDeFiche(activity, { libelle: meta.label, prix: (n) => formatPrice(n) })
+    ? pageDeFiche(activity, { libelle: meta.label, prix: (n) => formatPrice(n), quartier })
     : null;
 
   return (

@@ -87,6 +87,11 @@ console.log('\n5 · La page');
     J(p.bon) === '["Réservation obligatoire","Fermé le jeudi"]', J(p.bon));
   v('pas de prix : pas de tuile', p.prix === '');
   v('pas de quartier : la catégorie seule', p.surtitre === 'Resto');
+  const carte = pageDeFiche({ title: 'Da Enzo al 29', secteurs: { neighbourhood: 'Trastevere', suburb: 'Municipio Roma I' } }, { libelle: 'Resto' });
+  v('le quartier de la carte, le plus local', carte.surtitre === 'Resto · Trastevere', carte.surtitre);
+  const range = pageDeFiche({ title: 'Louvre', secteurs: { quarter: "Saint-Germain-l'Auxerrois", suburb: 'Paris 1er Arrondissement' } },
+    { libelle: 'Visite', quartier: 'Paris 1er Arrondissement' });
+  v('… ou celui que la Réserve a choisi pour tout le voyage', range.surtitre === 'Visite · Paris 1er Arrondissement', range.surtitre);
 }
 {
   const p = pageDeFiche({ title: 'Antico Forno', openingHours: 'Midi et soir', prixTexte: '5 - 12 €', price: '5',

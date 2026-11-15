@@ -13,7 +13,7 @@ import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
 import Icone from '../components/Icone';
-import { ChevronLeft, ChevronDown, Plus, Ellipsis, Search, NotebookPen, Luggage, Scale, Dices, Sparkles, MapPinCheck, UserPlus, ChartColumn, Settings, Trash2, CalendarDays, Wallet, Lightbulb, Map as MapIcone, ClipboardPaste, X, LayoutGrid, List, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Ellipsis, Search, NotebookPen, Luggage, Scale, Dices, Sparkles, MapPinCheck, UserPlus, ChartColumn, Settings, Trash2, CalendarDays, Wallet, Lightbulb, Map as MapIcone, ClipboardPaste, X, LayoutGrid, List, GripVertical, MapPin } from 'lucide-react';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useEtatRetenu } from '../hooks/useEtatRetenu';
@@ -28,6 +28,7 @@ import { loinDuVoyage } from '../utils/situer';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
 import { illustrer, resteAIllustrer, aIllustrer, empreinte, fichierDe } from '../utils/illustrer';
+import { choisirNiveau, quartierDe, rangerParQuartier, rangementPossible } from '../utils/quartiers';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -208,12 +209,21 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     return l;
   }, [hotelReserve?.lat, hotelReserve?.lon, trip?.days, trip?.reserve]); // eslint-disable-line react-hooks/exhaustive-deps
   const repere = lieuxRepere.find(l => l.id === depuisId) || null;
+  // Les quartiers de la Réserve, comme le sommaire d'un carnet (« San Marco »,
+  // « Cannaregio »…). Ils viennent de la carte ouverte quand la fiche est
+  // située, ou du carnet collé ; le niveau qui découpe le voyage se choisit
+  // sur le voyage entier (`quartiers.js`). Le rangement n'est proposé qu'à
+  // partir de deux quartiers : un seul groupe n'apprendrait rien.
+  const contexteQuartier = useMemo(() => choisirNiveau(trip?.reserve || []), [trip?.reserve]);
+  const parQuartierPossible = useMemo(
+    () => rangementPossible(trip?.reserve || [], contexteQuartier), [trip?.reserve, contexteQuartier]);
   // Un tri retenu dont la référence a disparu (hôtel retiré, position
   // éteinte, lieu supprimé) retombe sur l'ordre d'ajout au lieu d'un menu
   // sans option choisie.
   const tri = (reserveSort === 'hotel' && !hotelReserve) || (reserveSort === 'proche' && !geoReserve.position)
-    || (reserveSort === 'depuis' && !repere)
+    || (reserveSort === 'depuis' && !repere) || (reserveSort === 'quartier' && !parQuartierPossible)
     ? 'default' : reserveSort;
+  const parQuartier = tri === 'quartier';
   const choisirTri = (v) => {
     // Choisir « depuis un lieu » sans repère : on part de l'hôtel s'il existe,
     // sinon du premier lieu situé. Le sélecteur juste dessous permet d'en
@@ -1494,13 +1504,13 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         onClick={() => setOuvertSeul(v => !v)}
                         aria-pressed={ouvertSeul}
                       ><span className="point-ouvert" aria-hidden="true" />Ouvert</button>
-                      <button
+                      {!parQuartier && <button
                         className={`reserve-cmd${grouper ? ' reserve-cmd--on' : ''}`}
                         onClick={() => setGrouper(v => !v)}
                         aria-pressed={grouper}
                         aria-label={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
                         title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
-                      ><Icone de={grouper ? LayoutGrid : List} /></button>
+                      ><Icone de={grouper ? LayoutGrid : List} /></button>}
                       {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
@@ -1512,6 +1522,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
                         {geoReserve.position && <option value="proche">Le plus proche</option>}
+                        {parQuartierPossible && <option value="quartier">Par quartier</option>}
                         {hotelReserve && <option value="hotel">Depuis l'hôtel</option>}
                         {lieuxRepere.length > 0 && <option value="depuis">Depuis un lieu…</option>}
                       </select>
@@ -1535,7 +1546,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                     </select>
                   </label>
                 )}
-                {!grouper && !rechercheOuverte && (
+                {(!grouper || parQuartier) && !rechercheOuverte && (
                   <div className="reserve-filter">
                     {/* « Tout » ne sert qu'à revenir : muet tant qu'on n'est
                         parti nulle part. */}
@@ -1606,13 +1617,18 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                   // Regroupement par catégorie : c'est le premier tri de l'œil.
                   // Il ne s'applique que quand on regarde TOUT — filtrer sur une
                   // seule catégorie rendrait les en-têtes absurdes.
-                  const groupes = (grouper && reserveFilter === 'all')
+                  // Par quartier : un groupe par quartier, dans l'ordre alphabétique
+                  // — on y cherche celui où l'on est —, les fiches sans quartier
+                  // à la fin. Le filtre de catégorie s'y applique (« les restos,
+                  // quartier par quartier »).
+                  const groupes = parQuartier ? rangerParQuartier(retenues, contexteQuartier)
+                    : (grouper && reserveFilter === 'all')
                     ? CATEGORIES
                         .map(cat => ({ cat, items: retenues.filter(a => a.category === cat.id) }))
                         .filter(g => g.items.length)
                     : [{ cat: null, items: retenues }];
                   const sansCat = retenues.filter(a => !CATEGORIES.some(c => c.id === a.category));
-                  if (grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
+                  if (!parQuartier && grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
                   // Réordonner n'a de sens que sur une liste à plat, dans son
                   // ordre propre : groupée ou triée, la position manuelle ne se
                   // voit plus, donc la déplacer ne veut rien dire.
@@ -1629,10 +1645,16 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                   }
 
                   return groupes.map(g => (
-                    <div key={g.cat?.id || 'autres'} className="reserve-groupe">
+                    <div key={g.cle ? `q-${g.cle}` : g.cat?.id || 'autres'} className="reserve-groupe">
                       {g.cat && (
                         <div className="reserve-groupe__titre">
                           {g.cat.emoji} {g.cat.label}
+                          <span className="reserve-groupe__n">{g.items.length}</span>
+                        </div>
+                      )}
+                      {g.quartier && (
+                        <div className="reserve-groupe__titre reserve-groupe__titre--quartier">
+                          <Icone de={MapPin} taille={14} /> {g.quartier}
                           <span className="reserve-groupe__n">{g.items.length}</span>
                         </div>
                       )}
@@ -1652,6 +1674,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                       ><Icone de={GripVertical} taille={18} /></button>
                     )}
                     <ActivityCard
+                      quartier={quartierDe(activity, contexteQuartier) || null}
                       activity={activity}
                       enVoiture={enVoiture}
                       /* Ce qu'il faut savoir avant de piocher : ouvert ou non,

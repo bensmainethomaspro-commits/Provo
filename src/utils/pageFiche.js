@@ -11,6 +11,8 @@
  * avec certitude n'est pas deviné — la fiche montre alors le texte tel quel.
  */
 
+import { quartierDe } from './quartiers.js';
+
 const JOURS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const COURTS = ['lun', 'mar', 'mer', 'jeu', 'ven', 'sam', 'dim'];
 const LONGS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
@@ -181,7 +183,7 @@ function joursFermes(fermes) {
  * @param {{libelle?: string, prix?: (n: number) => string}} [o]
  *   `libelle` : le nom de la catégorie ; `prix` : la mise en forme d'un montant.
  */
-export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €` } = {}) {
+export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €`, quartier = null } = {}) {
   const description = String(a.description || '').trim();
   const notes = String(a.notes || '').trim();
   const faits = Array.isArray(a.faits) ? a.faits : [];
@@ -204,7 +206,9 @@ export function pageDeFiche(a, { libelle = '', prix = (n) => `${n} €` } = {}) 
   ].filter(Boolean);
 
   return {
-    surtitre: [libelle, String(a.quartier || '').trim()].filter(Boolean).join(' · '),
+    // Le quartier tel que la Réserve le range (passé par l'écran), sinon le
+    // plus local que la fiche connaisse.
+    surtitre: [libelle, quartier ?? quartierDe(a)].filter(Boolean).join(' · '),
     // La note de la personne tient lieu de présentation quand le lieu n'en a
     // pas : elle n'est alors pas redite plus bas.
     presentation: description || notes,

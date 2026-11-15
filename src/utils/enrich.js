@@ -13,6 +13,7 @@ import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-
 // (scripts/verif-completion.mjs), qui ne devine pas les extensions.
 import { avecDelai } from './reseau.js';
 import { faitsDepuisEtiquettes } from './pageFiche.js';
+import { secteursDe, secteursDePhoton } from './quartiers.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
@@ -78,15 +79,6 @@ function buildAddress(a = {}) {
   const city = a.city || a.town || a.village || a.municipality;
   return [street || a.suburb || a.neighbourhood, city, a.country]
     .filter(Boolean).join(', ');
-}
-
-/**
- * Le quartier d'une adresse de la carte ouverte — ce que le carnet appelle le
- * « secteur » (San Marco, Cannaregio, Dorsoduro). C'est par lui que la Réserve
- * se range quand on demande « qu'y a-t-il par ici ? ».
- */
-export function quartierDe(a = {}) {
-  return String(a.quarter || a.suburb || a.city_district || a.neighbourhood || a.borough || '').trim();
 }
 
 /**
@@ -205,7 +197,9 @@ async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm 
       openingHours: ex.opening_hours || '',
       ...(ex.website || ex['contact:website'] ? { link: ex.website || ex['contact:website'] } : {}),
       ...(price != null ? { price } : {}),
-      ...(quartierDe(p.address) ? { quartier: quartierDe(p.address) } : {}),
+      // Tous les niveaux de quartier : lequel découpe le voyage se décide sur
+      // le voyage entier (`quartiers.js`), pas lieu par lieu.
+      ...(secteursDe(p.address) ? { secteurs: secteursDe(p.address) } : {}),
       ...enPlus(ex),
     };
   } catch {
@@ -249,7 +243,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = R
         city: q.city || q.town || q.village, country: q.country,
       }),
       openingHours: '',
-      ...(q.district ? { quartier: String(q.district) } : {}),
+      ...(secteursDePhoton(q) ? { secteurs: secteursDePhoton(q) } : {}),
     };
   } catch {
     return null;
@@ -381,7 +375,7 @@ function merge(a, b) {
     openingHours: a.openingHours || b.openingHours,
     ...((a.link || b.link) ? { link: a.link || b.link } : {}),
     ...((a.price ?? b.price) != null ? { price: a.price ?? b.price } : {}),
-    ...((a.quartier || b.quartier) ? { quartier: a.quartier || b.quartier } : {}),
+    ...((a.secteurs || b.secteurs) ? { secteurs: a.secteurs || b.secteurs } : {}),
     ...((a.wikidata || b.wikidata) ? { wikidata: a.wikidata || b.wikidata } : {}),
     ...((a.wikipedia || b.wikipedia) ? { wikipedia: a.wikipedia || b.wikipedia } : {}),
     ...((a.faits || b.faits) ? { faits: [...new Set([...(a.faits || []), ...(b.faits || [])])] } : {}),
@@ -471,7 +465,8 @@ export function missingFieldsFrom(activity, found) {
   if (!activity.lat && found.lat) { patch.lat = found.lat; patch.lon = found.lon; }
   const noPrice = activity.price === '' || activity.price == null || parseFloat(activity.price) === 0;
   if (noPrice && found.price != null && found.price > 0) patch.price = found.price;
-  if (!activity.quartier && found.quartier) patch.quartier = found.quartier;
+  // `quartier` est celui de la personne ou de son carnet : jamais écrit ici.
+  if (!activity.secteurs && found.secteurs) patch.secteurs = found.secteurs;
   if (!Array.isArray(activity.faits) && found.faits?.length) patch.faits = found.faits;
   return Object.keys(patch).length ? patch : null;
 }

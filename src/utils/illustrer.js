@@ -100,7 +100,7 @@ export function resteAIllustrer(a, maintenant = Date.now()) {
     const t = Date.parse(a.illustreAt || '');
     if (!a.illustreVide || !Number.isFinite(t) || (maintenant - t) < REVENIR_MS) return false;
   }
-  return !a.photoUrl || !String(a.description || '').trim() || !a.quartier
+  return !a.photoUrl || !String(a.description || '').trim() || (!a.quartier && !a.secteurs)
     || (!a.photoCredit && Boolean(fichierDe(a.photoUrl)));
 }
 

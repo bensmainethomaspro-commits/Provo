@@ -312,6 +312,20 @@ const TITRE_LONG = { ...TRIP, reserve: [{
   category: 'resto', status: 'todo', durationHours: 1, durationMinutes: 30, travelerIds: [] },
   ...TRIP.reserve] };
 
+// Une Réserve à Venise telle que la carte ouverte la situe : le sestiere est
+// dans `neighbourhood`, et `suburb` vaut la commune pour tous (mesuré le
+// 15 novembre 2026). Plus une fiche venue d'un carnet, avec SON secteur.
+const VENISE_QUARTIERS = { ...TRIP, name: 'Venise', destination: 'Venise', reserve: [
+  ['q1', 'Palazzo Ducale', 'visite', 'San Marco'], ['q2', 'Campanile di San Marco', 'visite', 'San Marco'],
+  ['q3', 'Ponte di Rialto', 'balade', 'San Polo'], ['q4', 'Antico Forno', 'resto', 'San Polo'],
+  ['q5', 'Ai Promessi Sposi', 'resto', 'Cannaregio'], ['q6', 'Taverna San Trovaso', 'resto', 'Dorsoduro'],
+].map(([id, title, category, sestiere], i) => ({
+  id, title, category, status: 'todo', durationHours: 1, durationMinutes: 0, travelerIds: [],
+  lat: 45.434 + i * 0.002, lon: 12.335 + i * 0.001, address: `${sestiere}, Venise, Italie`,
+  secteurs: { neighbourhood: sestiere, suburb: 'Venezia-Murano-Burano' },
+})).concat([{ id: 'q7', title: 'Burano', category: 'balade', status: 'todo', durationHours: 1, durationMinutes: 0,
+  travelerIds: [], quartier: 'Les îles de la lagune', description: "L'île aux maisons colorées." }]) };
+
 // Une idée qui coche les trois signaux que le produit promet de donner :
 // fermée aujourd'hui, loin du reste, dans une journée déjà chargée.
 const A_SIGNALER = { ...TRIP,
@@ -1658,6 +1672,46 @@ const PARCOURS = [
       t.verifier('le bilan reste accessible', await t.visible('.recap-hero, .trip-recap'));
     } },
 
+  { groupe: 'Réserve', nom: 'Ranger la Réserve par quartier', depart: VENISE_QUARTIERS,
+    intention: "Sur place, voir d'un coup d'œil ce qu'on a gardé dans chaque quartier — "
+      + "comme le sommaire d'un carnet — sans rien saisir.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const options = await t.p.$$eval('.reserve-sort-select option', os => os.map(o => o.value));
+      t.verifier('« Par quartier » est proposé dans le tri', options.includes('quartier'), options.join(', '));
+      await t.p.selectOption('.reserve-sort-select', 'quartier');
+      await t.p.waitForTimeout(600);
+      // Le nom du quartier et le compte vivent dans deux éléments voisins.
+      const enTetes = () => t.p.$$eval('.reserve-groupe__titre--quartier',
+        ns => ns.map(n => `${[...n.childNodes].filter(c => !c.classList?.contains('reserve-groupe__n')).map(c => c.textContent).join('').trim()} ${n.querySelector('.reserve-groupe__n')?.textContent || ''}`.trim()));
+      const titres = await enTetes();
+      t.verifier('un groupe par sestiere, et le secteur du carnet — jamais « Venezia-Murano-Burano »',
+        titres.join(' | ') === 'Cannaregio 1 | Dorsoduro 1 | Les îles de la lagune 1 | San Marco 2 | San Polo 2',
+        titres.join(' | '));
+      t.verifier('le bouton « grouper par catégorie » s’efface plutôt que de rester inerte',
+        !(await t.visible('[aria-label="Afficher en liste, réordonnable"]')) && !(await t.visible('[aria-label="Grouper par catégorie"]')));
+      // Les restos, quartier par quartier.
+      const resto = '.reserve-filter__pill[aria-label^="Resto"]';
+      t.verifier('les pastilles de catégorie restent là', await t.visible(resto));
+      await t.clic(resto, { delai: 600 });
+      const filtres = await enTetes();
+      t.verifier('filtrer les restos garde le rangement par quartier', filtres.join(' | ') === 'Cannaregio 1 | Dorsoduro 1 | San Polo 1',
+        filtres.join(' | '));
+      // « Tout » ramène toutes les idées (toucher la pastille active ne la retire pas).
+      await t.clic('.reserve-filter__pill', { texte: /^Tout/, delai: 500 });
+      // La fiche ouverte dit le même quartier que l'en-tête de son groupe.
+      await t.clic('.activity-card__title', { texte: /Antico Forno/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('ouverte, la fiche dit « Resto · San Polo »', /RESTO · SAN POLO/i.test(page), page.slice(0, 60));
+      // Et le choix se retient d'une visite à l'autre.
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      t.verifier('le rangement par quartier est retenu', (await t.combien('.reserve-groupe__titre--quartier')) >= 4);
+    } },
+
   { groupe: 'Réserve', nom: 'Un titre à rallonge ne casse pas la fiche', depart: TITRE_LONG,
     intention: "Un lieu importé porte souvent un nom interminable.",
     async faire(t) {
@@ -2055,7 +2109,7 @@ const PARCOURS = [
       t.verifier('deux phrases en français, sans la parenthèse d’encyclopédie',
         musee?.description === "Le musée d'Histoire de l'art de Vienne est l'un des premiers musées d'art au monde. Il abrite les collections des Habsbourg.",
         musee?.description);
-      t.verifier('le quartier', musee?.quartier === 'Innere Stadt', musee?.quartier);
+      t.verifier('ses quartiers, tels que la carte les donne', musee?.secteurs?.suburb === 'Innere Stadt', JSON.stringify(musee?.secteurs));
       t.verifier('ce que la personne avait saisi n’a pas bougé',
         musee?.title === 'Kunsthistorisches Museum' && musee.price === '21' && musee.openingHours === 'Tu-Su 10:00-18:00',
         JSON.stringify({ t: musee?.title, p: musee?.price, h: musee?.openingHours }));
