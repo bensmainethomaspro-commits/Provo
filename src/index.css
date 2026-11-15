@@ -5305,6 +5305,92 @@ h1, h2, h3,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   LA FICHE OUVERTE — une page de carnet (14 novembre 2026)
+   Ouverte, la fiche se lit de haut en bas comme la page d'un guide : la photo
+   en grand, la catégorie et le quartier, le nom, l'adresse, ce qu'est le lieu,
+   deux tuiles (horaires, prix), et « bon à savoir » quand il y a quelque chose
+   à savoir. Elle montrait jusque-là les horaires au format de la carte
+   (« Mo-Sa 09:30-17:15 ») et taisait la présentation qu'elle gardait.
+   Rien n'a de cadre vide : chaque bloc n'existe que s'il a un contenu.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.activity-card--page .activity-card__photo,
+.reserve-card .activity-card--page .activity-card__photo {
+  width: 100%; height: 210px;
+  float: none; margin: 0 0 14px;
+  border-radius: var(--radius-md);
+}
+.activity-card__surtitre {
+  font-size: var(--t-xs); font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--accent-texte);
+  margin-bottom: 4px;
+}
+.activity-card--page .activity-card__title,
+.reserve-card .activity-card--page .activity-card__title {
+  font-size: var(--t-xl); font-weight: 700;
+  line-height: 1.18; letter-spacing: -0.4px;
+}
+.activity-card--page .activity-card__meta { margin-top: 8px; }
+/* L'adresse entière, sur sa ligne : c'est elle qui mène à l'itinéraire. */
+.activity-card--page .activity-card__address {
+  flex-basis: 100%; max-width: none;
+  white-space: normal; overflow: visible;
+  display: inline-flex; align-items: flex-start; gap: 6px;
+  min-height: 24px;
+}
+.activity-card--page .activity-card__address .icone { flex-shrink: 0; margin-top: 2px; }
+.activity-card--page .activity-card__expand { border-top: none; margin-top: 2px; padding-top: 0; }
+
+.fiche-page__texte {
+  font-size: var(--t-md); line-height: 1.5; color: var(--text);
+  margin: 10px 0 0;
+}
+/* Les horaires prennent plus de place que le prix : « Lun–sam 9h30–17h15 »
+   tient sur une ligne, « 12 € » n'a besoin de rien. Seule, une tuile prend
+   toute la largeur. */
+.fiche-page__tuiles {
+  display: grid; grid-template-columns: 1.7fr 1fr;
+  gap: 8px; margin-top: 14px;
+}
+.fiche-page__tuile:only-child { grid-column: 1 / -1; }
+.fiche-page__tuile {
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.fiche-page__label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--t-xs); font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.fiche-page__valeur {
+  font-size: var(--t-md); font-weight: 600; line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.fiche-page__valeur + .fiche-page__valeur { margin-top: 2px; }
+.fiche-page__quand { color: var(--text-muted); font-weight: 600; }
+.fiche-page__creneau { display: inline-block; white-space: pre; }
+.fiche-page__bon {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 8px 0 0; padding: 12px 14px;
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+  font-size: var(--t-sm); line-height: 1.45; color: var(--text);
+}
+.fiche-page__bon .icone { flex-shrink: 0; margin-top: 1px; color: var(--accent-texte); }
+.fiche-page__bon strong { font-weight: 700; color: var(--accent-texte); }
+.activity-card--page .activity-card__notes { margin-top: 10px; }
+.fiche-page__credit {
+  font-size: var(--t-xs); color: var(--text-muted);
+  margin: 10px 0 0; line-height: 1.4;
+}
+.fiche-page__credit a { color: inherit; text-decoration: underline; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
    VUE JOUR — ce qu'on lit d'abord, le reste au tap
    Avant : le total de la journée répété trois fois, chaque activité dépliée
    avec heure + durée + prix + adresse, un champ de notes vide occupant un quart
