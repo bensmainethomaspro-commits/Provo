@@ -155,5 +155,41 @@ console.log('\n8 · Une fiche qui a son point se complète autour D’ELLE');
   v('le lieu qui porte le nom entier donne ses horaires', r?.openingHours === 'Mo-Su 08:30-17:30', J(r));
 }
 
+console.log('\n9 · Ce que la carte ouverte dit en plus : quartiers, lien Wikidata, faits');
+// La fiche ouverte s'en sert (14 novembre 2026) : le quartier range la Réserve,
+// le lien Wikidata donne la photo et la présentation, les faits le « bon à savoir ».
+{
+  const { RAYON_FICHE_KM, missingFieldsFrom } = await import('../src/utils/enrich.js');
+  const SAN_MARCO = { lat: 45.4345, lon: 12.3397 };
+  reponses = { nominatim: [nomi('Basilica di San Marco', 45.43456, 12.33971, {
+    type: 'place_of_worship',
+    address: { road: 'Piazza San Marco', neighbourhood: 'San Marco', suburb: 'Venezia-Murano-Burano', city: 'Venezia', country: 'Italia' },
+    extratags: { wikidata: 'Q172988', wikipedia: 'it:Basilica di San Marco', fee: 'no', reservation: 'recommended', wheelchair: 'yes' },
+    namedetails: { name: 'Basilica di San Marco', 'name:fr': 'Basilique Saint-Marc' },
+  })] };
+  let suivi = { repondu: false };
+  r = await lookupPlace('Basilique Saint-Marc', '', SAN_MARCO, { rayonKm: RAYON_FICHE_KM, nomEntier: true, suivi });
+  v('tous les niveaux de quartier, tels quels', J(r?.secteurs) === '{"neighbourhood":"San Marco","suburb":"Venezia-Murano-Burano"}', J(r?.secteurs));
+  v('aucun quartier choisi ici : c’est le voyage entier qui choisit', r?.quartier === undefined, J(r));
+  v('le lien vers Wikidata et Wikipédia', r?.wikidata === 'Q172988' && r.wikipedia === 'it:Basilica di San Marco', J(r));
+  v('les faits qui valent d’être dits, et seulement eux', J(r?.faits) === '["reservation-conseillee","gratuit"]', J(r?.faits));
+  v('un service a répondu à cette recherche', suivi.repondu === true);
+  const patch = missingFieldsFrom({ title: 'Basilique Saint-Marc', address: 'Piazza San Marco', lat: 45.4345, lon: 12.3397 }, r);
+  v('la fiche reçoit ses quartiers et ses faits', patch?.secteurs?.neighbourhood === 'San Marco' && patch.faits?.length === 2 && patch.quartier === undefined, J(patch));
+  v('… sans écraser ceux qu’elle a déjà',
+    missingFieldsFrom({ title: 'X', address: 'a', lat: 1, lon: 1, openingHours: 'Mo 10:00-11:00', secteurs: { neighbourhood: 'Castello' }, faits: [] }, r) === null);
+
+  // « Rien trouvé » et « personne n'a répondu » rendent tous deux null.
+  suivi = { repondu: false };
+  reponses = {};
+  r = await lookupPlace('Lieu Que Personne Ne Connaît', '', { lat: 45.44, lon: 12.33 }, { rayonKm: RAYON_FICHE_KM, nomEntier: true, suivi });
+  v('rien trouvé, mais les services ont répondu', r === null && suivi.repondu === true);
+  suivi = { repondu: false };
+  reponses = { nominatim: 429, photon: 429, overpass: 429 };
+  r = await lookupPlace('Autre Lieu Inconnu', '', { lat: 45.45, lon: 12.34 }, { rayonKm: RAYON_FICHE_KM, nomEntier: true, suivi });
+  v('personne n’a répondu : ce n’est pas « ce lieu n’existe pas »', r === null && suivi.repondu === false);
+
+}
+
 console.log(`\n${ok} réussis, ${ko} échoués`);
 process.exit(ko ? 1 : 0);

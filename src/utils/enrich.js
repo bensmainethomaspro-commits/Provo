@@ -12,6 +12,8 @@ import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-
 // Avec son extension : ce fichier est aussi chargé tel quel par Node
 // (scripts/verif-completion.mjs), qui ne devine pas les extensions.
 import { avecDelai } from './reseau.js';
+import { faitsDepuisEtiquettes } from './pageFiche.js';
+import { secteursDe, secteursDePhoton } from './quartiers.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
@@ -79,7 +81,27 @@ function buildAddress(a = {}) {
     .filter(Boolean).join(', ');
 }
 
+/**
+ * Ce que la carte ouverte dit d'un lieu au-delà de son adresse : le lien vers
+ * Wikidata (d'où viennent la photo et la présentation, `illustrer.js`) et les
+ * faits à dire avant d'y aller (`pageFiche.js`).
+ */
+function enPlus(etiquettes = {}) {
+  const faits = faitsDepuisEtiquettes(etiquettes);
+  return {
+    ...(etiquettes.wikidata ? { wikidata: etiquettes.wikidata } : {}),
+    ...(etiquettes.wikipedia ? { wikipedia: etiquettes.wikipedia } : {}),
+    ...(faits.length ? { faits } : {}),
+  };
+}
+
 const GENERIC_CLASSES = ['place', 'highway', 'boundary', 'building', 'landuse'];
+
+// Combien de réponses valides les services ont rendues depuis le chargement.
+// « Rien trouvé » et « personne n'a répondu » rendent tous deux `null` : seul
+// ce compte les distingue, et l'appelant qui veut retenir « cherché, ce lieu
+// n'existe pas » ne doit pas le retenir un jour de portail captif.
+let reponsesRecues = 0;
 
 export function distKm(aLat, aLon, bLat, bLon) {
   const R = 6371, rad = d => d * Math.PI / 180;
@@ -144,6 +166,7 @@ async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm 
     const res = await avecDelai(url, DELAIS.nominatim, { headers: { 'Accept-Language': 'fr' } });
     if (!res.ok) return null;
     const data = await res.json();
+    reponsesRecues++;
     if (!Array.isArray(data) || !data.length) return null;
 
     let p = null, best = -Infinity;
@@ -174,6 +197,10 @@ async function searchNominatim(query, lat = null, lon = null, nom = '', rayonKm 
       openingHours: ex.opening_hours || '',
       ...(ex.website || ex['contact:website'] ? { link: ex.website || ex['contact:website'] } : {}),
       ...(price != null ? { price } : {}),
+      // Tous les niveaux de quartier : lequel découpe le voyage se décide sur
+      // le voyage entier (`quartiers.js`), pas lieu par lieu.
+      ...(secteursDe(p.address) ? { secteurs: secteursDe(p.address) } : {}),
+      ...enPlus(ex),
     };
   } catch {
     return null;
@@ -192,6 +219,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = R
     const res = await avecDelai(url, DELAIS.photon);
     if (!res.ok) return null;
     const data = await res.json();
+    reponsesRecues++;
     let p = null, best = -Infinity;
     for (const f of data?.features || []) {
       const [cLon, cLat] = f.geometry?.coordinates || [];
@@ -215,6 +243,7 @@ async function searchPhoton(query, lat = null, lon = null, nom = '', rayonKm = R
         city: q.city || q.town || q.village, country: q.country,
       }),
       openingHours: '',
+      ...(secteursDePhoton(q) ? { secteurs: secteursDePhoton(q) } : {}),
     };
   } catch {
     return null;
@@ -233,6 +262,7 @@ async function searchOverpass(name, lat, lon, rayonKm = 25, nomEntier = false) {
     const res = await avecDelai(`${OVERPASS}?data=${encodeURIComponent(q)}`, DELAIS.overpass);
     if (!res.ok) return null;
     const data = await res.json();
+    reponsesRecues++;
     // Le premier élément rendu n'est pas le meilleur : on prend celui qui porte
     // le nom le plus exactement, puis le plus renseigné, puis le plus proche.
     let el = null, best = -Infinity;
@@ -260,6 +290,7 @@ async function searchOverpass(name, lat, lon, rayonKm = 25, nomEntier = false) {
       openingHours: t.opening_hours || '',
       ...(t.website || t['contact:website'] ? { link: t.website || t['contact:website'] } : {}),
       ...(price != null ? { price } : {}),
+      ...enPlus(t),
     };
   } catch {
     return null;
@@ -344,6 +375,10 @@ function merge(a, b) {
     openingHours: a.openingHours || b.openingHours,
     ...((a.link || b.link) ? { link: a.link || b.link } : {}),
     ...((a.price ?? b.price) != null ? { price: a.price ?? b.price } : {}),
+    ...((a.secteurs || b.secteurs) ? { secteurs: a.secteurs || b.secteurs } : {}),
+    ...((a.wikidata || b.wikidata) ? { wikidata: a.wikidata || b.wikidata } : {}),
+    ...((a.wikipedia || b.wikipedia) ? { wikipedia: a.wikipedia || b.wikipedia } : {}),
+    ...((a.faits || b.faits) ? { faits: [...new Set([...(a.faits || []), ...(b.faits || [])])] } : {}),
   };
 }
 
@@ -361,13 +396,15 @@ export function nomSansPrecision(titre) {
  * @param {object} coords {lat, lon} du voyage, pour la recherche de proximité
  * @returns {Promise<object|null>} champs trouvés, ou null si rien de fiable
  */
-export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM, nomEntier = false } = {}) {
+export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM, nomEntier = false, suivi = null } = {}) {
   const name = (title || '').trim();
   if (name.length < 3) return null;
 
   const query = near ? `${name}, ${near}` : name;
   const key = `${query}|${coords.lat ?? ''}|${coords.lon ?? ''}|${rayonKm}|${nomEntier}`.toLowerCase();
-  if (cache.has(key)) return cache.get(key);
+  // `suivi.repondu` : un service au moins a-t-il vraiment répondu à CETTE
+  // recherche ? (Un échec retenu dix minutes ne compte pas : on n'a rien demandé.)
+  if (cache.has(key)) { if (suivi) suivi.repondu = true; return cache.get(key); }
   // Un lieu absent d'OpenStreetMap coûte jusqu'à sept appels et plus de trois
   // secondes de pauses, dans une file partagée avec le contrôle des lieux. On
   // retient l'échec dix minutes, pas plus : un échec peut venir d'une coupure
@@ -376,6 +413,7 @@ export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM
   if (echec && Date.now() - echec < ECHEC_MS) return null;
 
   const run = async () => {
+    const avant = reponsesRecues;
     // « Acropole (billets coupe-file) », « Sagrada Família - visite guidée » :
     // la précision ajoutée par l'utilisateur n'est pas dans le nom du lieu.
     const court = nomSansPrecision(name);
@@ -406,6 +444,7 @@ export async function lookupPlace(title, near, coords = {}, { rayonKm = RAYON_KM
     }
     if (found) cache.set(key, found);
     else echecs.set(key, Date.now());
+    if (suivi) suivi.repondu = reponsesRecues > avant;
     return found;
   };
 
@@ -426,5 +465,8 @@ export function missingFieldsFrom(activity, found) {
   if (!activity.lat && found.lat) { patch.lat = found.lat; patch.lon = found.lon; }
   const noPrice = activity.price === '' || activity.price == null || parseFloat(activity.price) === 0;
   if (noPrice && found.price != null && found.price > 0) patch.price = found.price;
+  // `quartier` est celui de la personne ou de son carnet : jamais écrit ici.
+  if (!activity.secteurs && found.secteurs) patch.secteurs = found.secteurs;
+  if (!Array.isArray(activity.faits) && found.faits?.length) patch.faits = found.faits;
   return Object.keys(patch).length ? patch : null;
 }

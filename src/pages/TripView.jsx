@@ -13,7 +13,7 @@ import ExpensesTab from '../components/ExpensesTab';
 import TripSearch from '../components/TripSearch';
 import ReserveAssign from '../components/ReserveAssign';
 import Icone from '../components/Icone';
-import { ChevronLeft, ChevronDown, Plus, Ellipsis, Search, NotebookPen, Luggage, Scale, Dices, Sparkles, MapPinCheck, UserPlus, ChartColumn, Settings, Trash2, CalendarDays, Wallet, Lightbulb, Map as MapIcone, ClipboardPaste, X, LayoutGrid, List, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronDown, Plus, Ellipsis, Search, NotebookPen, Luggage, Scale, Dices, Sparkles, MapPinCheck, UserPlus, ChartColumn, Settings, Trash2, CalendarDays, Wallet, Lightbulb, Map as MapIcone, ClipboardPaste, X, LayoutGrid, List, GripVertical, MapPin } from 'lucide-react';
 import { useWeather } from '../hooks/useWeather';
 import { useTripAnchor } from '../hooks/useTripAnchor';
 import { useEtatRetenu } from '../hooks/useEtatRetenu';
@@ -27,6 +27,9 @@ import { budgetStats, repasEnAttente, destinationUtile, dateLocale, formatPrice,
 import { loinDuVoyage } from '../utils/situer';
 import { useCurrencyRates } from '../hooks/useCurrencyRates';
 import { lookupPlace, missingFieldsFrom, RAYON_FICHE_KM } from '../utils/enrich';
+import { illustrer, resteAIllustrer, aIllustrer, empreinte, fichierDe } from '../utils/illustrer';
+import { choisirNiveau, quartierDe, rangerParQuartier, rangementPossible } from '../utils/quartiers';
+import { lireCarnet } from '../utils/carnet';
 import { analyserVoyage } from '../utils/verifyPlaces';
 import { ouvertMaintenant, dejaPlanifiee, manques } from '../utils/reserveView';
 import { signauxAjout } from '../utils/propositions';
@@ -207,12 +210,21 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     return l;
   }, [hotelReserve?.lat, hotelReserve?.lon, trip?.days, trip?.reserve]); // eslint-disable-line react-hooks/exhaustive-deps
   const repere = lieuxRepere.find(l => l.id === depuisId) || null;
+  // Les quartiers de la Réserve, comme le sommaire d'un carnet (« San Marco »,
+  // « Cannaregio »…). Ils viennent de la carte ouverte quand la fiche est
+  // située, ou du carnet collé ; le niveau qui découpe le voyage se choisit
+  // sur le voyage entier (`quartiers.js`). Le rangement n'est proposé qu'à
+  // partir de deux quartiers : un seul groupe n'apprendrait rien.
+  const contexteQuartier = useMemo(() => choisirNiveau(trip?.reserve || []), [trip?.reserve]);
+  const parQuartierPossible = useMemo(
+    () => rangementPossible(trip?.reserve || [], contexteQuartier), [trip?.reserve, contexteQuartier]);
   // Un tri retenu dont la référence a disparu (hôtel retiré, position
   // éteinte, lieu supprimé) retombe sur l'ordre d'ajout au lieu d'un menu
   // sans option choisie.
   const tri = (reserveSort === 'hotel' && !hotelReserve) || (reserveSort === 'proche' && !geoReserve.position)
-    || (reserveSort === 'depuis' && !repere)
+    || (reserveSort === 'depuis' && !repere) || (reserveSort === 'quartier' && !parQuartierPossible)
     ? 'default' : reserveSort;
+  const parQuartier = tri === 'quartier';
   const choisirTri = (v) => {
     // Choisir « depuis un lieu » sans repère : on part de l'hôtel s'il existe,
     // sinon du premier lieu situé. Le sélecteur juste dessous permet d'en
@@ -371,6 +383,113 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     setPropsAuto(null);
     setUndoVisible(false);
   };
+  /**
+   * Ce que les sources libres savent du lieu, écrit sans rien demander :
+   * adresse, horaires, point, quartier — puis sa photo et deux phrases de
+   * présentation quand la carte ouverte le relie à Wikidata (les monuments,
+   * presque toujours ; les restaurants, presque jamais : `diag-carnet.mjs`).
+   * Rend la fiche telle qu'elle est après.
+   */
+  const completerDepuisLaCarte = async (activity, activityId, location) => {
+    const complete = activity.address && activity.openingHours && activity.lat;
+    const aVoir = resteAIllustrer(activity);
+    let aJour = activity;
+    if (!complete || aVoir) {
+      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
+      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
+      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
+      // la carte ouverte le connaît, là où il est (11 novembre 2026).
+      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
+      const suivi = { repondu: false };
+      let found = situee
+        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
+          { rayonKm: RAYON_FICHE_KM, nomEntier: true, suivi })
+        : await lookupPlace(activity.title, trip?.destination || '', { lat: anchor?.lat, lon: anchor?.lon });
+      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
+      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
+      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
+      // voyage — un point lointain, c'est à la personne de le confirmer, et
+      // l'écran d'ajout le lui montre.
+      if (!found?.lat && !situee && anchor) {
+        const s = await situerParLeServeur(activity.title, trip?.destination || '', { memoire: true });
+        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
+        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
+      }
+      const patch = missingFieldsFrom(activity, found) || {};
+      // La photo et la présentation ne se cherchent que pour une fiche déjà
+      // située : le lieu retenu porte alors son nom ENTIER, à deux pas d'elle.
+      // Une fiche située à l'instant passera au prochain tour.
+      if (aVoir) {
+        const lien = found?.wikidata || found?.wikipedia;
+        const ill = (lien || fichierDe(activity.photoUrl))
+          ? await illustrer({ wikidata: found?.wikidata, wikipedia: found?.wikipedia, photoUrl: activity.photoUrl || '' })
+          : null;
+        if (ill?.photoUrl && !activity.photoUrl) {
+          Object.assign(patch, { photoUrl: ill.photoUrl, photoCredit: ill.photoCredit || '' },
+            ill.photoPage ? { photoPage: ill.photoPage } : {});
+        } else if (ill?.photoCredit && activity.photoUrl && !activity.photoCredit) {
+          Object.assign(patch, { photoCredit: ill.photoCredit }, ill.photoPage ? { photoPage: ill.photoPage } : {});
+        }
+        if (ill?.description && !(activity.description || '').trim()) patch.description = ill.description;
+        // Cherché : on s'en souvient, pour ne pas redemander demain. Si aucun
+        // service n'a répondu (hors ligne, portail d'hôtel), on n'a rien
+        // cherché du tout — la fiche repassera.
+        if (suivi.repondu) {
+          Object.assign(patch, {
+            illustreSig: empreinte({ ...activity, ...patch }),
+            illustreAt: new Date().toISOString(),
+            // La carte ouverte ne connaît pas ce lieu : on y reviendra.
+            illustreVide: !found,
+          });
+        }
+      }
+      if (Object.keys(patch).length) {
+        updateActivity(tripId, location, activityId, patch);
+        aJour = { ...activity, ...patch };
+      }
+    }
+    return aJour;
+  };
+
+  /**
+   * Situer la fiche, puis — si elle vient de l'être — chercher sa photo et sa
+   * présentation autour de son point, tout de suite plutôt qu'au prochain
+   * passage de la fouille silencieuse.
+   */
+  const situerPuisIllustrer = async (activity, activityId, location) => {
+    let aJour = await completerDepuisLaCarte(activity, activityId, location);
+    const situee = (a) => Number.isFinite(a.lat) && Number.isFinite(a.lon);
+    if (!situee(activity) && situee(aJour) && resteAIllustrer(aJour)) {
+      aJour = await completerDepuisLaCarte(aJour, activityId, location);
+    }
+    return aJour;
+  };
+
+  // Un carnet collé ajoute des dizaines de fiches d'un coup. Elles se
+  // complètent l'une après l'autre — la carte ouverte demande une seconde
+  // entre deux recherches — et sans proposer d'aller lire leurs sites : le
+  // carnet a déjà dit horaires et prix, la fouille silencieuse fera le reste.
+  const fileDuCarnet = useRef(Promise.resolve());
+  const ajouterLeCarnet = (lieux) => {
+    const avant = tripRef.current;
+    const ajouts = lieux.map(a => ({ a, id: addToReserve(tripId, a) }));
+    const n = ajouts.length;
+    // Trente fiches d'un geste se retirent d'un geste.
+    if (avant) pushUndo(avant, `📦 ${n} lieu${n > 1 ? 'x' : ''} mis en réserve`);
+    navigateTab('reserve');
+    // Un temps pour annuler — et pour que `tripRef` voie les nouvelles fiches —
+    // avant la première recherche.
+    fileDuCarnet.current = fileDuCarnet.current.then(() => new Promise(r => setTimeout(r, 1500)));
+    for (const { a, id } of ajouts) {
+      fileDuCarnet.current = fileDuCarnet.current.then(async () => {
+        // Annulé entre-temps : rien à compléter. Hors ligne : la fouille
+        // silencieuse s'en chargera au retour du réseau.
+        if (!navigator.onLine || !tripRef.current?.reserve?.some(r => r.id === id)) return;
+        await situerPuisIllustrer(a, id, { type: 'reserve' });
+      }).catch(() => {});
+    }
+  };
+
   const fouillerEnSilence = async () => {
     const f = fouilleAutoRef.current;
     if (f.enCours || propsAuto?.length) return;
@@ -379,10 +498,19 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     // dix fois dans le métro.
     if (Date.now() - f.derniere < 30 * 60 * 1000) return;
     const liste = aEnrichir(tripRef.current);
-    if (!liste.length) return;
+    // Les fiches d'avant : photo, présentation et quartier viennent des sources
+    // libres et s'écrivent sans rien demander. Douze par passage — la carte
+    // ouverte demande une seconde entre deux recherches.
+    const sansImage = aIllustrer(tripRef.current).slice(0, 12);
+    if (!liste.length && !sansImage.length) return;
     f.enCours = true;
     f.derniere = Date.now();
     try {
+      for (const { activite, emplacement } of sansImage) {
+        if (!navigator.onLine) break;
+        await completerDepuisLaCarte(activite, activite.id, emplacement);
+      }
+      if (!liste.length) return;
       const { propositions, marques } = await fouillerLesFiches(liste, {});
       marques.forEach(m => updateActivity(tripId, m.emplacement, m.id, m.patch));
       if (propositions.length) {
@@ -729,7 +857,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
     let texte = '';
     // Refus de l'utilisateur, ou API absente : on ouvre quand même la feuille.
     try { texte = await navigator.clipboard.readText(); } catch { /* rien à coller */ }
-    const lien = premierLien(texte);
+    // Un carnet entier passe tel quel : la feuille propose ses lieux.
+    const lien = texte.includes('\n') && lireCarnet(texte) ? texte : premierLien(texte);
     // Rien d'exploitable : on ouvre quand même la feuille, prête à recevoir.
     setLienColle(lien || null);
     setSheetDefaultDayId(null);
@@ -872,34 +1001,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
   // n'attend pas le réseau, et un échec ne casse rien.
   const autoEnrich = async (activity, activityId, location) => {
     if (!activityId || activity.isMeal) return;
-    const complete = activity.address && activity.openingHours && activity.lat;
-    let aJour = activity;
-    if (!complete) {
-      // Une fiche qui a son point se complète autour D'ELLE, pas autour du
-      // voyage : un restaurant de Rome gardé dans un voyage à Biarritz était
-      // cherché « à Biarritz », et restait sans adresse ni horaires alors que
-      // la carte ouverte le connaît, là où il est (11 novembre 2026).
-      const situee = Number.isFinite(activity.lat) && Number.isFinite(activity.lon);
-      let found = situee
-        ? await lookupPlace(activity.title, '', { lat: activity.lat, lon: activity.lon },
-          { rayonKm: RAYON_FICHE_KM, nomEntier: true })
-        : await lookupPlace(activity.title, trip.destination, { lat: anchor?.lat, lon: anchor?.lon });
-      // La carte ouverte ne situe pas ce nom (dit dans une autre langue, ou
-      // lieu qu'elle ne connaît pas) : le serveur demande son point à Google
-      // Maps. Écrit sans rien demander, donc seulement s'il tombe DANS le
-      // voyage — un point lointain, c'est à la personne de le confirmer, et
-      // l'écran d'ajout le lui montre.
-      if (!found?.lat && !situee && anchor) {
-        const s = await situerParLeServeur(activity.title, trip.destination, { memoire: true });
-        // … et jamais un lieu qui ne fait que ressembler (`ressemble`).
-        if (s && !s.ressemble && loinDuVoyage(s, anchor) == null) found = { ...s, ...(found || {}), lat: s.lat, lon: s.lon };
-      }
-      const patch = missingFieldsFrom(activity, found);
-      if (patch) {
-        updateActivity(tripId, location, activityId, patch);
-        aJour = { ...activity, ...patch };
-      }
-    }
+    const aJour = await situerPuisIllustrer(activity, activityId, location);
 
     // Les bases ouvertes s'arrêtent là. Le site du lieu, lui, donne les
     // horaires réels, une gamme de prix et de quoi décrire l'endroit — c'est
@@ -1405,8 +1507,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         type="button"
                         className="reserve-search-coller"
                         onClick={collerUnLien}
-                        title="Coller un lien depuis le presse-papier"
-                        aria-label="Coller un lien depuis le presse-papier"
+                        title="Coller un lien ou un carnet depuis le presse-papier"
+                        aria-label="Coller un lien ou un carnet depuis le presse-papier"
                       ><Icone de={ClipboardPaste} /></button>
                       <button
                         type="button"
@@ -1433,8 +1535,8 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         type="button"
                         className="reserve-cmd reserve-search-coller"
                         onClick={collerUnLien}
-                        title="Coller un lien depuis le presse-papier"
-                        aria-label="Coller un lien depuis le presse-papier"
+                        title="Coller un lien ou un carnet depuis le presse-papier"
+                        aria-label="Coller un lien ou un carnet depuis le presse-papier"
                       ><Icone de={ClipboardPaste} /></button>
                       {/* Un lieu dont on ignore les horaires n'est jamais masqué :
                           le filtre écarte ce qui est fermé, pas ce qu'on ne sait pas. */}
@@ -1443,13 +1545,13 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         onClick={() => setOuvertSeul(v => !v)}
                         aria-pressed={ouvertSeul}
                       ><span className="point-ouvert" aria-hidden="true" />Ouvert</button>
-                      <button
+                      {!parQuartier && <button
                         className={`reserve-cmd${grouper ? ' reserve-cmd--on' : ''}`}
                         onClick={() => setGrouper(v => !v)}
                         aria-pressed={grouper}
                         aria-label={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
                         title={grouper ? 'Afficher en liste, réordonnable' : 'Grouper par catégorie'}
-                      ><Icone de={grouper ? LayoutGrid : List} /></button>
+                      ><Icone de={grouper ? LayoutGrid : List} /></button>}
                       {/* « Ordre d'ajout » est l'état par défaut : l'écrire en
                           toutes lettres prenait 130 px pour ne rien apprendre. */}
                       <select className="reserve-sort-select" value={tri} aria-label="Trier les idées"
@@ -1461,6 +1563,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                         <option value="duration">Durée</option>
                         <option value="price">Prix</option>
                         {geoReserve.position && <option value="proche">Le plus proche</option>}
+                        {parQuartierPossible && <option value="quartier">Par quartier</option>}
                         {hotelReserve && <option value="hotel">Depuis l'hôtel</option>}
                         {lieuxRepere.length > 0 && <option value="depuis">Depuis un lieu…</option>}
                       </select>
@@ -1484,7 +1587,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                     </select>
                   </label>
                 )}
-                {!grouper && !rechercheOuverte && (
+                {(!grouper || parQuartier) && !rechercheOuverte && (
                   <div className="reserve-filter">
                     {/* « Tout » ne sert qu'à revenir : muet tant qu'on n'est
                         parti nulle part. */}
@@ -1555,13 +1658,18 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                   // Regroupement par catégorie : c'est le premier tri de l'œil.
                   // Il ne s'applique que quand on regarde TOUT — filtrer sur une
                   // seule catégorie rendrait les en-têtes absurdes.
-                  const groupes = (grouper && reserveFilter === 'all')
+                  // Par quartier : un groupe par quartier, dans l'ordre alphabétique
+                  // — on y cherche celui où l'on est —, les fiches sans quartier
+                  // à la fin. Le filtre de catégorie s'y applique (« les restos,
+                  // quartier par quartier »).
+                  const groupes = parQuartier ? rangerParQuartier(retenues, contexteQuartier)
+                    : (grouper && reserveFilter === 'all')
                     ? CATEGORIES
                         .map(cat => ({ cat, items: retenues.filter(a => a.category === cat.id) }))
                         .filter(g => g.items.length)
                     : [{ cat: null, items: retenues }];
                   const sansCat = retenues.filter(a => !CATEGORIES.some(c => c.id === a.category));
-                  if (grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
+                  if (!parQuartier && grouper && reserveFilter === 'all' && sansCat.length) groupes.push({ cat: null, items: sansCat });
                   // Réordonner n'a de sens que sur une liste à plat, dans son
                   // ordre propre : groupée ou triée, la position manuelle ne se
                   // voit plus, donc la déplacer ne veut rien dire.
@@ -1578,10 +1686,16 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                   }
 
                   return groupes.map(g => (
-                    <div key={g.cat?.id || 'autres'} className="reserve-groupe">
+                    <div key={g.cle ? `q-${g.cle}` : g.cat?.id || 'autres'} className="reserve-groupe">
                       {g.cat && (
                         <div className="reserve-groupe__titre">
                           {g.cat.emoji} {g.cat.label}
+                          <span className="reserve-groupe__n">{g.items.length}</span>
+                        </div>
+                      )}
+                      {g.quartier && (
+                        <div className="reserve-groupe__titre reserve-groupe__titre--quartier">
+                          <Icone de={MapPin} taille={14} /> {g.quartier}
                           <span className="reserve-groupe__n">{g.items.length}</span>
                         </div>
                       )}
@@ -1601,6 +1715,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
                       ><Icone de={GripVertical} taille={18} /></button>
                     )}
                     <ActivityCard
+                      quartier={quartierDe(activity, contexteQuartier) || null}
                       activity={activity}
                       enVoiture={enVoiture}
                       /* Ce qu'il faut savoir avant de piocher : ouvert ou non,
@@ -1776,6 +1891,7 @@ export default function TripView({ tripId, onBack, lienAImporter, onLienConsomme
         tripLon={anchor?.lon}
         tripDestination={trip.destination}
         lienInitial={lienEnCours}
+        onAjouterCarnet={ajouterLeCarnet}
       />
 
       {fouilleEnCours && (

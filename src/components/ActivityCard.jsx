@@ -1,12 +1,13 @@
 import { memo, useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icone from './Icone';
-import { Check, X, Clock, Ellipsis, Pencil, ArrowUp, ArrowDown, Sunrise, Copy, Share, Trash2, GripVertical } from 'lucide-react';
+import { Check, X, Clock, Ellipsis, Pencil, ArrowUp, ArrowDown, Sunrise, Copy, Share, Trash2, GripVertical, MapPin, Info, Euro } from 'lucide-react';
 import { getCategoryMeta, formatDuration, formatPrice, STATUS_CONFIG, getDayLabel, lienItineraire, nomDeLieu } from '../utils/helpers';
 import { vibrate } from '../hooks/useSettings';
 import ConfirmDialog from './ConfirmDialog';
 import ImagePiece from './ImagePiece';
 import { ouvrirPiece, messagePiece } from '../utils/pieces';
+import { pageDeFiche } from '../utils/pageFiche';
 
 function ActivityCard({
   activity, context, isLastDay, slot, isPastTrip,
@@ -23,6 +24,9 @@ function ActivityCard({
   // déjà durée, prix et adresse ; `action` se range dans la rangée du haut, à
   // côté du ⋯, qui a de la hauteur à revendre.
   etat, action,
+  // Le quartier tel que la Réserve range le voyage : le même mot dans l'en-tête
+  // du groupe et sur la fiche ouverte.
+  quartier = null,
 }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -134,6 +138,13 @@ function ActivityCard({
   }, [activity]);
 
   const isExpandedOrPast = expanded || showPolaroid;
+  // Ouverte, la fiche se lit comme une page de carnet : la photo en grand, ce
+  // qu'est le lieu, ses horaires et son prix en clair, et ce qu'il faut savoir
+  // avant d'y aller. C'est la même fiche, pas un écran de plus (14 nov. 2026).
+  // Le souvenir d'un voyage passé garde son dessin de polaroid.
+  const lue = expanded && !showPolaroid
+    ? pageDeFiche(activity, { libelle: meta.label, prix: (n) => formatPrice(n), quartier })
+    : null;
 
   return (
     <>
@@ -151,6 +162,7 @@ function ActivityCard({
             showPolaroid ? 'activity-card--polaroid' : '',
             compareSelected ? 'activity-card--compare-selected' : '',
             isExpandedOrPast ? 'activity-card--expanded' : '',
+            lue ? 'activity-card--page' : '',
             activity.mustDo ? 'activity-card--mustdo' : '',
           ].filter(Boolean).join(' ')}
           style={{ transform: `translateX(${swipeOffset}px)`, transition: swipeRef.current.isDragging ? 'none' : 'transform 0.2s ease' }}
@@ -188,8 +200,11 @@ function ActivityCard({
                 {activity.status === 'done' ? <Icone de={Check} taille={18} /> : activity.status === 'nogo' ? <Icone de={X} taille={18} /> : null}
               </button>
             )}
-            <div className="activity-card__emoji">{meta.emoji}</div>
+            {/* Ouverte, la catégorie s'écrit au-dessus du nom, avec le quartier :
+                le pictogramme rend sa place au titre. */}
+            {!lue && <div className="activity-card__emoji">{meta.emoji}</div>}
             <div className="activity-card__main">
+              {lue?.surtitre && <div className="activity-card__surtitre">{lue.surtitre}</div>}
               <div className="activity-card__title">
                 {/* Plus de point de couleur devant le titre : la catégorie se
                     disait trois fois (émoji, point, titre de section). L'émoji
@@ -209,7 +224,8 @@ function ActivityCard({
                     une heure d'un prix. */}
                 {slot && <span className={`time-slot${slot.fixed ? ' time-slot--fixed' : ''}`}>{slot.start} – {slot.end}</span>}
                 {dur > 0 && <span className="activity-card__duration">{formatDuration(dur)}</span>}
-                {activity.price > 0 && <span className="activity-card__price">{formatPrice(parseFloat(activity.price))}</span>}
+                {/* Ouverte, le prix a sa tuile : il ne se dit pas deux fois. */}
+                {!lue && activity.price > 0 && <span className="activity-card__price">{formatPrice(parseFloat(activity.price))}</span>}
                 {etat}
                 {activity.address && (itineraire
                   ? (
@@ -220,9 +236,9 @@ function ActivityCard({
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       aria-label={`Itinéraire vers ${nomDeLieu(activity.title)}`}
-                    >{activity.address}</a>
+                    >{lue && <Icone de={MapPin} taille={14} />}{activity.address}</a>
                   )
-                  : <span className="activity-card__address">{activity.address}</span>
+                  : <span className="activity-card__address">{lue && <Icone de={MapPin} taille={14} />}{activity.address}</span>
                 )}
               </div>
             </div>
@@ -252,7 +268,47 @@ function ActivityCard({
           {/* Expanded content */}
           {isExpandedOrPast && (
             <div className="activity-card__expand" onClick={e => e.stopPropagation()}>
-              {activity.openingHours && <div className="activity-card__hours">🕐 {activity.openingHours}</div>}
+              {lue ? (
+                <>
+                  {lue.presentation && <p className="fiche-page__texte">{lue.presentation}</p>}
+                  {/* Une tuile n'existe que si elle a quelque chose à dire : pas
+                      de cadre « Prix » vide sur une fiche qui n'en a pas. */}
+                  {(lue.horaires.length > 0 || lue.prix) && (
+                    <div className={`fiche-page__tuiles${lue.larges ? ' fiche-page__tuiles--larges' : ''}`}>
+                      {lue.horaires.length > 0 && (
+                        <div className="fiche-page__tuile">
+                          <div className="fiche-page__label"><Icone de={Clock} taille={14} /> Horaires</div>
+                          {/* Chaque créneau d'un seul tenant : la tuile coupe
+                              entre deux services, jamais dans « 9h30–17h15 ».
+                              Le texte d'un carnet, lui, revient à la ligne. */}
+                          {lue.horaires.map((b, i) => (
+                            <div key={i} className="fiche-page__valeur">
+                              {b.quand && <span className="fiche-page__quand">{b.quand} </span>}
+                              {b.texte ? b.creneaux[0] : b.creneaux.map((c, k) => (
+                                <span key={k} className="fiche-page__creneau">{c}{k < b.creneaux.length - 1 ? ', ' : ''}</span>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {lue.prix && (
+                        <div className="fiche-page__tuile">
+                          <div className="fiche-page__label"><Icone de={Euro} taille={14} /> Prix</div>
+                          <div className="fiche-page__valeur fiche-page__valeur--lignes">{lue.prix}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {lue.bon.length > 0 && (
+                    <p className="fiche-page__bon">
+                      <Icone de={Info} taille={16} />
+                      <span><strong>Bon à savoir</strong> · {lue.bon.join(' · ')}</span>
+                    </p>
+                  )}
+                </>
+              ) : (
+                activity.openingHours && <div className="activity-card__hours">🕐 {activity.openingHours}</div>
+              )}
               {activity.link && (
                 <div className="activity-card__link">
                   <a href={activity.link} target="_blank" rel="noopener noreferrer">
@@ -260,7 +316,7 @@ function ActivityCard({
                   </a>
                 </div>
               )}
-              {activity.notes && <div className="activity-card__notes">{activity.notes}</div>}
+              {(lue ? lue.notes : activity.notes) && <div className="activity-card__notes">{lue ? lue.notes : activity.notes}</div>}
               {activity.screenshots?.length > 0 && (
                 <div className="activity-card__screenshots">
                   {activity.screenshots.map((src, i) => (
@@ -302,6 +358,15 @@ function ActivityCard({
                   </div>
                 )}
               </div>
+              {/* Une photo libre se crédite : son auteur et sa licence, avec le
+                  lien vers la page de l'image quand on l'a. */}
+              {lue?.credit && (
+                <p className="fiche-page__credit">
+                  Photo : {activity.photoPage
+                    ? <a href={activity.photoPage} target="_blank" rel="noopener noreferrer">{lue.credit}</a>
+                    : lue.credit}
+                </p>
+              )}
             </div>
           )}
         </div>

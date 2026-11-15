@@ -11,6 +11,7 @@ import { ChevronDown, X, Search } from 'lucide-react';
 import ImagePiece from './ImagePiece';
 import { enPiece } from '../utils/pieces';
 import { trouverDoublon } from '../utils/doublon';
+import { lireCarnet } from '../utils/carnet';
 
 const blank = { title: '', category: 'resto', durationHours: 0, durationMinutes: 0, address: '', notes: '', price: '', link: '', screenshots: [], photoUrl: '', openingHours: '', lat: null, lon: null, fixedStart: '', fixedEnd: '', mustDo: false, pdfs: [], travelerIds: [] };
 
@@ -45,7 +46,7 @@ function isDefaultDuration(f) {
 
 export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve, onAddToDay,
   defaultDayId, editActivity, onEditSave, reserveActivities, onMoveFromReserve,
-  tripTravelers, onAddToAllDays, tripLat, tripLon, tripDestination, lienInitial }) {
+  tripTravelers, onAddToAllDays, tripLat, tripLon, tripDestination, lienInitial, onAjouterCarnet }) {
   const isEdit = !!editActivity;
   const [form, setForm] = useState({ ...blank });
   const { suggestions } = usePlaceSuggestions(tripLat, tripLon, isOpen && !isEdit);
@@ -71,6 +72,9 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
   // lus : les jeter obligerait à les retaper un par un.
   const [autresLieux, setAutresLieux] = useState([]);
   const [lieuxRetenus, setLieuxRetenus] = useState(() => new Set());
+  // D'où viennent ces lieux : une légende (« ce lien cite aussi… ») ou un
+  // carnet collé, dont chaque lieu devient une fiche entière.
+  const [sourceLieux, setSourceLieux] = useState('lien');
   // En modification, on vient précisément pour changer un champ : le pli
   // s'ouvre. En création, la recherche suffit presque toujours.
   const [detailsOuverts, setDetailsOuverts] = useState(false);
@@ -90,6 +94,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
       setPoiHint(null);
       setAutresLieux([]);
       setLieuxRetenus(new Set());
+      setSourceLieux('lien');
       setDetailsOuverts(isEdit);
       if (isEdit) {
         setForm({
@@ -246,6 +251,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     const lu = await lireLegende(texteLegende, tripDestination || '');
     if (!lu?.title) return false;
     if (lu.autresLieux?.length) {
+      setSourceLieux('lien');
       setAutresLieux(lu.autresLieux);
       setLieuxRetenus(new Set(lu.autresLieux.map((_, i) => i)));
     }
@@ -344,6 +350,57 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg(`${choisis.length} lieu${choisis.length > 1 ? 'x' : ''} mis en réserve ✓`);
   };
 
+  // Un carnet collé — un guide en PDF, des notes de voyage : chaque lieu
+  // devient une fiche, avec ce que le carnet en dit (adresse, présentation,
+  // horaires, prix, « bon à savoir »). Le lire ne demande rien au réseau.
+  // Ce qui est déjà dans le voyage part décoché : on ne pioche pas deux fois
+  // la même idée.
+  const proposerCarnet = (lieux) => {
+    setImportUrl('');
+    setCandidates([]);
+    setCandidats([]);
+    setImportMsg('');
+    setSourceLieux('carnet');
+    setAutresLieux(lieux);
+    setLieuxRetenus(new Set(lieux
+      .map((l, i) => (trouverDoublon(l, days || [], reserveActivities || []) ? -1 : i))
+      .filter(i => i >= 0)));
+  };
+
+  // Un carnet est à l'écran : le bouton du bas de la feuille le met en réserve.
+  const carnetPropose = sourceLieux === 'carnet' && autresLieux.length > 0;
+
+  // Les lieux retenus partent ensemble, tels que le carnet les décrit ; la
+  // feuille se ferme sur la Réserve, où l'app les complète l'un après l'autre.
+  const ajouterLeCarnet = () => {
+    const tous = (tripTravelers || []).map(t => t.id);
+    const choisis = autresLieux.filter((_, i) => lieuxRetenus.has(i)).map((l) => {
+      const duree = DEFAULT_DURATIONS[l.category] || DEFAULT_DURATIONS.visite;
+      return {
+        ...blank, ...l,
+        durationHours: duree.h, durationMinutes: duree.m,
+        price: parseFloat(l.price) || 0,
+        travelerIds: tous,
+      };
+    });
+    if (!choisis.length) return;
+    onAjouterCarnet?.(choisis);
+    close();
+  };
+
+  // Le collage d'un carnet se lit AVANT d'entrer dans le champ : sur une seule
+  // ligne, ses retours à la ligne — ce qui sépare un nom d'une adresse — sont
+  // perdus.
+  const collerDansLeChamp = (e) => {
+    if (isEdit || !onAjouterCarnet) return;
+    const texte = e.clipboardData?.getData('text') || '';
+    if (!texte.includes('\n')) return;
+    const carnet = lireCarnet(texte);
+    if (!carnet) return;
+    e.preventDefault();
+    proposerCarnet(carnet.lieux);
+  };
+
   // Chercher pendant qu'on tape. Le bouton de recherche reste — pour les liens, pour
   // valider une adresse complète — mais il n'est plus le seul chemin : sur un
   // téléphone, taper trois lettres et toucher le bon nom est le geste le plus
@@ -381,6 +438,12 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
     setImportMsg('');
     setCandidates([]);
     try {
+      // Un carnet entier, arrivé par le bouton « Coller » de la Réserve (qui
+      // garde les retours à la ligne) ou par le menu Partager.
+      if (!isEdit && onAjouterCarnet && raw.includes('\n')) {
+        const carnet = lireCarnet(raw);
+        if (carnet) { proposerCarnet(carnet.lieux); return; }
+      }
       // Un partage arrive rarement nu : « Taverna Platanos » puis le lien,
       // « Regarde ce lieu : https://… », ou une adresse `geo:` d'Android. Le
       // lien se lit à part, et le nom écrit à côté sert si le lien ne dit rien.
@@ -440,6 +503,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           // Retenus par défaut : ils viennent d'être trouvés, et décocher est
           // plus rapide que cocher six fois.
           if (result.autresLieux?.length) {
+            setSourceLieux('lien');
             setAutresLieux(result.autresLieux);
             setLieuxRetenus(new Set(result.autresLieux.map((_, i) => i)));
           }
@@ -843,7 +907,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               elle attendait qu'on appuie sur un bouton, sous une rangée de
               raccourcis, au milieu d'un formulaire de onze champs. */}
           <div className="form-group import-section">
-            <label className="form-label">Cherche un lieu, ou colle un lien ou une confirmation</label>
+            <label className="form-label">Cherche un lieu, ou colle un lien, une confirmation ou un carnet</label>
             <div className="import-row">
               <input
                 className="form-input"
@@ -851,6 +915,7 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                 value={importUrl}
                 onChange={e => setImportUrl(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && importUrl && handleImport()}
+                onPaste={collerDansLeChamp}
                 autoFocus={!isEdit}
               />
               <button
@@ -872,16 +937,23 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
               </p>
             )}
 
-            {/* Les autres lieux cités par la même légende. Ils partent en
-                Réserve — ce sont des idées, pas un programme — et l'app ira
-                compléter leurs fiches comme pour n'importe quel ajout. */}
+            {/* Les autres lieux cités par la même légende, ou ceux d'un carnet
+                collé. Ils partent en Réserve — ce sont des idées, pas un
+                programme — et l'app ira compléter leurs fiches comme pour
+                n'importe quel ajout. Un carnet compte des dizaines de lieux :
+                c'est le bouton du bas de la feuille, toujours visible, qui les
+                met en réserve — pas un second bouton au bout de la liste. */}
             {autresLieux.length > 0 && (
-              <div className="autres-lieux">
+              <div className={`autres-lieux${carnetPropose ? ' autres-lieux--carnet' : ''}`}>
                 <p className="autres-lieux__titre">
-                  Ce lien cite aussi {autresLieux.length} lieu{autresLieux.length > 1 ? 'x' : ''} :
+                  {carnetPropose
+                    ? `Ce carnet compte ${autresLieux.length} lieux :`
+                    : `Ce lien cite aussi ${autresLieux.length} lieu${autresLieux.length > 1 ? 'x' : ''} :`}
                 </p>
                 <ul className="autres-lieux__liste">
-                  {autresLieux.map((l, i) => (
+                  {autresLieux.map((l, i) => {
+                    const deja = carnetPropose ? trouverDoublon(l, days || [], reserveActivities || []) : null;
+                    return (
                     <li key={`${l.title}-${i}`}>
                       <button
                         type="button"
@@ -898,19 +970,23 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
                         </span>
                         <span className="autres-lieux__nom">
                           {getCategoryMeta(l.category).emoji} {l.title}
+                          {deja && <span className="autres-lieux__deja"> · déjà {deja.ou}</span>}
                         </span>
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
-                <button
-                  type="button"
-                  className="btn btn--secondary btn--sm autres-lieux__valider"
-                  disabled={!lieuxRetenus.size}
-                  onClick={ajouterLesAutres}
-                >
-                  📦 Mettre {lieuxRetenus.size} en réserve
-                </button>
+                {!carnetPropose && (
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm autres-lieux__valider"
+                    disabled={!lieuxRetenus.size}
+                    onClick={ajouterLesAutres}
+                  >
+                    📦 Mettre {lieuxRetenus.size} en réserve
+                  </button>
+                )}
               </div>
             )}
 
@@ -1279,11 +1355,17 @@ export default function AddActivitySheet({ isOpen, onClose, days, onAddToReserve
           {error && <p className="form-error">{error}</p>}
         </div>
 
-        <div className="sheet__footer">
+        <div className={`sheet__footer${carnetPropose ? ' sheet__footer--large' : ''}`}>
           <button className="btn btn--secondary btn--full" onClick={close}>Annuler</button>
-          <button className="btn btn--primary btn--full" onClick={handleSubmit} disabled={saving}>
-            {saving ? '📍 Localisation…' : isEdit ? '✅ Enregistrer' : dest === 'reserve' ? '📦 En réserve' : '📅 Assigner'}
-          </button>
+          {carnetPropose ? (
+            <button className="btn btn--primary btn--full" onClick={ajouterLeCarnet} disabled={!lieuxRetenus.size}>
+              📦 {lieuxRetenus.size} en réserve
+            </button>
+          ) : (
+            <button className="btn btn--primary btn--full" onClick={handleSubmit} disabled={saving}>
+              {saving ? '📍 Localisation…' : isEdit ? '✅ Enregistrer' : dest === 'reserve' ? '📦 En réserve' : '📅 Assigner'}
+            </button>
+          )}
         </div>
       </div>
     </div>

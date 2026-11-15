@@ -22,7 +22,7 @@
  *                                   [--seul <motif>] [--json] [--garder-captures]
  */
 import { chromium } from 'playwright';
-import { existsSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { trip as TRIP, settings as SETTINGS } from './ui-fixture.mjs';
 import { brancherReseau } from './reseau-stubs.mjs';
@@ -57,6 +57,12 @@ const JSON_OUT = args.includes('--json');
 const SEUL_HORS_LIGNE = args.includes('--hors-ligne');
 const SEUL_RESEAU = args.includes('--reseau');
 const CAPTURES = '/tmp/provo-parcours';
+
+// « Cherché dans les sources libres » se retient sur la fiche, pour qu'elle ne
+// repasse pas demain (`illustreSig`, `illustreAt`, `illustreVide`). Ce n'est
+// pas une information écrite à la place de la personne : les parcours qui
+// vérifient « rien n'a été écrit sans accord » comparent le voyage sans elles.
+const sansMarques = (v) => JSON.stringify(v, (k, x) => (/^illustre(Sig|At|Vide)$/.test(k) ? undefined : x));
 
 // ── Boîte à outils offerte à chaque parcours ────────────────────────────────
 function outils(p, journal) {
@@ -305,6 +311,20 @@ const TITRE_LONG = { ...TRIP, reserve: [{
   id: 'long', title: 'Restaurant Zum Schwarzen Kameel — Bognergasse 5, 1010 Wien, Autriche (réserver au moins trois semaines à l\'avance)',
   category: 'resto', status: 'todo', durationHours: 1, durationMinutes: 30, travelerIds: [] },
   ...TRIP.reserve] };
+
+// Une Réserve à Venise telle que la carte ouverte la situe : le sestiere est
+// dans `neighbourhood`, et `suburb` vaut la commune pour tous (mesuré le
+// 15 novembre 2026). Plus une fiche venue d'un carnet, avec SON secteur.
+const VENISE_QUARTIERS = { ...TRIP, name: 'Venise', destination: 'Venise', reserve: [
+  ['q1', 'Palazzo Ducale', 'visite', 'San Marco'], ['q2', 'Campanile di San Marco', 'visite', 'San Marco'],
+  ['q3', 'Ponte di Rialto', 'balade', 'San Polo'], ['q4', 'Antico Forno', 'resto', 'San Polo'],
+  ['q5', 'Ai Promessi Sposi', 'resto', 'Cannaregio'], ['q6', 'Taverna San Trovaso', 'resto', 'Dorsoduro'],
+].map(([id, title, category, sestiere], i) => ({
+  id, title, category, status: 'todo', durationHours: 1, durationMinutes: 0, travelerIds: [],
+  lat: 45.434 + i * 0.002, lon: 12.335 + i * 0.001, address: `${sestiere}, Venise, Italie`,
+  secteurs: { neighbourhood: sestiere, suburb: 'Venezia-Murano-Burano' },
+})).concat([{ id: 'q7', title: 'Burano', category: 'balade', status: 'todo', durationHours: 1, durationMinutes: 0,
+  travelerIds: [], quartier: 'Les îles de la lagune', description: "L'île aux maisons colorées." }]) };
 
 // Une idée qui coche les trois signaux que le produit promet de donner :
 // fermée aujourd'hui, loin du reste, dans une journée déjà chargée.
@@ -1652,6 +1672,124 @@ const PARCOURS = [
       t.verifier('le bilan reste accessible', await t.visible('.recap-hero, .trip-recap'));
     } },
 
+  { groupe: 'Réserve', nom: 'Ranger la Réserve par quartier', depart: VENISE_QUARTIERS,
+    intention: "Sur place, voir d'un coup d'œil ce qu'on a gardé dans chaque quartier — "
+      + "comme le sommaire d'un carnet — sans rien saisir.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const options = await t.p.$$eval('.reserve-sort-select option', os => os.map(o => o.value));
+      t.verifier('« Par quartier » est proposé dans le tri', options.includes('quartier'), options.join(', '));
+      await t.p.selectOption('.reserve-sort-select', 'quartier');
+      await t.p.waitForTimeout(600);
+      // Le nom du quartier et le compte vivent dans deux éléments voisins.
+      const enTetes = () => t.p.$$eval('.reserve-groupe__titre--quartier',
+        ns => ns.map(n => `${[...n.childNodes].filter(c => !c.classList?.contains('reserve-groupe__n')).map(c => c.textContent).join('').trim()} ${n.querySelector('.reserve-groupe__n')?.textContent || ''}`.trim()));
+      const titres = await enTetes();
+      t.verifier('un groupe par sestiere, et le secteur du carnet — jamais « Venezia-Murano-Burano »',
+        titres.join(' | ') === 'Cannaregio 1 | Dorsoduro 1 | Les îles de la lagune 1 | San Marco 2 | San Polo 2',
+        titres.join(' | '));
+      t.verifier('le bouton « grouper par catégorie » s’efface plutôt que de rester inerte',
+        !(await t.visible('[aria-label="Afficher en liste, réordonnable"]')) && !(await t.visible('[aria-label="Grouper par catégorie"]')));
+      // Les restos, quartier par quartier.
+      const resto = '.reserve-filter__pill[aria-label^="Resto"]';
+      t.verifier('les pastilles de catégorie restent là', await t.visible(resto));
+      await t.clic(resto, { delai: 600 });
+      const filtres = await enTetes();
+      t.verifier('filtrer les restos garde le rangement par quartier', filtres.join(' | ') === 'Cannaregio 1 | Dorsoduro 1 | San Polo 1',
+        filtres.join(' | '));
+      // « Tout » ramène toutes les idées (toucher la pastille active ne la retire pas).
+      await t.clic('.reserve-filter__pill', { texte: /^Tout/, delai: 500 });
+      // La fiche ouverte dit le même quartier que l'en-tête de son groupe.
+      await t.clic('.activity-card__title', { texte: /Antico Forno/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('ouverte, la fiche dit « Resto · San Polo »', /RESTO · SAN POLO/i.test(page), page.slice(0, 60));
+      // Et le choix se retient d'une visite à l'autre.
+      await t.p.reload({ waitUntil: 'domcontentloaded' });
+      await t.p.waitForTimeout(900);
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      t.verifier('le rangement par quartier est retenu', (await t.combien('.reserve-groupe__titre--quartier')) >= 4);
+    } },
+
+  { groupe: 'Réserve', nom: 'Coller un carnet crée toutes ses fiches d’un coup', depart: VENISE_QUARTIERS,
+    intention: "Préparer le voyage avec un carnet (un guide en PDF, des notes) : tout copier, "
+      + "coller, et trouver dans la Réserve une fiche complète par lieu — sans rien retaper.",
+    async faire(t) {
+      const carnet = readFileSync(new URL('./fixtures/carnet-venise.txt', import.meta.url), 'utf8');
+      await t.ouvrirVoyage();
+      await t.onglet(/Réserve/i);
+      const avant = (await t.voyage()).reserve.length;
+
+      // 1. Collé dans le champ d'ajout, comme on colle un lien.
+      await t.clic('.header__add-btn', { delai: 900 });
+      await t.p.evaluate((texte) => {
+        const champ = document.querySelector('input[placeholder*="colle un lien"]');
+        champ.focus();
+        const dt = new DataTransfer();
+        dt.setData('text/plain', texte);
+        champ.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      }, carnet);
+      await t.p.waitForTimeout(500);
+      const titre = await t.p.locator('.autres-lieux--carnet .autres-lieux__titre').first().innerText().catch(() => '');
+      t.verifier('le carnet est lu : « Ce carnet compte 10 lieux »', /compte 10 lieux/.test(titre), titre || '(rien)');
+      const champ = await t.p.locator('input[placeholder*="colle un lien"]').inputValue().catch(() => '?');
+      t.verifier('le texte ne s’entasse pas dans le champ', champ === '', JSON.stringify(champ.slice(0, 40)));
+      const forno = t.p.locator('.autres-lieux__item', { hasText: 'Antico Forno' }).first();
+      t.verifier('un lieu déjà dans la Réserve part décoché, et le dit',
+        (await forno.getAttribute('aria-pressed')) === 'false' && /déjà dans ta Réserve/.test(await forno.innerText()),
+        await forno.innerText().catch(() => '(absent)'));
+      // Le bouton du bas de la feuille, toujours visible, compte ce qui part —
+      // et il est le seul : pas de second bouton au bout de trente lignes.
+      const bouton = await t.p.locator('.sheet__footer .btn--primary').innerText().catch(() => '');
+      t.verifier('le bouton du bas compte les 9 autres, et il est le seul', /9 en réserve/.test(bouton)
+        && (await t.combien('.autres-lieux__valider')) === 0, bouton);
+      const deborde = await t.p.evaluate(() => {
+        const cadre = document.querySelector('.autres-lieux')?.getBoundingClientRect();
+        return [...document.querySelectorAll('.autres-lieux__item')].filter(i => i.getBoundingClientRect().right > cadre.right + 1).length;
+      });
+      t.verifier('un nom long s’abrège dans son cadre', deborde === 0, `${deborde} lignes débordent`);
+
+      // 2. Trente fiches d'un geste se retirent d'un geste.
+      await t.clic('.sheet__footer .btn--primary', { delai: 900 });
+      const toast = await t.p.locator('.undo-toast__msg').innerText().catch(() => '');
+      t.verifier('« 9 lieux mis en réserve », annulable', /9 lieux mis en réserve/.test(toast)
+        && await t.visible('.undo-toast__btn'), toast || '(aucun message)');
+      t.verifier('la feuille s’est refermée sur la Réserve', !(await t.visible('.sheet')) && (await t.voyage()).reserve.length === avant + 9,
+        `${(await t.voyage()).reserve.length} fiches`);
+      await t.clic('.undo-toast__btn', { texte: /Annuler/, delai: 700 });
+      t.verifier('« Annuler » les retire toutes', (await t.voyage()).reserve.length === avant, `${(await t.voyage()).reserve.length} fiches`);
+
+      // 3. Par le bouton « Coller » de la Réserve, et en écartant un lieu.
+      await t.p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+      await t.p.evaluate((texte) => navigator.clipboard.writeText(texte), carnet);
+      await t.clic('.reserve-search-coller', { delai: 1200 });
+      t.verifier('le bouton « Coller » de la Réserve lit le carnet aussi', await t.visible('.autres-lieux--carnet'));
+      await t.clic('.autres-lieux__item', { texte: 'Margaret Duchamp', delai: 300 });
+      await t.clic('.sheet__footer .btn--primary', { texte: /8 en réserve/, delai: 1200 });
+      const v = await t.voyage();
+      t.verifier('huit fiches de plus', v.reserve.length === avant + 8, `${v.reserve.length - avant} ajoutées`);
+      const b = v.reserve.find(a => a.title === 'Basilique Saint-Marc') || {};
+      t.verifier('la fiche porte ce que dit le carnet',
+        b.address === 'Piazza San Marco' && b.category === 'visite' && b.quartier === 'San Marco & Rialto'
+        && /^Joyau byzantin/.test(b.description || '') && b.bonASavoir === 'Tenue correcte exigée : épaules et genoux couverts.',
+        JSON.stringify({ address: b.address, category: b.category, quartier: b.quartier, bon: b.bonASavoir }));
+      t.verifier('horaires lisibles ET sûrs pour « ouvert / fermé »',
+        b.horairesTexte === 'Lun-sam 9h30 - 17h15\nDim 14h - 17h15' && b.openingHours === 'Mo-Sa 09:30-17:15; Su 14:00-17:15',
+        JSON.stringify([b.horairesTexte, b.openingHours]));
+      t.verifier('un prix pour le budget, et le texte du carnet', b.price === 3 && /coupe-file/.test(b.prixTexte || ''),
+        JSON.stringify([b.price, b.prixTexte]));
+      t.verifier('une durée de visite, comme tout ajout', b.durationHours === 2, JSON.stringify([b.durationHours, b.durationMinutes]));
+      t.verifier('Antico Forno n’est pas en double', v.reserve.filter(a => a.title === 'Antico Forno').length === 1);
+
+      // 4. Ouverte, la fiche se lit comme la page du carnet.
+      await t.clic('.activity-card__title', { texte: /Basilique Saint-Marc/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('la page dit horaires, prix et « bon à savoir » du carnet',
+        /Lun-sam 9h30 - 17h15/.test(page) && /coupe-file en ligne/.test(page) && /Bon à savoir · Tenue correcte/.test(page),
+        page.slice(0, 160));
+    } },
+
   { groupe: 'Réserve', nom: 'Un titre à rallonge ne casse pas la fiche', depart: TITRE_LONG,
     intention: "Un lieu importé porte souvent un nom interminable.",
     async faire(t) {
@@ -1997,7 +2135,7 @@ const PARCOURS = [
         `${t.appels().enrichPlace || 0} appels`);
       const popup = await t.visible('.sheet--check, .enrich-photo, .check-card');
       t.verifier('une confirmation est proposée', popup);
-      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      t.verifier("rien n'a été écrit sans accord", sansMarques(await t.voyage()) === sansMarques(JSON.parse(avant)));
       if (!popup) return;
       const texte = await t.texte();
       t.verifier('les informations trouvées sont montrées',
@@ -2026,9 +2164,52 @@ const PARCOURS = [
       t.verifier('la barre de messages annonce les fiches complétées', /complétées? en ligne/.test(msg),
         msg || '(rien)');
       t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
-      t.verifier("rien n'a été écrit sans accord", JSON.stringify(await t.voyage()) === avant);
+      t.verifier("rien n'a été écrit sans accord", sansMarques(await t.voyage()) === sansMarques(JSON.parse(avant)));
       await t.clic('.undo-toast__btn', { texte: /Voir/, delai: 900 });
       t.verifier('« Voir » ouvre les propositions, à accepter ou refuser', await t.visible('.check-card'));
+    } },
+
+  { groupe: 'Réseau', nom: 'Un monument reçoit sa photo créditée et sa présentation, sans rien demander', depart: 'voyage',
+    reseau: { nominatim: 'monument', enrichPlace: 'vide' },
+    intention: "Ouvrir son voyage et retrouver, sur un musée gardé en Réserve sans photo ni texte, "
+      + "sa photo, deux phrases de présentation et son quartier — comme une page de carnet.",
+    async faire(t) {
+      await t.ouvrirVoyage();
+      // Le passage silencieux part dix secondes après l'ouverture, puis la
+      // carte ouverte demande une seconde entre deux recherches.
+      let musee = null;
+      for (let i = 0; i < 45 && !musee?.photoUrl; i++) {
+        await t.p.waitForTimeout(1000);
+        musee = (await t.voyage())?.reserve.find(a => a.id === 'r3');
+      }
+      t.verifier('la photo est arrivée', /900px-Kunsthistorisches/.test(musee?.photoUrl || ''), musee?.photoUrl || '(aucune)');
+      t.verifier('avec son auteur et sa licence', musee?.photoCredit === 'Thomas Ledl · CC BY-SA 4.0 · Wikimedia Commons', musee?.photoCredit);
+      t.verifier('deux phrases en français, sans la parenthèse d’encyclopédie',
+        musee?.description === "Le musée d'Histoire de l'art de Vienne est l'un des premiers musées d'art au monde. Il abrite les collections des Habsbourg.",
+        musee?.description);
+      t.verifier('ses quartiers, tels que la carte les donne', musee?.secteurs?.suburb === 'Innere Stadt', JSON.stringify(musee?.secteurs));
+      t.verifier('ce que la personne avait saisi n’a pas bougé',
+        musee?.title === 'Kunsthistorisches Museum' && musee.price === '21' && musee.openingHours === 'Tu-Su 10:00-18:00',
+        JSON.stringify({ t: musee?.title, p: musee?.price, h: musee?.openingHours }));
+      const v = await t.voyage();
+      const autres = [...v.reserve, ...v.days.flatMap(d => d.activities)].filter(a => a.id !== 'r3');
+      t.verifier('aucune autre fiche ne reçoit la photo du musée',
+        !autres.some(a => /Kunsthistorisches/.test(a.photoUrl || '') || /Habsbourg/.test(a.description || '')));
+      t.verifier("aucune feuille ne s'est ouverte d'office", !(await t.visible('.check-card')));
+
+      // Et la fiche ouverte la montre comme une page.
+      await t.onglet(/Réserve/i);
+      await t.clic('.activity-card__title', { texte: /Kunsthistorisches/, delai: 700 });
+      const page = (await t.p.locator('.activity-card--page').first().innerText().catch(() => '')).replace(/\s+/g, ' ');
+      t.verifier('ouverte, la fiche dit la catégorie et le quartier', /VISITE · INNERE STADT/i.test(page), page.slice(0, 80));
+      t.verifier('… sa présentation', /premiers musées d'art au monde/.test(page));
+      t.verifier('… ses horaires en français, pas au format de la carte', /Mar–dim 10h–18h/.test(page) && !/Tu-Su/.test(page), page.slice(0, 300));
+      t.verifier('… ce qu’il faut savoir : réservation conseillée, fermé le lundi',
+        /Bon à savoir · Réservation conseillée · Fermé le lundi/.test(page), page.slice(0, 400));
+      t.verifier('… et le crédit de la photo', /Photo : Thomas Ledl · CC BY-SA 4\.0/.test(page));
+      const img = await t.p.locator('.activity-card--page .activity-card__photo').first()
+        .evaluate(el => ({ l: el.naturalWidth, h: el.getBoundingClientRect().height })).catch(() => null);
+      t.verifier('la photo est affichée, en grand', img?.l > 0 && img.h >= 200, JSON.stringify(img));
     } },
 
   { groupe: 'Réseau', nom: "Compléter sans rien trouver ne redemandera pas", depart: 'voyage',

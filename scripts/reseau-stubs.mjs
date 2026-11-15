@@ -52,6 +52,22 @@ export const REPONSES = {
       { id: 'cd2', date: '2026-10-02', startTime: '09:00', activities: [] }], reserve: [] },
   tauxSecours: { result: 'success', base_code: 'EUR', rates: { EUR: 1, USD: 1.1, JPY: 170, MAD: 10.8, AED: 4.0, EGP: 53 } },
 
+  // Wikidata, Wikipédia et Wikimedia Commons : la photo créditée et la
+  // présentation d'un lieu que la carte ouverte relie à Wikidata.
+  wikidata: { entities: { Q95569: {
+    claims: { P18: [{ mainsnak: { datavalue: { value: 'Kunsthistorisches Museum Wien.jpg' } } }] },
+    sitelinks: { frwiki: { title: "Musée d'Histoire de l'art de Vienne" } },
+  } } },
+  wikipediaFr: { extract: "Le musée d'Histoire de l'art de Vienne (en allemand : Kunsthistorisches Museum) "
+    + "est l'un des premiers musées d'art au monde. Il abrite les collections des Habsbourg. Il a ouvert en 1891." },
+  commons: { query: { pages: { 7: { imageinfo: [{
+    url: 'https://upload.wikimedia.org/wikipedia/commons/7/7a/Kunsthistorisches_Museum_Wien.jpg',
+    thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Kunsthistorisches_Museum_Wien.jpg/900px-Kunsthistorisches_Museum_Wien.jpg',
+    descriptionurl: 'https://commons.wikimedia.org/wiki/File:Kunsthistorisches_Museum_Wien.jpg',
+    extmetadata: { Artist: { value: '<a href="//commons.wikimedia.org/wiki/User:Thomas_Ledl">Thomas Ledl</a>' },
+      LicenseShortName: { value: 'CC BY-SA 4.0' } },
+  }] } } } },
+
   // Overpass : lieux autour d'un point.
   overpass: { elements: [{ type: 'node', id: 1, lat: 48.2085, lon: 16.3735,
     tags: { name: 'Stephansdom', tourism: 'attraction', opening_hours: 'Mo-Su 06:00-22:00' } }] },
@@ -189,7 +205,18 @@ export const VARIANTES = {
   },
   // Le modèle a lu le texte, mais n'y a trouvé aucun lieu nommé.
   legende: { aucun: { ok: false } },
-  nominatim: { aucun: [] },
+  nominatim: { aucun: [],
+    // Un monument que la carte ouverte relie à Wikidata, avec son quartier.
+    monument: [{
+      place_id: 7, lat: '48.2038', lon: '16.3614', name: 'Kunsthistorisches Museum',
+      display_name: 'Kunsthistorisches Museum, 5, Burgring, Innere Stadt, Wien, 1010, Österreich',
+      class: 'tourism', type: 'museum', importance: 0.6,
+      address: { tourism: 'Kunsthistorisches Museum', road: 'Burgring', house_number: '5',
+        suburb: 'Innere Stadt', city: 'Wien', postcode: '1010', country: 'Österreich', country_code: 'at' },
+      extratags: { opening_hours: 'Tu-Su 10:00-18:00', wikidata: 'Q95569',
+        wikipedia: 'de:Kunsthistorisches Museum', reservation: 'recommended' },
+      namedetails: { name: 'Kunsthistorisches Museum' },
+    }] },
   reservation: { douteux: REPONSES.reservationDouteuse,
     aucun: REPONSES.pasUneReservation, sansCle: { error: 'cle_absente' } },
   overpass: { aucun: { elements: [] } },
@@ -275,6 +302,9 @@ export async function brancherReseau(page, base, plan = {}) {
     // La source de secours, pour ce que la BCE ne publie pas (dirhams, livre égyptienne…).
     ['**/open.er-api.com/**', 'taux', () => REPONSES.tauxSecours],
     ['**/en.wikipedia.org/**', 'wikipedia', () => REPONSES.wikipedia],
+    ['**/www.wikidata.org/**', 'wikidata', () => REPONSES.wikidata],
+    ['**/fr.wikipedia.org/**', 'wikipediaFr', () => REPONSES.wikipediaFr],
+    ['**/commons.wikimedia.org/**', 'commons', () => REPONSES.commons],
     ['**/router.project-osrm.org/**', 'osrm', () => ({ routes: [{ duration: 900, distance: 3200 }] })],
     ['**/api.rss2json.com/**', 'actualites', () => ({ items: [] })],
     ['**/date.nager.at/**', 'feries', null],
@@ -301,6 +331,14 @@ export async function brancherReseau(page, base, plan = {}) {
       return servir(route, nom, reponse());
     });
   }
+
+  // Les images de Wikimedia : un carré uni suffit, il s'agit de vérifier que
+  // la fiche l'affiche, pas ce qu'elle montre.
+  await page.route('**/upload.wikimedia.org/**', (route) => {
+    compter('image');
+    return route.fulfill({ status: 200, contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="60"><rect width="90" height="60" fill="#8B5E3C"/></svg>' });
+  });
 
   // Les fonctions Edge passent toutes par le même hôte : on les distingue au
   // chemin, sinon un plan de panne sur l'une couperait l'autre.
