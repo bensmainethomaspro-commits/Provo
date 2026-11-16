@@ -174,6 +174,8 @@ Exemple de ligne, à supprimer :
 | A-101 | 2026-11-16 | Dette technique | `traceGeo` est une variable de MODULE (`extract-place/index.ts:96`) que chaque requête remet à zéro (`:1714`) et rend dans `geocodeurs` (`:1742`, `:1786`). Deux appels servis par le même isolat mélangent donc leurs traces, et la réponse de l'un peut porter ce que l'autre a reçu. C'est précisément le champ sur lequel on juge la santé de la fonction : les sondes `diag-*` le lisent, et `project-notes` prévoit d'alerter dessus (« lire `geocodeurs` dans la réponse du témoin et alerter à l'orange »). A-093 a déjà coûté un banc qui mesurait autre chose que ce qu'il croyait. Deux utilisateurs et un canari suffisent à la collision ; elle ne fausse que le diagnostic, jamais la fiche. `_shared/budget.ts` porte déjà l'`AsyncLocalStorage` où ranger la trace. | Mineur | PROPOSÉ |
 | A-102 | 2026-11-16 | Produit et UX | La photo libre s'affiche **sans son crédit** partout sauf sur la fiche ouverte d'un voyage en cours. `ActivityCard.jsx:175` rend la photo dans tous les états ; `:145` ne calcule `lue` que si `expanded && !showPolaroid` ; `:362` ne sort le crédit que si `lue`. Donc : dans la Réserve repliée — l'état de lecture normal — la photo est là, l'auteur et la licence non ; et sur le polaroid d'un voyage passé (`:93`, `isPastTrip && status === 'done'`) il n'y a aucun moyen de les voir, `lue` y étant toujours nul. La règle est celle que le projet s'est donnée la veille (`illustrer.js:11`, « une photo libre se CRÉDITE — auteur et licence, avec le lien de sa page »), et les photos de Wikimedia sont pour l'essentiel en CC-BY ou CC-BY-SA. | Mineur | PROPOSÉ |
 
+| A-103 | 2026-11-16 | Fiabilité | **La moitié « vrai navigateur » de l'intégration continue ne tourne plus du tout, depuis cette nuit.** `ubuntu-latest` de GitHub est passé à Ubuntu 26.04 entre le 2026-11-15 16:45 et le 2026-11-16 01:23, et Playwright 1.56.1 ne le connaît pas : l'étape « Chromium » de `verif.yml` tombe en une seconde (« Playwright does not support chromium on ubuntu26.04-x64 »), et les trois étapes qui suivent sont SAUTÉES — les 87 parcours, `verif-demarrage` et `verif-carte`. Mesuré sur deux passages du même workflow : le 2026-11-15 à 16:33 l'installation réussissait en 20 s et les parcours tournaient dix minutes (run 39, vert) ; ce passage-ci (run 40) échoue avant d'avoir ouvert un navigateur. `/parcours` est le seul outil du dépôt qui appuie sur les boutons, et il n'y a pas d'autre cadre de tests : à partir de maintenant, toute PR part avec cette moitié éteinte, et le travail rouge se fusionne par habitude. Même famille qu'A-081 (une suite rouge que personne ne regardait) et qu'A-096 (un outil de livraison en « latest » qui change sans commit) — la leçon du 2026-11-14 le dit déjà : « un outil qui livre se fige ». Correctif à la main, une ligne : `runs-on: ubuntu-24.04` sur le travail `parcours` (figer le runner, pas monter une dépendance — l'étape 12 de la routine interdit de changer une version de paquet). | Majeur | PROPOSÉ |
+
 ## Dernier audit effectif
 
 Date : 2026-11-16
@@ -187,6 +189,14 @@ inchangé depuis le 2026-09-30 — la dette n'a pas monté malgré +2 690 lignes
 applicatives. `npm run build` vert, les 27 suites `verif-*` vertes (`npm run
 verif`), `verif-ui` sur ses 52 points assumés et aucun de plus, les cinq écrans
 neufs du carnet et de la fiche compris.
+
+**Les 87 parcours n'ont pas pu être joués pour ce passage**, et il faut le dire
+plutôt que de l'enjoliver : dans la CI ils ne démarrent plus (A-103), et dans le
+bac à sable ils avancent trois fois plus lentement qu'un exécuteur GitHub —
+j'ai interrompu la course au bout d'une demi-heure, ce qui a fait tomber le
+navigateur (`browserContext.close`). Leur dernier passage vert est celui de
+`main` le 2026-11-15 à 16:43. Le correctif de cette PR (A-100) est couvert par
+`verif-situer` et `verif-completion`.
 
 ### Le contrôle de pertinence, et ce que cet audit a lu
 

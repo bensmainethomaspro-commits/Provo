@@ -492,6 +492,14 @@ dans le workflow (il rougit par construction sur 52 marqueurs Leaflet de
 échouait — sur `main` aussi (A-081). Avant de croire qu'une suite garde
 quelque chose, vérifier qu'un travail de `verif.yml` la nomme.
 
+**Et vérifier que le travail qui la nomme a bien ATTEINT cette étape.** Le
+2026-11-16, le travail `parcours` est rouge dès son étape « Chromium » :
+`ubuntu-latest` est passé à Ubuntu 26.04 dans la nuit et Playwright 1.56.1 ne
+le connaît pas, donc les 87 parcours, `verif-demarrage` et `verif-carte` sont
+SAUTÉS, pas échoués (A-103). Un travail rouge peut n'avoir rien mesuré du tout :
+lire quelle étape a échoué, pas seulement la couleur. Correctif : figer
+`runs-on: ubuntu-24.04` sur ce travail.
+
 **Et vérifier à quelle HEURE elle a été lancée.** `verif-carte` passait en fin
 d'après-midi et échouait le reste du temps : piocher depuis la carte ouvre la
 feuille « À savoir » tant qu'il reste de la journée devant soi, et rien du tout
