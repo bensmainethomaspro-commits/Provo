@@ -1,4 +1,5 @@
 import { distKm, lookupPlace, missingFieldsFrom } from './enrich';
+import { LOIN_KM } from './situer';
 
 /**
  * Contrôle des lieux d'un voyage.
@@ -19,8 +20,9 @@ import { distKm, lookupPlace, missingFieldsFrom } from './enrich';
  */
 
 // Un voyage tient rarement dans plus de 150 km autour de sa destination. Au
-// delà on ne conclut pas à l'erreur, on demande.
-const SEUIL_KM = 150;
+// delà on ne conclut pas à l'erreur, on demande. Même seuil que la complétion
+// automatique, et pour cause : une seule définition (`situer.js`).
+const SEUIL_KM = LOIN_KM;
 
 const geolocalisee = (a) => Number.isFinite(a?.lat) && Number.isFinite(a?.lon);
 // Un repas n'est pas un lieu : il n'a ni adresse ni horaires à corriger.

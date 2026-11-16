@@ -14,6 +14,9 @@ import { accordNom, nomsConnus } from '../../supabase/functions/_shared/lecture-
 import { avecDelai } from './reseau.js';
 import { faitsDepuisEtiquettes } from './pageFiche.js';
 import { secteursDe, secteursDePhoton } from './quartiers.js';
+// Le seuil « hors du voyage » : une seule définition pour la complétion, le
+// contrôle des lieux et le choix du lieu d'un lien (voir `situer.js`).
+import { LOIN_KM } from './situer.js';
 
 const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
@@ -122,10 +125,11 @@ export function distKm(aLat, aLon, bLat, bLon) {
 // 500 km. Un voisin qui a des horaires n'est pas le lieu ; mieux vaut ne rien
 // remplir que remplir faux.
 //
-// Rayon : 150 km autour du voyage, le seuil au-delà duquel le contrôle des
-// lieux signale déjà une fiche comme mal située. Accepter plus loin ici
-// fabriquait l'erreur que ce contrôle doit ensuite rattraper.
-const RAYON_KM = 150;
+// Rayon : le seuil au-delà duquel le contrôle des lieux signale déjà une fiche
+// comme mal située. Accepter plus loin ici fabriquait l'erreur que ce contrôle
+// doit ensuite rattraper — c'est pourquoi la valeur vient de `situer.js` et
+// n'est plus recopiée ici.
+const RAYON_KM = LOIN_KM;
 
 function candidatValable(noms, cLat, cLon, { nom, lat, lon, rayonKm = RAYON_KM, nomEntier = false }) {
   const accord = nom ? accordNom(nom, noms) : 'fort';
