@@ -168,7 +168,82 @@ Exemple de ligne, à supprimer :
 | A-096 | 2026-11-14 | Fiabilité | **La fusion #107 n'a rien déployé.** `deploy-edge-functions.yml` installait le CLI Supabase « latest » : le 3.0, sorti le 2 novembre, exige une confirmation avant de toucher un projet en ligne, et un workflow ne peut pas répondre (« Confirmation required… Re-run with --yes »). Le jeton était bon (200) ; le dernier déploiement réussi datait du 1er octobre, sous le CLI 2. L'alerte posée le 28 septembre a tenu (#108 ouverte dans les secondes), mais la PR annonçait « à la fusion, le workflow redéploie » sur la foi d'un chemin qui n'avait pas tourné depuis six semaines, et la production est restée quatorze heures sur la fonction d'avant pendant que l'app, elle, était à jour. Corrigé : CLI figé en 3.1.0 (options relues sur cette version), `--yes`, `--remote=` à la place de `--project-ref` (retiré en 4), version du CLI affichée, et l'alerte dit quoi lire quand la cause est l'outil. Relancé depuis la branche (identique à `main` hors workflow) : `extract-place` v39, `enrich-place` v14, `verify_jwt` inchangé. **Première mesure chez l'hébergeur réel**, aussitôt : le lien du signalement avec la destination « Biarritz » rend la fiche entière en 3,2 s (un titre nu en 10 s le 11 novembre), et l'aperçu Google est bien servi à l'hébergeur (quatre passages : Twitterbot deux fois, et le robot de Facebook les deux fois où Twitterbot a reçu un captcha). | Majeur | CORRIGÉ |
 | A-097 | 2026-11-14 | Fiabilité | Trouvé par le banc lancé contre la production juste après le déploiement, sur son passage « fonction de la branche » : Google a servi sa vérification aux deux robots PUIS au navigateur, et la fiche du lien du signalement est sortie intitulée « EgQDKdJFGNba4NcGIjCUk8Qh… ». `extractMapsName` lisait le paramètre `q` de n'importe quelle adresse Google — or la page de vérification vit à `/sorry/index?continue=<adresse voulue>&q=<jeton>`. Le garde-fou « jeton opaque » existait, mais seulement dans le lecteur suivant (`extractGoogleSearchName`), jamais atteint. Même faiblesse côté téléphone (`parseGoogleMapsUrl`, voie de secours par proxy). Corrigé dans le module partagé : `avantLeCaptcha` rend l'adresse que Google allait servir (qui porte souvent le vrai nom : la fiche se remplit alors malgré le refus), ou rien ; `jetonOpaque` garde les deux lecteurs ; le contenu de la page de vérification n'est plus lu (son `<title>` est une adresse). La trace dit `page-google captcha (suite lue|sans suite)`. **Nouveau garde-fou : `verif-fonction-captcha.ts`** lance la fonction ENTIÈRE sous Deno face à un réseau simulé (Google refusant tout, Nominatim en 403 comme en production) — 7 de ses 10 contrôles échouent sur le code d'avant, avec la trace exacte du banc. Il tourne sur chaque PR (`verif.yml`), avec le typage des deux fonctions. **Pas encore en ligne** : la fonction ne se redéploie qu'à la fusion. | Majeur | CORRIGÉ (à déployer) |
 
+| A-098 | 2026-11-16 | Fiabilité | **Carnet collé : seules les deux ou trois premières fiches que la carte ouverte ne situe pas obtiennent leur point.** La file du carnet (`TripView.jsx:468`) enchaîne `situerPuisIllustrer` sans espacer ses demandes, et chaque fiche non située appelle `situerParLeServeur` (`TripView.jsx:417`). Côté fonction, `pointGoogle` fait jusqu'à deux demandes par nom et `pointRefuse` ferme la porte 60 s dès le premier captcha (`extract-place/index.ts:787`) ; `contexte.md` dit déjà que « le quatrième appel d'affilée déclenche le captcha ». Le client retient chaque échec 30 min en mémoire (`helpers.js:40`), donc le passage suivant refait le même mur. Conséquence sur le cas pour lequel la fonction a été écrite — un carnet de trente lieux : la plupart des fiches restent sans point, donc sans adresse ni horaires de la carte, et sans photo ni présentation (`resteAIllustrer` exige des coordonnées, `illustrer.js:96`). Le rangement par quartier, lui, survit : le `quartier` du carnet sert de repli (`quartiers.js:91`). **Lu sur le code, pas mesuré** : le bac à sable ne joint ni Google ni le domaine Supabase. | Majeur | PROPOSÉ |
+| A-099 | 2026-11-16 | Performance et coûts | **Les photos de la Réserve : demandées à 900 px pour une vignette de 52 px, chargées toutes d'un coup, et hors du service worker.** `illustrer.js:119` demande `iiurlwidth: 900` ; `index.css:5299` affiche la vignette en 52 × 52 dans la liste (150 px de haut une fois la fiche ouverte). `ActivityCard.jsx:175` ne porte ni `loading="lazy"` ni `decoding="async"` — alors que la même page les met sur les captures (`:323`) et que `TripCard.jsx:74` les a aussi. Et `public/sw.js:86` rend la main sur tout ce qui n'est pas de notre origine : seules les tuiles OSM ont un cache dédié, pas `upload.wikimedia.org`. Ouvrir la Réserve d'un voyage de trente idées télécharge donc trente images pleine taille pour en montrer trente de 52 px, sur la donnée mobile d'un séjour à l'étranger ; et rien dans l'app ne garantit qu'elles soient là hors ligne, alors que le dépôt a donné un cache à la main aux tuiles et au moteur OCR pour exactement cette raison (A-036). **Taille réelle non mesurée** : le bac à sable ne joint pas `upload.wikimedia.org`. | Majeur | PROPOSÉ |
+| A-100 | 2026-11-16 | Dette technique | Le seuil « au-delà, ce lieu n'est plus là où se passe le voyage » était écrit **trois fois sous trois noms** : `situer.js:LOIN_KM`, `enrich.js:RAYON_KM`, `verifyPlaces.js:SEUIL_KM`, tous à 150. Le commentaire d'`enrich.js` dit lui-même que le rayon de la complétion EST le seuil du contrôle des lieux (« accepter plus loin ici fabriquait l'erreur que ce contrôle doit ensuite rattraper ») ; `verif-situer.mjs:94` ne fige que l'un des trois, les deux autres pouvaient dériver sans qu'aucune suite ne bronche. Même motif que `reduireImage`, `dateLocale` et `REPAS_POSES`, déjà ramenés à un exemplaire. Corrigé : une seule définition dans `situer.js`, les deux autres l'importent et gardent leur nom local. | Mineur | CORRIGÉ |
+| A-101 | 2026-11-16 | Dette technique | `traceGeo` est une variable de MODULE (`extract-place/index.ts:96`) que chaque requête remet à zéro (`:1714`) et rend dans `geocodeurs` (`:1742`, `:1786`). Deux appels servis par le même isolat mélangent donc leurs traces, et la réponse de l'un peut porter ce que l'autre a reçu. C'est précisément le champ sur lequel on juge la santé de la fonction : les sondes `diag-*` le lisent, et `project-notes` prévoit d'alerter dessus (« lire `geocodeurs` dans la réponse du témoin et alerter à l'orange »). A-093 a déjà coûté un banc qui mesurait autre chose que ce qu'il croyait. Deux utilisateurs et un canari suffisent à la collision ; elle ne fausse que le diagnostic, jamais la fiche. `_shared/budget.ts` porte déjà l'`AsyncLocalStorage` où ranger la trace. | Mineur | PROPOSÉ |
+| A-102 | 2026-11-16 | Produit et UX | La photo libre s'affiche **sans son crédit** partout sauf sur la fiche ouverte d'un voyage en cours. `ActivityCard.jsx:175` rend la photo dans tous les états ; `:145` ne calcule `lue` que si `expanded && !showPolaroid` ; `:362` ne sort le crédit que si `lue`. Donc : dans la Réserve repliée — l'état de lecture normal — la photo est là, l'auteur et la licence non ; et sur le polaroid d'un voyage passé (`:93`, `isPastTrip && status === 'done'`) il n'y a aucun moyen de les voir, `lue` y étant toujours nul. La règle est celle que le projet s'est donnée la veille (`illustrer.js:11`, « une photo libre se CRÉDITE — auteur et licence, avec le lien de sa page »), et les photos de Wikimedia sont pour l'essentiel en CC-BY ou CC-BY-SA. | Mineur | PROPOSÉ |
+
 ## Dernier audit effectif
+
+Date : 2026-11-16
+Type : STANDARD (35 jours depuis le 2026-10-12, donc au-delà de trois semaines
+et en dessous de trois mois : sécurité, fiabilité, plus l'axe rotatif)
+Axe rotatif : **Dette technique** — consommé pour la première fois, après six
+audits LÉGERS et un STANDARD qui l'avaient repoussé. A-100 et A-101 y vivent.
+Prochain axe rotatif : **Produit et UX**.
+Référence ESLint à la date de l'audit : **40 erreurs, 4 avertissements**,
+inchangé depuis le 2026-09-30 — la dette n'a pas monté malgré +2 690 lignes
+applicatives. `npm run build` vert, les 27 suites `verif-*` vertes (`npm run
+verif`), `verif-ui` sur ses 52 points assumés et aucun de plus, les cinq écrans
+neufs du carnet et de la fiche compris.
+
+### Le contrôle de pertinence, et ce que cet audit a lu
+
+Le seuil passe : 16 commits significatifs depuis le 2026-10-12 (43 en tout, dont
+21 touchant `src/` ou `supabase/`), **+2 690 / −179 lignes sur 15 fichiers
+applicatifs**, dont cinq modules neufs — `carnet.js` (548), `pageFiche.js`
+(243), `illustrer.js` (183), `quartiers.js` (118), `situer.js` (112) — et
++475 lignes dans `extract-place`. Compté en fichiers, comme la règle du
+2026-09-28 le demande ; ici le compte de commits aurait donné la même réponse.
+
+Lu en priorité, selon la règle que le journal répète : le code écrit et fusionné
+le jour même par ses auteurs, que personne n'a relu depuis. C'est-à-dire tout ce
+qui précède, plus les correctifs d'A-096 et A-097 du 2026-11-14.
+
+Trouvés sains, après lecture : le garde-fou SSRF tient à la porte et sur chaque
+saut (`urlSure` dans `joindre`, et le seul `fetch` d'URL tierce restant,
+`r.jina.ai`, est une adresse à nous) ; `lecture-lien.ts`, qui est dans le paquet
+du navigateur, n'utilise aucune API Deno (seul `budget.ts` en a, et le client ne
+l'importe pas) ; la modification d'une fiche ne perd rien de ce que l'app y a
+écrit elle-même (`updateActivity` fusionne, `useTrips.js:702`) ; `pageFiche.js`
+traite correctement le cas qui fait peur — des horaires de carnet corrigés à la
+main depuis (`carnetDepasse`, `carnetTient`) ; `addToReserve` passe par un
+updater fonctionnel, donc trente fiches d'un carnet s'ajoutent bien toutes
+(`useTrips.js:654`) ; et l'annulation d'un carnet prend bien l'état d'AVANT les
+ajouts.
+
+### Ce que la production dit, ce jour
+
+- **Le déploiement des fonctions a bien eu lieu**, contrairement à la fusion
+  #107 : la poussée du 2026-11-14 est verte (`deploy-edge-functions.yml`, run 55),
+  `extract-place` est en v40 et `enrich-place` en v15. Le correctif d'A-097
+  (« CORRIGÉ (à déployer) ») est donc en ligne. La fusion #110 du 2026-11-15 ne
+  touche aucune fonction : rien à redéployer. **Vérifié, pas supposé** — c'est
+  le troisième passage où ce contrôle valait la peine.
+- Advisors sécurité : rien de neuf. `auth_leaked_password_protection` est A-044.
+  Les cinq `security definer` signalés (dont `lire_voyage_partage`, exposée à
+  `anon` par construction depuis A-001) sont voulus et déjà arbitrés.
+- Schéma inchangé : sept migrations dans le dépôt, la dernière
+  (`membres_du_voyage_visibles`) datant de l'audit du 2026-10-12 et déjà
+  vérifiée contre la base ce jour-là. `verif-migrations` vert.
+
+### Ce que cet audit n'a pas pu mesurer
+
+Le bac à sable refuse `upload.wikimedia.org`, `share.google`, `www.google.com`
+et le domaine Supabase du projet (403 sur le CONNECT du proxy). A-098 et A-099
+sont donc lus sur le code et sur les mesures que le dépôt a déjà consignées, pas
+observés. Les deux se mesurent, eux, par `diagnose-carnet.yml` et
+`diagnose-link.yml`, depuis un exécuteur GitHub.
+
+### La branche de cet audit
+
+Cette fois elle s'appelle bien `claude/audit-2026-11-16`, mais la leçon des
+2026-10-05 et 2026-10-12 tient toujours : **la PR d'audit se cherche par son
+TITRE (« Audit … »), jamais par le nom de sa branche.** Aucune PR d'audit
+n'était ouverte ce jour : cet audit repart de `main` (97ca567).
+
+### Audit précédent
 
 Date : 2026-10-12
 Type : LÉGER (7 jours depuis le 2026-10-05 : sécurité et fiabilité, pas d'axe
