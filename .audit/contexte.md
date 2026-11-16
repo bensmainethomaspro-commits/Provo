@@ -492,6 +492,14 @@ dans le workflow (il rougit par construction sur 52 marqueurs Leaflet de
 échouait — sur `main` aussi (A-081). Avant de croire qu'une suite garde
 quelque chose, vérifier qu'un travail de `verif.yml` la nomme.
 
+**Et vérifier que le travail qui la nomme a bien ATTEINT cette étape.** Le
+2026-11-16, le travail `parcours` est rouge dès son étape « Chromium » :
+`ubuntu-latest` est passé à Ubuntu 26.04 dans la nuit et Playwright 1.56.1 ne
+le connaît pas, donc les 87 parcours, `verif-demarrage` et `verif-carte` sont
+SAUTÉS, pas échoués (A-103). Un travail rouge peut n'avoir rien mesuré du tout :
+lire quelle étape a échoué, pas seulement la couleur. Correctif : figer
+`runs-on: ubuntu-24.04` sur ce travail.
+
 **Et vérifier à quelle HEURE elle a été lancée.** `verif-carte` passait en fin
 d'après-midi et échouait le reste du temps : piocher depuis la carte ouvre la
 feuille « À savoir » tant qu'il reste de la journée devant soi, et rien du tout
@@ -502,8 +510,8 @@ et la CI lance cette suite deux fois pour cette raison.
 
 ## Une seule réduction d'image, une seule date du jour, un seul modèle de repas
 
-Trois fonctions qui existaient en plusieurs exemplaires, ramenées à une et
-dont la copie est un piège connu :
+Quatre valeurs ou fonctions qui existaient en plusieurs exemplaires, ramenées à
+une et dont la copie est un piège connu :
 
 - `reduireImage(fichier, largeurMax, qualite)` (`helpers.js`) : la seule qui
   REJETTE sur un fichier illisible. Les copies privées de `NewTripModal` et
@@ -513,6 +521,53 @@ dont la copie est un piège connu :
 - `REPAS_POSES` (`helpers.js`) : le modèle des deux repas posés d'office, lu
   par `useTrips` qui les pose ET par `repasEnAttente` qui les reconnaît pour
   ne pas les compter comme des activités (A-079, A-070).
+- `LOIN_KM = 150` (`situer.js`) : le seuil « au-delà, ce lieu n'est plus là où
+  se passe le voyage ». Il vivait aussi sous `RAYON_KM` (`enrich.js`, le rayon
+  au-delà duquel la complétion n'écrit rien) et sous `SEUIL_KM`
+  (`verifyPlaces.js`, au-delà duquel le contrôle des lieux signale). Les trois
+  DOIVENT dire la même chose — le commentaire d'`enrich.js` l'explique : un
+  rayon plus large y fabrique l'erreur que le contrôle doit rattraper. Depuis
+  le 2026-11-16 (A-100), une seule définition ; les deux autres l'importent et
+  gardent leur nom local. `verif-situer.mjs` fige la valeur.
+
+## Le service worker ne voit RIEN de ce qui n'est pas à nous (sauf les tuiles)
+
+`public/sw.js:86` : `if (url.origin !== self.location.origin) return;`. Une
+seule exception, écrite avant cette ligne — les tuiles OpenStreetMap, qui ont
+leur propre cache (`provo-tiles-v1`, cache d'abord). Tout le reste de ce qui
+vient d'ailleurs échappe au service worker.
+
+Ça n'avait aucune conséquence tant que l'app ne chargeait rien de distant hors
+les tuiles. Depuis le 2026-11-15, chaque fiche peut porter une photo de
+`upload.wikimedia.org` (`illustrer.js`), affichée sur TOUTES les fiches de la
+Réserve. Elles ne dépendent donc que du cache HTTP du navigateur, celui dont le
+dépôt a précisément cessé de dépendre pour les tuiles et pour le moteur OCR
+(A-036). À ne pas redécouvrir avant de juger ce qui est disponible hors ligne :
+ce qui n'est pas de notre origine n'est pas gardé par l'app.
+
+## Les cinq modules du « carnet » — relevé le 2026-11-16
+
+Arrivés entre le 2026-11-12 et le 2026-11-15, tous purs (aucun réseau sauf
+`illustrer.js`) et tous couverts par une suite `verif-*` :
+
+| Module | Rôle | Suite |
+|---|---|---|
+| `src/utils/carnet.js` | un carnet collé (PDF ou notes) découpé en fiches : nom, adresse, présentation, horaires, prix, « bon à savoir » | `verif-carnet.mjs` (63 cas) |
+| `src/utils/situer.js` | lequel des lieux trouvés est celui du lien : nom ENTIER près du voyage, puis seul au monde à le porter, sinon proposé | `verif-situer.mjs` (25 cas) |
+| `src/utils/quartiers.js` | le quartier d'un lieu et le rangement de la Réserve ; aucun champ Nominatim n'est le bon partout, le niveau se choisit sur le voyage entier | `verif-quartiers.mjs` (26 cas) |
+| `src/utils/illustrer.js` | photo et deux phrases depuis Wikidata/Commons, créditées ; les monuments presque toujours, les restaurants presque jamais | `verif-illustrer.mjs` (29 cas) |
+| `src/utils/pageFiche.js` | ce que la fiche ouverte montre ; arbitre entre le texte du carnet et des horaires corrigés depuis | `verif-page-fiche.mjs` (61 cas) |
+
+Deux choses à savoir avant d'y toucher :
+
+- **La règle « quel lieu est-ce » est écrite deux fois**, une par langue : côté
+  téléphone dans `situer.js` + `candidatValable` (`enrich.js`), côté serveur
+  dans `pickBest` / `resolvePlace` / `auPoint` (`extract-place`). Seule la
+  primitive est partagée (`accordNom`, `nomsConnus`, `_shared/lecture-lien.ts`).
+  Les commentaires du serveur disent eux-mêmes « c'est la règle que le client
+  applique déjà » : c'est le motif de dérive que ce dépôt a déjà payé cinq fois.
+- `situer.js` n'importe que `_shared/lecture-lien.ts` : il peut servir de point
+  bas à la pile de `src/utils/` sans créer de cycle (c'est ce qu'A-100 utilise).
 
 ## Le budget de temps des fonctions Edge repose sur AsyncLocalStorage
 

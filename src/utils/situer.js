@@ -22,7 +22,18 @@
  */
 import { accordNom, normaliser, seulDeSonNom } from '../../supabase/functions/_shared/lecture-lien.ts';
 
-/** Au-delà, un lieu n'est plus « là où se passe le voyage » (seuil du contrôle des lieux). */
+/**
+ * Au-delà, un lieu n'est plus « là où se passe le voyage ».
+ *
+ * SEULE DÉFINITION du seuil, pour les trois endroits qui s'en servent et qui
+ * doivent dire la même chose : ce module (quel lieu est celui du lien), la
+ * complétion automatique (`enrich.js`, qui n'écrit rien au-delà) et le
+ * contrôle des lieux (`verifyPlaces.js`, qui signale au-delà). Il a vécu en
+ * trois exemplaires sous trois noms — `LOIN_KM`, `RAYON_KM`, `SEUIL_KM` —
+ * alors que le commentaire d'`enrich.js` dit lui-même que les accepter plus
+ * loin « fabriquait l'erreur que ce contrôle doit ensuite rattraper ».
+ * `scripts/verif-situer.mjs` fige la valeur.
+ */
 export const LOIN_KM = 150;
 
 export function kmEntre(aLat, aLon, bLat, bLon) {
